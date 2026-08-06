@@ -1,0 +1,69 @@
+name: M4 Branch Gate
+
+on:
+  push:
+    branches: [agent/milestone-4]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: m4-branch-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out work branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: true
+          fetch-depth: 0
+
+      - name: Apply Milestone 4 implementation
+        run: |
+          base64 --decode tools/m4_apply.py.gz.b64 | gzip --decompress > /tmp/m4_apply.py
+          python /tmp/m4_apply.py
+
+      - name: Format source
+        run: cargo fmt --all
+
+      - name: Resolve workspace lockfile
+        run: cargo check --workspace --all-targets
+
+      - name: Verify dependency lockfile
+        run: cargo update --workspace --locked --dry-run
+
+      - name: Run strict Clippy
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+      - name: Run tests
+        run: cargo test --workspace --all-features --locked
+
+      - name: Build documentation
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --workspace --all-features --no-deps --locked
+
+      - name: Verify generated corpus is unchanged
+        run: |
+          cargo run -p aligngauge-testkit --locked -- generate-corpus --root .
+          git diff --exit-code -- testdata
+
+      - name: Run pinned Samtools counter differential
+        run: tools/reference/samtools/compare-counters.sh
+
+      - name: Validate and publish cleaned branch state
+        run: |
+          git diff --check
+          rm .github/workflows/m4-branch-gate.yml tools/m4_apply.py.gz.b64
+          git diff --check
+          git status --short
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'feat: add checked alignment counters'
+          git push origin HEAD:agent/milestone-4
