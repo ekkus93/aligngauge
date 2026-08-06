@@ -14,6 +14,15 @@ replace_exact(reader, "Whether HTSlib expanded a BAM long-CIGAR representation",
 replace_exact(reader, "invalid options, HTSlib\n", "invalid options, `HTSlib`\n")
 replace_exact(
     reader,
+    """                ErrorCategory::InputFormat,
+                format!("failed to open BAM '{}'", input.display()),
+""",
+    """                ErrorCategory::InputCorrupt,
+                format!("failed to open BAM '{}'", input.display()),
+""",
+)
+replace_exact(
+    reader,
     "self.record_index.checked_add(1).unwrap_or(u64::MAX)",
     "self.record_index.saturating_add(1)",
 )
