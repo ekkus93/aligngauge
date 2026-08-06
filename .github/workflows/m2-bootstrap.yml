@@ -25,6 +25,9 @@ jobs:
         with:
           persist-credentials: true
 
+      - name: Apply compiler repair
+        run: python tools/m2_fix1.py
+
       - name: Apply documentation corrections
         run: python tools/m2_patch_docs.py
 
