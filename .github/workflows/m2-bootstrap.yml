@@ -1,6 +1,6 @@
 name: M2 Bootstrap
 
-# Retry after exact ADR filename correction.
+# Retry after strict Clippy contract repairs.
 on:
   push:
     branches: [master]
@@ -28,6 +28,9 @@ jobs:
 
       - name: Apply compiler and serializer repairs
         run: python tools/m2_fix1.py
+
+      - name: Apply strict Clippy repairs
+        run: python tools/m2_clippy_fixes.py
 
       - name: Apply documentation corrections
         run: python tools/m2_patch_docs.py
