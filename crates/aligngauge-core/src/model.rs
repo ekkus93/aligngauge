@@ -350,13 +350,6 @@ impl Summary {
                 .cmp(&right.code)
                 .then_with(|| left.message.cmp(&right.message))
         });
-        let per_reference_counters = match per_reference_counters {
-            Availability::Available(mut counters) => {
-                counters.sort_by(|left, right| left.name.cmp(&right.name));
-                Availability::Available(counters)
-            }
-            unavailable @ Availability::Unavailable { .. } => unavailable,
-        };
         Self {
             schema_version: SUMMARY_SCHEMA_VERSION.to_owned(),
             application,

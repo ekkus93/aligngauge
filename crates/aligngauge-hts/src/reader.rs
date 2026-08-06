@@ -89,6 +89,8 @@ pub struct ValidatedRecord<'a> {
     index: u64,
     flags: u16,
     coordinate: Option<RecordCoordinate>,
+    mate_coordinate: FieldValue<Option<RecordCoordinate>>,
+    mapping_quality: FieldValue<u8>,
     cigar: FieldValue<CigarFacts>,
     edit_distance: FieldValue<u64>,
     mismatch_descriptor: FieldValue<String>,
@@ -118,6 +120,18 @@ impl ValidatedRecord<'_> {
     #[must_use]
     pub const fn coordinate(&self) -> Option<RecordCoordinate> {
         self.coordinate
+    }
+
+    /// Planned mate coordinate. `Value(None)` means unpaired or mate-unmapped.
+    #[must_use]
+    pub const fn mate_coordinate(&self) -> &FieldValue<Option<RecordCoordinate>> {
+        &self.mate_coordinate
+    }
+
+    /// Planned mapping quality.
+    #[must_use]
+    pub const fn mapping_quality(&self) -> &FieldValue<u8> {
+        &self.mapping_quality
     }
 
     /// Planned and validated CIGAR facts.
@@ -269,6 +283,8 @@ impl BamReader {
             index: self.record_index,
             flags: facts.flags,
             coordinate: facts.coordinate,
+            mate_coordinate: facts.mate_coordinate,
+            mapping_quality: facts.mapping_quality,
             cigar: facts.cigar,
             edit_distance: facts.edit_distance,
             mismatch_descriptor: facts.mismatch_descriptor,
@@ -414,6 +430,8 @@ fn validate_record_layout(record: &Record, index: u64) -> Result<RecordLayout, A
 struct RecordFacts {
     flags: u16,
     coordinate: Option<RecordCoordinate>,
+    mate_coordinate: FieldValue<Option<RecordCoordinate>>,
+    mapping_quality: FieldValue<u8>,
     cigar: FieldValue<CigarFacts>,
     edit_distance: FieldValue<u64>,
     mismatch_descriptor: FieldValue<String>,
@@ -449,12 +467,20 @@ fn validate_record(
     let flags = record.flags();
     validate_flags(flags, index, record)?;
     let coordinate = validate_coordinate(record, header, index)?;
+    let mate_coordinate = validate_mate_coordinate(record, header, plan, index)?;
+    let mapping_quality = if plan.requires(RequiredField::MappingQuality) {
+        FieldValue::Value(record.mapq())
+    } else {
+        FieldValue::NotRequested
+    };
     let cigar_facts = validate_cigar(record, header, coordinate, index)?;
     let tags = validate_auxiliary(record, header, plan, index, cigar_facts.operation_count)?;
 
     Ok(RecordFacts {
         flags,
         coordinate,
+        mate_coordinate,
+        mapping_quality,
         cigar: if plan.requires(RequiredField::Cigar) {
             FieldValue::Value(cigar_facts)
         } else {
@@ -558,6 +584,97 @@ fn validate_coordinate(
         reference_id: target_id,
         position,
     }))
+}
+
+fn validate_mate_coordinate(
+    record: &Record,
+    header: &ValidatedHeader,
+    plan: &FieldPlan,
+    index: u64,
+) -> Result<FieldValue<Option<RecordCoordinate>>, AlignGaugeError> {
+    if !plan.requires(RequiredField::MateCoordinates) {
+        return Ok(FieldValue::NotRequested);
+    }
+
+    let flags = record.flags();
+    if flags & 0x1 == 0 {
+        return Ok(FieldValue::Value(None));
+    }
+
+    let target_id = record.mtid();
+    let position = record.mpos();
+    if target_id < -1 || position < -1 {
+        return Err(record_error(
+            ErrorCategory::InputCorrupt,
+            "BAM mate coordinate is below the no-coordinate sentinel",
+            index,
+            record,
+        )
+        .with_detail("mate_reference_id", i64::from(target_id))
+        .with_detail("mate_position", position));
+    }
+
+    let mate_unmapped = flags & 0x8 != 0;
+    if mate_unmapped && target_id == -1 && position == -1 {
+        return Ok(FieldValue::Value(None));
+    }
+    if (target_id == -1) != (position == -1) {
+        return Err(record_error(
+            ErrorCategory::InputCorrupt,
+            "BAM mate has only one no-coordinate sentinel",
+            index,
+            record,
+        )
+        .with_detail("mate_reference_id", i64::from(target_id))
+        .with_detail("mate_position", position));
+    }
+    if target_id == -1 {
+        return Err(record_error(
+            ErrorCategory::InputCorrupt,
+            "mapped mate has no coordinate",
+            index,
+            record,
+        ));
+    }
+
+    let reference = header.reference(target_id).ok_or_else(|| {
+        record_error(
+            ErrorCategory::InputCorrupt,
+            "BAM mate references an unknown target ID",
+            index,
+            record,
+        )
+        .with_detail("mate_reference_id", i64::from(target_id))
+    })?;
+    let position_u64 = u64::try_from(position).map_err(|source| {
+        record_error(
+            ErrorCategory::InputCorrupt,
+            "BAM mate position does not fit u64",
+            index,
+            record,
+        )
+        .with_source(source)
+    })?;
+    if position_u64 >= reference.length() {
+        return Err(record_error(
+            ErrorCategory::InputCorrupt,
+            "BAM mate position lies outside the declared reference",
+            index,
+            record,
+        )
+        .with_detail("mate_reference_id", i64::from(target_id))
+        .with_detail("mate_position", position)
+        .with_detail("reference_length", reference.length()));
+    }
+
+    if mate_unmapped {
+        Ok(FieldValue::Value(None))
+    } else {
+        Ok(FieldValue::Value(Some(RecordCoordinate {
+            reference_id: target_id,
+            position,
+        })))
+    }
 }
 
 #[allow(clippy::too_many_lines)]

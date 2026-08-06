@@ -23,6 +23,7 @@ version = "0.0.0"
 dependencies = [
  "aligngauge-core",
  "aligngauge-hts",
+ "aligngauge-metrics",
  "rust-htslib",
 ]
 
@@ -39,6 +40,14 @@ dependencies = [
  "flate2",
  "rust-htslib",
  "sha2",
+]
+
+[[package]]
+name = "aligngauge-metrics"
+version = "0.0.0"
+dependencies = [
+ "aligngauge-core",
+ "aligngauge-hts",
 ]
 
 [[package]]

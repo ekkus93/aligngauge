@@ -1,11 +1,13 @@
-//! Minimal counting CLI over the production BAM validation boundary.
+//! Command-line orchestration over the production BAM reader and checked counters.
 
 use std::path::Path;
 
-use aligngauge_core::{AlignGaugeError, ErrorCategory};
-use aligngauge_hts::{BamReader, FieldPlan, ReaderOptions};
+use aligngauge_core::AlignGaugeError;
+use aligngauge_metrics::analyze_bam as analyze_metrics_bam;
 
-/// Record counts emitted while Milestone 4 collectors are built.
+pub use aligngauge_metrics::CounterReport;
+
+/// Legacy three-counter projection retained for the walking-skeleton contract.
 #[derive(Debug, Clone, Copy, Default, Eq, PartialEq)]
 pub struct BamCounts {
     /// Number of decoded and validated records.
@@ -16,39 +18,24 @@ pub struct BamCounts {
     pub unmapped: u64,
 }
 
-/// Validate a BAM stream and count total, mapped, and unmapped records.
-///
-/// The production reader reuses one rust-htslib record buffer. Counts are
-/// returned only after the entire stream passes header, record, tag, reference,
-/// and coordinate-order validation.
+/// Analyze a BAM with all Milestone 4 counters.
 ///
 /// # Errors
-///
-/// Returns a typed [`AlignGaugeError`] for any reader validation failure or
-/// checked-counter overflow.
-pub fn count_bam(path: impl AsRef<Path>) -> Result<BamCounts, AlignGaugeError> {
-    let mut reader = BamReader::open(path, FieldPlan::counters(), ReaderOptions::default())?;
-    let mut counts = BamCounts::default();
-
-    while let Some(record) = reader.next_record()? {
-        increment(&mut counts.total, "total")?;
-        if record.is_unmapped() {
-            increment(&mut counts.unmapped, "unmapped")?;
-        } else {
-            increment(&mut counts.mapped, "mapped")?;
-        }
-    }
-
-    Ok(counts)
+/// Returns a typed reader failure or checked-counter overflow.
+pub fn analyze_bam(path: impl AsRef<Path>) -> Result<CounterReport, AlignGaugeError> {
+    analyze_metrics_bam(path)
 }
 
-fn increment(counter: &mut u64, field: &'static str) -> Result<(), AlignGaugeError> {
-    *counter = counter.checked_add(1).ok_or_else(|| {
-        AlignGaugeError::new(
-            ErrorCategory::InternalInvariant,
-            format!("BAM record counter '{field}' overflowed"),
-        )
-        .with_detail("counter", field)
-    })?;
-    Ok(())
+/// Validate a BAM and return the original three-counter projection.
+///
+/// # Errors
+/// Returns a typed reader failure or checked-counter overflow.
+pub fn count_bam(path: impl AsRef<Path>) -> Result<BamCounts, AlignGaugeError> {
+    let report = analyze_bam(path)?;
+    let counters = report.alignment_counters();
+    Ok(BamCounts {
+        total: counters.total,
+        mapped: counters.mapped,
+        unmapped: counters.unmapped,
+    })
 }

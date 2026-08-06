@@ -1,7 +1,7 @@
 [package]
-name = "aligngauge-cli"
+name = "aligngauge-metrics"
 version = "0.0.0"
-description = "Command-line interface for AlignGauge"
+description = "Checked alignment and per-reference counters for AlignGauge"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -11,14 +11,6 @@ publish = false
 [dependencies]
 aligngauge-core = { path = "../aligngauge-core" }
 aligngauge-hts = { path = "../aligngauge-hts" }
-aligngauge-metrics = { path = "../aligngauge-metrics" }
-
-[dev-dependencies]
-rust-htslib = { version = "1.0.1", default-features = false }
-
-[[bin]]
-name = "aligngauge"
-path = "src/main.rs"
 
 [lints]
 workspace = true

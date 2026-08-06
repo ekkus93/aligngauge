@@ -11,6 +11,10 @@ pub enum RequiredField {
     Flags,
     /// Reference identifier and position.
     Coordinates,
+    /// Mate reference identifier and position.
+    MateCoordinates,
+    /// Mapping quality.
+    MappingQuality,
     /// Validated CIGAR facts and raw operations.
     Cigar,
     /// Read-group tag and declaration state.
@@ -27,9 +31,11 @@ pub enum RequiredField {
 
 impl RequiredField {
     /// All fields in stable provenance order.
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 10] = [
         Self::Flags,
         Self::Coordinates,
+        Self::MateCoordinates,
+        Self::MappingQuality,
         Self::Cigar,
         Self::ReadGroup,
         Self::EditDistance,
@@ -44,6 +50,8 @@ impl RequiredField {
         match self {
             Self::Flags => "flags",
             Self::Coordinates => "coordinates",
+            Self::MateCoordinates => "mate_coordinates",
+            Self::MappingQuality => "mapping_quality",
             Self::Cigar => "cigar",
             Self::ReadGroup => "read_group",
             Self::EditDistance => "nm",
@@ -64,7 +72,12 @@ impl FieldPlan {
     /// Fields required by Milestone 4 counters.
     #[must_use]
     pub fn counters() -> Self {
-        Self::from_fields([RequiredField::Flags, RequiredField::Coordinates])
+        Self::from_fields([
+            RequiredField::Flags,
+            RequiredField::Coordinates,
+            RequiredField::MateCoordinates,
+            RequiredField::MappingQuality,
+        ])
     }
 
     /// Fields required by Milestone 5 exact coverage.
