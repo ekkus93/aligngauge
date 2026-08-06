@@ -1,5 +1,6 @@
 name: M5 Branch Gate
 
+# Read-only branch compiler and differential gate.
 on:
   push:
     branches: [agent/milestone-5]
