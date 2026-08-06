@@ -1,0 +1,152 @@
+//! Minimal required-field planning for the v0.1 BAM reader.
+
+use std::collections::{BTreeMap, BTreeSet};
+
+use aligngauge_core::JsonValue;
+
+/// A field that may be exposed by the validated BAM record boundary.
+#[derive(Debug, Clone, Copy, Eq, Ord, PartialEq, PartialOrd)]
+pub enum RequiredField {
+    /// SAM flags.
+    Flags,
+    /// Reference identifier and position.
+    Coordinates,
+    /// Validated CIGAR facts and raw operations.
+    Cigar,
+    /// Read-group tag and declaration state.
+    ReadGroup,
+    /// Optional `NM` edit-distance tag.
+    EditDistance,
+    /// Optional `MD` mismatch descriptor.
+    MismatchDescriptor,
+    /// Packed sequence bases. Reserved; not requested by v0.1 plans.
+    Sequence,
+    /// Base qualities. Reserved; not requested by v0.1 plans.
+    Qualities,
+}
+
+impl RequiredField {
+    /// All fields in stable provenance order.
+    pub const ALL: [Self; 8] = [
+        Self::Flags,
+        Self::Coordinates,
+        Self::Cigar,
+        Self::ReadGroup,
+        Self::EditDistance,
+        Self::MismatchDescriptor,
+        Self::Sequence,
+        Self::Qualities,
+    ];
+
+    /// Stable machine-readable field name.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Flags => "flags",
+            Self::Coordinates => "coordinates",
+            Self::Cigar => "cigar",
+            Self::ReadGroup => "read_group",
+            Self::EditDistance => "nm",
+            Self::MismatchDescriptor => "md",
+            Self::Sequence => "sequence",
+            Self::Qualities => "qualities",
+        }
+    }
+}
+
+/// Immutable set of fields required by the selected v0.1 collectors.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct FieldPlan {
+    fields: BTreeSet<RequiredField>,
+}
+
+impl FieldPlan {
+    /// Fields required by Milestone 4 counters.
+    #[must_use]
+    pub fn counters() -> Self {
+        Self::from_fields([RequiredField::Flags, RequiredField::Coordinates])
+    }
+
+    /// Fields required by Milestone 5 exact coverage.
+    #[must_use]
+    pub fn coverage() -> Self {
+        Self::from_fields([
+            RequiredField::Flags,
+            RequiredField::Coordinates,
+            RequiredField::Cigar,
+        ])
+    }
+
+    /// Add optional tags used by diagnostic and later metric collectors.
+    #[must_use]
+    pub fn with_optional_tags(mut self) -> Self {
+        self.fields.extend([
+            RequiredField::ReadGroup,
+            RequiredField::EditDistance,
+            RequiredField::MismatchDescriptor,
+        ]);
+        self
+    }
+
+    /// Union two plans without introducing execution-backend dimensions.
+    #[must_use]
+    pub fn union(mut self, other: &Self) -> Self {
+        self.fields.extend(other.fields.iter().copied());
+        self
+    }
+
+    /// Whether a field is part of the resolved plan.
+    #[must_use]
+    pub fn requires(&self, field: RequiredField) -> bool {
+        self.fields.contains(&field)
+    }
+
+    /// Stable provenance representation of every supported field decision.
+    #[must_use]
+    pub fn to_json(&self) -> JsonValue {
+        let fields = RequiredField::ALL
+            .into_iter()
+            .map(|field| {
+                (
+                    field.as_str().to_owned(),
+                    JsonValue::Bool(self.requires(field)),
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+
+        JsonValue::Object(BTreeMap::from([
+            (
+                String::from("schema"),
+                JsonValue::String(String::from("aligngauge-field-plan-v1")),
+            ),
+            (String::from("fields"), JsonValue::Object(fields)),
+        ]))
+    }
+
+    fn from_fields(fields: impl IntoIterator<Item = RequiredField>) -> Self {
+        Self {
+            fields: fields.into_iter().collect(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{FieldPlan, RequiredField};
+
+    #[test]
+    fn plan_union_is_stable_and_has_no_backend_surface() {
+        let plan = FieldPlan::counters()
+            .union(&FieldPlan::coverage())
+            .with_optional_tags();
+        let json = plan.to_json().to_compact_string();
+
+        assert!(plan.requires(RequiredField::Cigar));
+        assert!(plan.requires(RequiredField::ReadGroup));
+        assert!(!plan.requires(RequiredField::Sequence));
+        assert!(!plan.requires(RequiredField::Qualities));
+        assert!(!json.contains("backend"));
+        assert!(!json.contains("gpu"));
+        assert!(!json.contains("cuda"));
+    }
+}
