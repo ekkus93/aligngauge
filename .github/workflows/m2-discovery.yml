@@ -1,0 +1,53 @@
+name: M2 Identity Discovery
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - ".github/workflows/m2-discovery.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  discover:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Resolve Samtools image identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag='quay.io/biocontainers/samtools:1.24--h9dcdb79_1'
+          docker pull "$tag"
+          digest="$(docker inspect --format='{{index .RepoDigests 0}}' "$tag")"
+          test -n "$digest"
+          echo "SAMTOOLS_TAG=$tag"
+          echo "SAMTOOLS_DIGEST=$digest"
+          docker run --rm --network none "$digest" samtools --version
+
+      - name: Resolve HG002 source identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          base='https://ftp-trace.ncbi.nlm.nih.gov/ReferenceSamples/giab/data/AshkenazimTrio/HG002_NA24385_son/Element_AVITI_20231018'
+          bam='HG002_GRCh38-GIABv3_Element-StdInsert_2X150_81x_20231018.bam'
+          echo "HG002_BAM_URL=$base/$bam"
+          echo "HG002_BAI_URL=$base/$bam.bai"
+          curl --fail --silent --show-error --location --head "$base/$bam"
+          curl --fail --silent --show-error --location --head "$base/$bam.bai"
+          echo '--- directory checksum candidates ---'
+          curl --fail --silent --show-error --location "$base/" \
+            | grep -E 'md5|sha256|StdInsert' \
+            | sed -n '1,200p'
+          for candidate in \
+            "$base/$bam.md5" \
+            "$base/$bam.bai.md5" \
+            "$base/md5sum.txt" \
+            "$base/MD5SUMS"; do
+            echo "--- $candidate ---"
+            if ! curl --fail --silent --show-error --location "$candidate"; then
+              echo 'NOT_FOUND'
+            fi
+          done
