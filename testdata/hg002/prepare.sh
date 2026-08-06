@@ -16,6 +16,7 @@ region='chr20:10000000-11000000'
 seed='42'
 fraction='0.37037037037037'
 output_directory=${1:-"$repository_root/testdata/local/hg002-grch38-giabv3-chr20-10-11mb-30x"}
+container_user="$(id -u):$(id -g)"
 
 for executable in curl docker md5sum sha256sum; do
   command -v "$executable" >/dev/null || {
@@ -43,6 +44,7 @@ printf '%s  %s\n' "$source_bai_md5" "$staging/source.bam.bai" | md5sum --check -
 docker pull "$SAMTOOLS_IMAGE" >/dev/null
 
 docker run --rm --network bridge --read-only --cap-drop ALL \
+  --user "$container_user" \
   --security-opt no-new-privileges --pids-limit 512 --memory 4g --cpus 4 \
   --tmpfs /tmp:rw,noexec,nosuid,size=256m \
   --volume "$staging:/out:rw" \
@@ -57,14 +59,15 @@ docker run --rm --network bridge --read-only --cap-drop ALL \
     "$source_bam" \
     /out/source.bam.bai \
     "$region"
-
 docker run --rm --network none --read-only --cap-drop ALL \
+  --user "$container_user" \
   --security-opt no-new-privileges --pids-limit 256 --memory 2g --cpus 2 \
   --tmpfs /tmp:rw,noexec,nosuid,size=64m \
   --volume "$staging:/out:rw" \
   "$SAMTOOLS_IMAGE" samtools index -@ 1 /out/subset.bam /out/subset.bam.bai
 
 docker run --rm --network none --read-only --cap-drop ALL \
+  --user "$container_user" \
   --security-opt no-new-privileges --pids-limit 128 --memory 1g --cpus 1 \
   --tmpfs /tmp:rw,noexec,nosuid,size=32m \
   --volume "$staging:/out:ro" \
