@@ -1,0 +1,355 @@
+from pathlib import Path
+
+
+def replace(path: str, old: str, new: str) -> None:
+    file = Path(path)
+    text = file.read_text(encoding="utf-8")
+    count = text.count(old)
+    if count != 1:
+        raise SystemExit(f"{path}: expected one match, found {count}")
+    file.write_text(text.replace(old, new), encoding="utf-8")
+
+
+replace(
+    "crates/aligngauge-core/src/atomic.rs",
+    "Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,",
+    "Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {},",
+)
+
+replace(
+    "crates/aligngauge-core/src/error.rs",
+    "use crate::json::{JsonValue, ToJson};",
+    "use crate::json::JsonValue;",
+)
+replace(
+    "crates/aligngauge-core/src/error.rs",
+    '''    pub fn with_detail(mut self, key: impl Into<String>, value: impl ToJson) -> Self {
+        self.details.insert(key.into(), value.to_json());
+        self
+    }
+
+    /// Add a detail that is redacted unless sensitive diagnostics are requested.
+    #[must_use]
+    pub fn with_sensitive_detail(mut self, key: impl Into<String>, value: impl ToJson) -> Self {
+        self.sensitive_details.insert(key.into(), value.to_json());
+        self
+    }''',
+    '''    pub fn with_detail(mut self, key: impl Into<String>, value: impl Into<JsonValue>) -> Self {
+        self.details.insert(key.into(), value.into());
+        self
+    }
+
+    /// Add a detail that is redacted unless sensitive diagnostics are requested.
+    #[must_use]
+    pub fn with_sensitive_detail(
+        mut self,
+        key: impl Into<String>,
+        value: impl Into<JsonValue>,
+    ) -> Self {
+        self.sensitive_details.insert(key.into(), value.into());
+        self
+    }''',
+)
+
+replace(
+    "crates/aligngauge-core/src/json.rs",
+    '''            Self::Signed(value) => {
+                write!(output, "{value}").expect("writing to String cannot fail")
+            }''',
+    '''            Self::Signed(value) => {
+                write!(output, "{value}").expect("writing to String cannot fail");
+            }''',
+)
+replace(
+    "crates/aligngauge-core/src/json.rs",
+    "/// Conversion into deterministic JSON.\npub trait ToJson",
+    '''impl From<String> for JsonValue {
+    fn from(value: String) -> Self {
+        Self::String(value)
+    }
+}
+
+impl From<&str> for JsonValue {
+    fn from(value: &str) -> Self {
+        Self::String(value.to_owned())
+    }
+}
+
+impl From<bool> for JsonValue {
+    fn from(value: bool) -> Self {
+        Self::Bool(value)
+    }
+}
+
+impl From<u32> for JsonValue {
+    fn from(value: u32) -> Self {
+        Self::Unsigned(u64::from(value))
+    }
+}
+
+impl From<u64> for JsonValue {
+    fn from(value: u64) -> Self {
+        Self::Unsigned(value)
+    }
+}
+
+/// Conversion into deterministic JSON.
+pub trait ToJson''',
+)
+
+for old, new in [
+    (
+        '''                overrides.memory_limit_bytes =
+                    Some(parse_memory_limit(&parse_string(&value, &key)?)?)''',
+        '''                overrides.memory_limit_bytes =
+                    Some(parse_memory_limit(&parse_string(&value, &key)?)?);''',
+    ),
+    (
+        '''                overrides.coverage_thresholds =
+                    Some(parse_coverage_thresholds(&parse_string(&value, &key)?)?)''',
+        '''                overrides.coverage_thresholds =
+                    Some(parse_coverage_thresholds(&parse_string(&value, &key)?)?);''',
+    ),
+    (
+        '''                overrides.log_format = Some(LogFormat::parse(&parse_string(&value, &key)?, &key)?)''',
+        '''                overrides.log_format = Some(LogFormat::parse(&parse_string(&value, &key)?, &key)?);''',
+    ),
+    (
+        '''                overrides.preserve_failed_staging = Some(parse_bool(&value, &key)?)''',
+        '''                overrides.preserve_failed_staging = Some(parse_bool(&value, &key)?);''',
+    ),
+]:
+    replace("crates/aligngauge-core/src/config.rs", old, new)
+
+replace(
+    "crates/aligngauge-core/src/model.rs",
+    '''/// Canonical coverage policy.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct CoveragePolicy {
+    /// Stable profile name.
+    pub name: String,
+    /// Minimum mapping quality.
+    pub minimum_mapq: u32,
+    /// Whether duplicate records are included.
+    pub include_duplicates: bool,
+    /// Whether vendor-QC-fail records are included.
+    pub include_qc_fail: bool,
+    /// Whether secondary records are included.
+    pub include_secondary: bool,
+    /// Whether supplementary records are included.
+    pub include_supplementary: bool,
+    /// Whether exact mate-overlap correction is enabled.
+    pub mate_overlap_correction: bool,
+}
+
+impl ToJson for CoveragePolicy {
+    fn to_json(&self) -> JsonValue {
+        JsonValue::Object(BTreeMap::from([
+            (
+                String::from("include_duplicates"),
+                self.include_duplicates.to_json(),
+            ),
+            (
+                String::from("include_qc_fail"),
+                self.include_qc_fail.to_json(),
+            ),
+            (
+                String::from("include_secondary"),
+                self.include_secondary.to_json(),
+            ),
+            (
+                String::from("include_supplementary"),
+                self.include_supplementary.to_json(),
+            ),
+            (
+                String::from("mate_overlap_correction"),
+                self.mate_overlap_correction.to_json(),
+            ),
+            (String::from("minimum_mapq"), self.minimum_mapq.to_json()),
+            (String::from("name"), self.name.to_json()),
+        ]))
+    }
+}''',
+    '''/// Inclusion policy for one alignment-record class.
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum RecordInclusion {
+    /// Include this record class.
+    Include,
+    /// Exclude this record class.
+    Exclude,
+}
+
+impl RecordInclusion {
+    const fn is_included(self) -> bool {
+        matches!(self, Self::Include)
+    }
+}
+
+/// Mate-overlap treatment for coverage.
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum MateOverlapPolicy {
+    /// Count both mates independently.
+    CountBoth,
+    /// Correct overlapping mates exactly.
+    Correct,
+}
+
+impl MateOverlapPolicy {
+    const fn uses_correction(self) -> bool {
+        matches!(self, Self::Correct)
+    }
+}
+
+/// Canonical coverage policy.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct CoveragePolicy {
+    /// Stable profile name.
+    pub name: String,
+    /// Minimum mapping quality.
+    pub minimum_mapq: u32,
+    /// Duplicate-record inclusion.
+    pub duplicates: RecordInclusion,
+    /// Vendor-QC-fail-record inclusion.
+    pub qc_fail: RecordInclusion,
+    /// Secondary-record inclusion.
+    pub secondary: RecordInclusion,
+    /// Supplementary-record inclusion.
+    pub supplementary: RecordInclusion,
+    /// Mate-overlap treatment.
+    pub mate_overlap: MateOverlapPolicy,
+}
+
+impl ToJson for CoveragePolicy {
+    fn to_json(&self) -> JsonValue {
+        JsonValue::Object(BTreeMap::from([
+            (
+                String::from("include_duplicates"),
+                self.duplicates.is_included().to_json(),
+            ),
+            (
+                String::from("include_qc_fail"),
+                self.qc_fail.is_included().to_json(),
+            ),
+            (
+                String::from("include_secondary"),
+                self.secondary.is_included().to_json(),
+            ),
+            (
+                String::from("include_supplementary"),
+                self.supplementary.is_included().to_json(),
+            ),
+            (
+                String::from("mate_overlap_correction"),
+                self.mate_overlap.uses_correction().to_json(),
+            ),
+            (String::from("minimum_mapq"), self.minimum_mapq.to_json()),
+            (String::from("name"), self.name.to_json()),
+        ]))
+    }
+}''',
+)
+replace(
+    "crates/aligngauge-core/src/model.rs",
+    "            unavailable => unavailable,",
+    "            unavailable @ Availability::Unavailable { .. } => unavailable,",
+)
+
+replace(
+    "crates/aligngauge-core/src/lib.rs",
+    '''    AlignmentCounters, Availability, BuildInfo, CoveragePolicy, CoverageSummary, InputIdentity,
+    MetricDefinition, PerReferenceCounters, Provenance, Summary, SystemInfo, Warning,''',
+    '''    AlignmentCounters, Availability, BuildInfo, CoveragePolicy, CoverageSummary, InputIdentity,
+    MateOverlapPolicy, MetricDefinition, PerReferenceCounters, Provenance, RecordInclusion,
+    Summary, SystemInfo, Warning,''',
+)
+replace(
+    "crates/aligngauge-core/tests/contracts.rs",
+    '''    InputIdentity, JsonValue, MapEnvironment, MetricDefinition, PerReferenceCounters, Provenance,
+    Summary, SystemInfo, ToJson, Warning, resolve_config,''',
+    '''    InputIdentity, JsonValue, MapEnvironment, MateOverlapPolicy, MetricDefinition,
+    PerReferenceCounters, Provenance, RecordInclusion, Summary, SystemInfo, ToJson, Warning,
+    resolve_config,''',
+)
+replace(
+    "crates/aligngauge-core/tests/contracts.rs",
+    '''            include_duplicates: false,
+            include_qc_fail: false,
+            include_secondary: false,
+            include_supplementary: false,
+            mate_overlap_correction: false,''',
+    '''            duplicates: RecordInclusion::Exclude,
+            qc_fail: RecordInclusion::Exclude,
+            secondary: RecordInclusion::Exclude,
+            supplementary: RecordInclusion::Exclude,
+            mate_overlap: MateOverlapPolicy::CountBoth,''',
+)
+
+permanent_workflow = '''name: Permanent CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: permanent-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: ci/permanent
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Show pinned toolchain
+        run: |
+          rustc --version --verbose
+          cargo --version
+
+      - name: Verify dependency lockfile
+        run: cargo update --workspace --locked --dry-run
+
+      - name: Check formatting
+        run: cargo fmt --all --check
+
+      - name: Validate committed JSON schemas
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          for path in sorted(Path("schemas").glob("*.json")):
+              with path.open(encoding="utf-8") as handle:
+                  json.load(handle)
+          PY
+
+      - name: Run Clippy
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+      - name: Run tests
+        run: cargo test --workspace --all-features --locked
+
+      - name: Build documentation
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --workspace --all-features --no-deps --locked
+
+      - name: Verify repository remains clean
+        run: |
+          if [[ -n "$(git status --porcelain)" ]]; then
+            git status --short
+            git diff --check
+            exit 1
+          fi
+'''
+Path(".github/workflows/ci.yml").write_text(permanent_workflow, encoding="utf-8")
+Path(__file__).unlink()
