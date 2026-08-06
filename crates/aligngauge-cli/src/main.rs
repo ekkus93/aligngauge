@@ -48,9 +48,7 @@ fn parse_args() -> Result<CliAction, String> {
         return Err(format!("missing subcommand\n{}", usage(&program)));
     };
 
-    if command.as_os_str() == OsStr::new("--help")
-        || command.as_os_str() == OsStr::new("-h")
-    {
+    if command.as_os_str() == OsStr::new("--help") || command.as_os_str() == OsStr::new("-h") {
         return Ok(CliAction::Help(usage(&program)));
     }
     if command.as_os_str() != OsStr::new("qc") {
@@ -63,8 +61,7 @@ fn parse_args() -> Result<CliAction, String> {
 
     let mut input = None;
     while let Some(argument) = arguments.next() {
-        if argument.as_os_str() == OsStr::new("--help")
-            || argument.as_os_str() == OsStr::new("-h")
+        if argument.as_os_str() == OsStr::new("--help") || argument.as_os_str() == OsStr::new("-h")
         {
             return Ok(CliAction::Help(usage(&program)));
         }
@@ -90,8 +87,5 @@ fn parse_args() -> Result<CliAction, String> {
 }
 
 fn usage(program: &OsStr) -> String {
-    format!(
-        "Usage: {} qc --input <BAM>",
-        program.to_string_lossy()
-    )
+    format!("Usage: {} qc --input <BAM>", program.to_string_lossy())
 }
