@@ -1,5 +1,6 @@
 name: Permanent CI
 
+# Bounded documentation-signoff workflow; the committed signoff deletes its script.
 on:
   push:
     branches: [master]
