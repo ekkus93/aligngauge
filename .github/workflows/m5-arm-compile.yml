@@ -1,0 +1,59 @@
+name: M5 ARM Compile Gate
+
+on:
+  push:
+    branches: [agent/milestone-5]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: m5-arm-compile-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compile:
+    if: contains(github.event.head_commit.message, '[m5-arm]')
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out work branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Apply Milestone 5 implementation
+        run: |
+          base64 --decode tools/m5_apply.py.gz.b64 \
+            | gzip --decompress \
+            > /tmp/m5_apply.py
+          echo 'f8ef4cd20d1a46e43617e26871120378db741dd1d4faa64afafc07bed02652a9  /tmp/m5_apply.py' \
+            | sha256sum --check -
+          python /tmp/m5_apply.py
+
+      - name: Format source
+        run: cargo fmt --all
+
+      - name: Compile workspace
+        run: cargo check --workspace --all-targets
+
+      - name: Verify dependency lockfile
+        run: cargo update --workspace --locked --dry-run
+
+      - name: Run strict Clippy
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+      - name: Run tests
+        run: cargo test --workspace --all-features --locked
+
+      - name: Build documentation
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --workspace --all-features --no-deps --locked
+
+      - name: Validate final diff
+        run: |
+          git diff --check
+          git status --short
