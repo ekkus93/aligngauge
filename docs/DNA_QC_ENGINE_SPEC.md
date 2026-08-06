@@ -1,347 +1,531 @@
-# Rust DNA Sequencer v0.1 Specification
+# BamGauge Product and Architecture Specification
 
-**Repository:** `ekkus93/rust-dna-sequencer`  
-**Status:** Initial architecture specification  
-**Target release:** v0.1  
-**Last updated:** 2026-08-05
+**Current repository:** `ekkus93/rust-dna-sequencer`  
+**Recommended repository name:** `ekkus93/bamgauge`  
+**Binary name:** `bamgauge`  
+**Status:** Revised planning specification  
+**Last updated:** 2026-08-06  
+**Supersedes:** Initial `DNA_QC_ENGINE_SPEC.md` dated 2026-08-05
 
-## 1. Executive summary
+## 1. Product identity
 
-Rust DNA Sequencer is a high-performance DNA sequencing quality-control and alignment-analysis engine for whole-genome sequencing (WGS), whole-exome sequencing (WES), and targeted sequencing data.
+### 1.1 Name
 
-Despite the repository name, v0.1 is **not** software for controlling a physical sequencing instrument and is **not** a basecaller. It processes existing coordinate-sorted BAM or CRAM alignment files. Its primary architectural goal is to decode each alignment record once, share that decoded record among all enabled analyses, and produce a coherent set of alignment, coverage, target, and quality metrics without repeatedly scanning the same large file.
+The recommended project name is **BamGauge**.
 
-The system shall be implemented in Rust. A complete CPU implementation is mandatory and authoritative. NVIDIA CUDA acceleration is optional and shall only be used for workloads where measured end-to-end performance improves. GPU availability must never be required for correctness or basic operation.
+“BAM” immediately identifies the primary input class for the first release, while
+“Gauge” communicates measurement rather than alignment, variant calling, basecalling,
+or physical sequencer control. Later CRAM support does not change the product’s core:
+quality control of aligned sequencing records.
 
-The initial implementation shall prioritize:
+Recommended repository rename:
 
-- exact and documented analysis semantics;
-- deterministic results;
-- fail-closed input and reference validation;
-- no silent fallback to approximate algorithms;
-- a stable native JSON result model;
-- compatibility exports for common bioinformatics tooling;
-- differential validation against established tools;
-- realistic validation using Genome in a Bottle (GIAB) HG002 data;
-- reproducible CPU and GPU benchmarks.
+```text
+ekkus93/rust-dna-sequencer
+    ↓
+ekkus93/bamgauge
+```
+
+Recommended crate namespace:
+
+```text
+bamgauge
+bamgauge-core
+bamgauge-hts
+bamgauge-metrics
+bamgauge-coverage
+bamgauge-formats
+bamgauge-testkit
+```
+
+### 1.2 Project description
+
+> **A validation-first Rust engine for fast, single-pass BAM/CRAM alignment QC and
+> coverage analysis for WGS, WES, and targeted sequencing.**
+
+A slightly longer README description may use:
+
+> BamGauge reads each alignment record once and shares it across deterministic
+> quality-control collectors, producing canonical JSON, provenance, alignment
+> counters, coverage metrics, and compatibility exports without repeatedly scanning
+> the same BAM or CRAM file.
+
+### 1.3 Product boundary
+
+BamGauge is not:
+
+- software for controlling a physical DNA sequencer;
+- a basecaller;
+- a FASTQ aligner;
+- a duplicate marker;
+- a variant caller;
+- a genome assembler;
+- a clinical diagnostic product.
+
+It analyzes existing aligned sequencing data.
 
 ## 2. Problem statement
 
-A typical DNA sequencing QC workflow may invoke several tools independently over the same BAM or CRAM file. Common operations include alignment statistics, flag counts, insert-size metrics, mapping-quality distributions, genome coverage, target coverage, GC bias, quality histograms, and sample-identity allele extraction.
-
-Each independent invocation may perform another expensive round of:
+DNA sequencing QC pipelines commonly run several tools independently over the same
+large BAM or CRAM file. Each invocation may repeat:
 
 1. storage reads;
 2. BGZF or CRAM decompression;
-3. record decoding;
+3. alignment-record decoding;
 4. CIGAR parsing;
 5. filtering;
-6. output formatting.
+6. metric accumulation;
+7. output formatting.
 
-For large WGS files, repeated decompression and traversal can dominate the total cost. Rust DNA Sequencer shall consolidate compatible analyses into one coordinated pass and reuse work among collectors.
+For WGS data, repeated decoding and traversal can dominate the total QC cost.
+BamGauge shall coordinate compatible analyses around a shared record stream so that
+each decoded record is reused by all enabled collectors.
 
-The project is successful when its total runtime approaches the cost of reading and decoding the input once, plus the unavoidable cost of the enabled analyses.
+The performance target is not “Rust is faster than C.” The target is:
 
-## 3. Goals
+> Approach the cost of reading and decoding the input once, plus the unavoidable
+> work of the selected metrics.
 
-### 3.1 Functional goals
+## 3. Design principles
 
-v0.1 shall:
+The following requirements apply to every release.
 
-1. Read coordinate-sorted BAM and CRAM files.
-2. Validate alignment headers, coordinate order, indexes where required, and CRAM reference compatibility.
-3. Produce `flagstat`-style alignment counters.
-4. Produce `idxstats`-style per-reference counts.
-5. Produce core alignment statistics comparable to the commonly consumed sections of `samtools stats` and Picard alignment metrics.
-6. Calculate exact genome, window, and interval coverage.
-7. Calculate WES and targeted-panel coverage metrics from BED intervals.
-8. Calculate read length, mapping quality, insert size, clipping, sequence GC, and base-quality histograms where the necessary fields are enabled.
-9. Break down metrics by sample, read group, library, and platform unit when present.
-10. Emit a canonical versioned JSON result.
-11. Emit versioned provenance describing all inputs, filters, algorithms, backends, and compatibility profiles.
-12. Emit selected compatibility files for MultiQC and established command-line ecosystems.
-13. Support deterministic multithreaded CPU execution.
-14. Support optional CUDA acceleration through a separately testable backend.
-15. Validate results against synthetic edge cases and public GIAB HG002 data.
+### 3.1 Correctness before breadth
 
-### 3.2 Performance goals
+A metric is not complete until its semantics, fixtures, reference comparison, and
+failure behavior are defined. A smaller verified release is preferred over a broad
+release with unresolved compatibility gaps.
 
-The implementation shall:
+### 3.2 CPU-authoritative implementation
 
-- avoid per-record heap allocation in the steady-state hot path;
-- reuse record and batch buffers;
-- decode only fields required by the selected analysis plan where the input backend permits it;
-- use thread-local accumulators and deterministic reduction;
-- batch work sent to the GPU;
-- overlap CPU decoding, host/device transfer, and GPU execution when CUDA is enabled;
-- measure end-to-end performance rather than kernel-only performance;
-- preserve a complete CPU path as the reference implementation.
+Every released metric shall have a complete CPU implementation. Experimental
+hardware acceleration shall never be required to obtain correct results.
 
-### 3.3 Correctness goals
+### 3.3 Fail closed
 
-The implementation shall:
+BamGauge shall not:
 
-- define every filter and metric mathematically or procedurally;
-- reject malformed or incompatible inputs rather than guessing;
-- distinguish unsupported input from empty valid input;
-- never silently change exact algorithms into approximate algorithms;
-- never silently ignore failed collectors;
-- avoid saturating counters without reporting an error;
-- produce deterministic output ordering and deterministic reductions;
-- identify all expected compatibility differences in machine-readable metadata and documentation.
+- substitute zero for missing data;
+- silently skip a failed collector;
+- silently accept malformed or unsorted input;
+- silently change an exact algorithm into an approximation;
+- silently fetch an input or reference from the network;
+- silently emit partial compatibility files;
+- silently saturate counters;
+- silently assign unknown read groups to invented groups.
 
-## 4. Non-goals for v0.1
+Unsupported or unverifiable input shall produce an actionable error.
 
-The following are explicitly outside v0.1:
+### 3.4 Canonical model first
 
-- physical sequencer control;
-- Illumina image processing;
-- Oxford Nanopore signal basecalling;
-- PacBio signal processing;
-- FASTQ alignment;
-- de novo assembly;
-- duplicate marking or removal;
-- base-quality score recalibration;
-- small-variant, structural-variant, or copy-number calling;
-- phasing;
-- ancestry inference;
-- a native contamination estimator equivalent to VerifyBamID2;
-- a clinical diagnostic claim or regulated clinical validation;
-- a new BAM or CRAM codec implementation;
-- remote object-store support as a release requirement;
-- perfect byte-for-byte emulation of every historical option in Samtools, Picard, mosdepth, or Qualimap.
+The native, versioned result model is authoritative. Compatibility files are derived
+from that model rather than accumulated independently, except where a format
+requires additional explicitly named state.
 
-Future versions may add raw-read workflows, targeted allele extraction, contamination estimation, D4 output, remote I/O, and additional sequencing technologies.
+### 3.5 Deterministic reduction
+
+Integer counts remain integers through collection and reduction. Means, percentages,
+and other floating-point values are computed in one deterministic CPU-side final
+reduction over canonical integer inputs. Output ordering is stable.
+
+### 3.6 Evidence-based optimization
+
+Optimization follows profiling. The project shall not add permanent configuration,
+public CLI flags, crates, or result-schema fields for a hypothetical backend before
+a prototype demonstrates reproducible end-to-end value.
+
+## 4. Version roadmap
+
+The version boundaries are product contracts, not aspirational labels.
+
+### 4.1 v0.1 — BAM CPU foundation
+
+v0.1 is a coherent, releasable BAM QC engine with:
+
+- coordinate-sorted BAM input;
+- one streaming reader;
+- CPU execution only;
+- input/header/coordinate validation;
+- `flagstat`-equivalent record classification and counters;
+- `idxstats`-equivalent per-reference mapped and unmapped counters;
+- exact project-defined genome coverage;
+- coverage histograms and configurable thresholds;
+- canonical JSON;
+- provenance JSON;
+- atomic output publication;
+- synthetic differential fixtures;
+- validation on a small real HG002 region.
+
+v0.1 does not include CRAM, WES/panel metrics, Picard compatibility, CUDA, remote
+I/O, full-genome validation, or indexed partition parallelism.
+
+### 4.2 v0.2 — CRAM and reference integrity
+
+v0.2 adds:
+
+- CRAM input through a pinned HTSlib/rust-htslib version;
+- mandatory local-reference resolution;
+- remote reference retrieval disabled unconditionally;
+- reference identity and MD5 validation;
+- BAM/CRAM equivalence testing;
+- `inspect` and `validate-reference` workflows;
+- CRAM corruption and missing-reference fixtures.
+
+### 4.3 v0.3 — WES and targeted panels
+
+v0.3 adds:
+
+- BED target input;
+- strict but vendor-compatible BED parsing;
+- normalized target intervals;
+- on-target, near-target, and off-target measurements;
+- per-target coverage and threshold summaries;
+- uncovered target runs;
+- target territory and enrichment metrics;
+- an explicitly defined fold-80 metric or named alternative;
+- HG002 exome/target validation.
+
+### 4.4 v0.4 — Expanded metric and ecosystem compatibility
+
+v0.4 adds selected, explicitly scoped compatibility with:
+
+- commonly consumed `samtools stats` sections;
+- Picard alignment-summary metrics;
+- Picard insert-size metrics, including exact trimming/rounding where claimed;
+- Picard WGS and hybrid-selection metrics where adopted;
+- MultiQC parser validation;
+- read-group, library, sample, and platform-unit breakdowns;
+- exact mate-overlap correction under a supported execution mode.
+
+### 4.5 v0.5 — Full-scale qualification
+
+v0.5 adds:
+
+- approximately 30× HG002 WGS validation;
+- repeatable benchmark reports;
+- serial-versus-parallel equivalence where parallel execution is released;
+- resource-bound testing;
+- fuzzing and sanitizer campaigns sufficient for a production beta;
+- signed release artifacts and SBOMs if distribution automation is ready.
+
+### 4.6 Post-v0.5 candidates
+
+Potential later capabilities include:
+
+- D4 coverage output;
+- targeted sample-identity allele extraction;
+- contamination-estimation integration;
+- remote object-store input;
+- additional compatibility profiles;
+- long-read-specific policies;
+- native or alternative alignment backends.
+
+### 4.7 Hardware-acceleration research track
+
+GPU acceleration is not assigned to a release.
+
+Research spikes may investigate:
+
+- GPU BGZF decompression;
+- coverage prefix scans;
+- target reductions;
+- pileup and allele counting;
+- compression or other profiled bottlenecks.
+
+A GPU feature may enter the product only after an ADR records:
+
+1. the measured bottleneck;
+2. the prototype design;
+3. CPU and GPU hardware;
+4. storage and PCIe topology;
+5. warm and cold runs;
+6. end-to-end wall-clock improvement;
+7. correctness equivalence;
+8. resource and maintenance costs.
+
+Kernel-only speedups do not qualify. No `--backend` option or GPU crate is part of
+the product until a feature passes this gate.
 
 ## 5. Terminology
 
-- **Alignment record:** A decoded SAM/BAM/CRAM record.
-- **Primary alignment:** A record that is neither secondary nor supplementary.
-- **Coverage:** The number of accepted aligned read bases covering a reference position under an explicitly named filter profile.
-- **Reference block:** A contiguous reference interval covered by a CIGAR operation that consumes aligned query and reference sequence.
-- **Target interval:** A half-open genomic interval supplied through BED or a normalized equivalent.
-- **Collector:** A component that consumes decoded records or coverage runs and accumulates a metric family.
-- **Analysis plan:** An immutable plan created before record processing that defines required fields, filters, collectors, output profiles, memory strategy, and execution backends.
-- **Compatibility profile:** A named set of semantics intended to reproduce or closely match an established tool's output.
-- **Exact mode:** A mode that follows the specified CIGAR, filtering, overlap, and base-quality semantics.
-- **Approximate mode:** Any mode that deliberately trades semantic fidelity for speed. No approximate mode is part of the default v0.1 path.
+- **Alignment record:** a decoded SAM/BAM/CRAM record.
+- **Primary record:** neither secondary nor supplementary.
+- **Reference block:** a half-open reference interval represented by a CIGAR
+  operation that the selected coverage policy treats as covered.
+- **Coverage track:** one coverage parameterization, including flag filters, MAPQ,
+  base-quality, duplicate, overlap, deletion, and skip policies.
+- **Collector:** a component that consumes validated records or coverage runs and
+  accumulates one metric family.
+- **Analysis plan:** an immutable plan created before processing that specifies
+  required fields, collectors, filters, resource limits, and outputs.
+- **Compatibility profile:** a pinned set of semantics intended to match a named
+  version of an established tool.
+- **Canonical result:** the versioned native metric model from which other outputs
+  are generated.
+- **Walking skeleton:** the first disposable vertical slice proving the complete
+  CLI-to-result path.
 
-## 6. Primary user workflows
+## 6. v0.1 command-line contract
 
-### 6.1 WGS QC
+### 6.1 Walking-skeleton interface
+
+The first code milestone may expose:
 
 ```bash
-rust-dna-sequencer qc \
+bamgauge qc --input sample.bam
+```
+
+It shall count total, mapped, and unmapped records, print a human-readable result,
+and fail nonzero on a truncated BAM.
+
+The walking skeleton is intentionally disposable. It does not establish the final
+schema or output contract.
+
+### 6.2 v0.1 release interface
+
+```bash
+bamgauge qc \
   --input sample.bam \
-  --reference GRCh38.fa \
   --outdir results \
-  --profile wgs \
-  --backend auto \
-  --threads 16
+  --threads 8 \
+  --memory-limit 4GiB \
+  --coverage-thresholds 1,10,20,30
 ```
 
-Expected outputs include alignment counters, per-contig statistics, coverage distributions, threshold summaries, insert-size and quality metrics, canonical JSON, and provenance.
-
-### 6.2 WES or panel QC
-
-```bash
-rust-dna-sequencer qc \
-  --input sample.cram \
-  --reference GRCh38.fa \
-  --targets capture_targets.bed \
-  --outdir results \
-  --profile targeted \
-  --coverage-thresholds 1,10,20,30,50,100
-```
-
-Expected outputs include WGS-style core metrics plus on-target/off-target metrics, per-target coverage, uncovered intervals, threshold percentages, uniformity, and enrichment metrics.
-
-### 6.3 CPU-only reproducibility run
-
-```bash
-rust-dna-sequencer qc \
-  --input sample.bam \
-  --reference GRCh38.fa \
-  --outdir results-cpu \
-  --backend cpu
-```
-
-### 6.4 Required-CUDA run
-
-```bash
-rust-dna-sequencer qc \
-  --input sample.bam \
-  --reference GRCh38.fa \
-  --outdir results-cuda \
-  --backend cuda \
-  --cuda-device 0
-```
-
-If CUDA is requested explicitly and cannot be initialized, the command shall fail. It shall not silently continue on the CPU.
-
-### 6.5 Input inspection
-
-```bash
-rust-dna-sequencer inspect \
-  --input sample.cram \
-  --reference GRCh38.fa
-```
-
-This shall validate metadata without running the full analysis and shall report contigs, sort order, read groups, index availability, reference matching, and estimated workload.
-
-## 7. Command-line interface
-
-The installed binary name shall initially be `rust-dna-sequencer`. A shorter alias may be added later without changing the canonical name.
-
-### 7.1 Subcommands
-
-- `qc`: run one complete analysis;
-- `inspect`: inspect and validate alignment metadata;
-- `validate-reference`: validate an input alignment against a FASTA and indexes;
-- `schema`: print the native JSON schema version and optionally export the schema;
-- `testdata`: list or prepare documented public test-data subsets; this may be deferred until after the core engine.
-
-### 7.2 Common options
+Required v0.1 options:
 
 - `--input <PATH>`
-- `--reference <PATH>`
-- `--targets <PATH>`
 - `--outdir <PATH>`
-- `--profile <wgs|targeted|custom>`
-- `--backend <auto|cpu|cuda>`
+
+Optional v0.1 options:
+
 - `--threads <N>`
 - `--io-threads <N>`
-- `--cuda-device <N>`
 - `--memory-limit <SIZE>`
 - `--coverage-thresholds <LIST>`
 - `--config <PATH>`
 - `--log-format <human|json>`
 - `--quiet`
 - `--verbose`
+- `--preserve-failed-staging`
 
-Configuration precedence shall be documented and deterministic:
+The following options are not part of v0.1:
+
+- `--reference`
+- `--targets`
+- `--profile targeted`
+- `--backend`
+- `--cuda-device`
+
+### 6.3 Configuration precedence
+
+Configuration precedence is:
 
 1. built-in defaults;
 2. configuration file;
-3. environment variables, only for explicitly supported values;
+3. explicitly documented environment variables;
 4. CLI arguments.
 
-The final resolved configuration shall be recorded in provenance.
+The fully resolved configuration is written to provenance.
 
-## 8. Input contracts
+Unknown configuration keys are fatal by default. A future migration tool may
+provide controlled schema upgrades.
 
-### 8.1 BAM and CRAM
+## 7. v0.1 BAM input contract
 
-v0.1 shall support:
+### 7.1 Format and access
 
-- BAM conforming to the maintained SAM/BAM specification;
-- CRAM through HTSlib via `rust-htslib`;
-- coordinate-sorted input;
-- BAI, CSI, or CRAI where indexed region access is used;
-- local filesystem paths.
+v0.1 accepts local BAM files conforming to the maintained SAM/BAM specification.
 
-A streaming whole-file pass may operate without an index when the enabled analyses do not require seeking. Indexed parallel mode shall require a compatible index.
+A whole-file streaming pass does not require an index. If an index is present it
+may be inspected, but v0.1 correctness shall not depend on indexed partitioning.
 
-### 8.2 Reference FASTA
+### 7.2 Coordinate order
 
-CRAM shall require a matching reference FASTA unless the file is fully self-contained and the backend can prove that no external reference is needed. The implementation shall not guess between references.
+The header sort declaration is not sufficient. During traversal, BamGauge shall
+detect coordinate regressions among mapped records.
 
-Reference validation shall compare, when available:
+Policy:
 
-- sequence names;
-- sequence lengths;
-- header MD5 values;
-- FASTA index entries;
-- dictionary metadata.
+- mapped records must be nondecreasing by reference ID and position;
+- unmapped-tail placement shall follow the supported SAM/BAM ordering policy;
+- a material regression is fatal;
+- the diagnostic shall identify the prior and current record coordinates without
+  logging sensitive read names by default.
 
-Any mismatch that can change decoded sequence or coordinates shall be fatal.
+### 7.3 Record corruption
 
-### 8.3 BED targets
+Truncation, malformed record lengths, invalid CIGAR encodings, overflowing
+coordinates, and decoder errors are fatal.
 
-BED input shall be interpreted as zero-based, half-open intervals. The parser shall:
+No completed output directory may be published after such an error.
 
-- reject negative, reversed, or overflowing coordinates;
-- validate contig names against the alignment header;
-- optionally reject unknown contigs by default;
-- sort intervals deterministically;
-- merge overlaps for aggregate calculations while retaining original interval identity for per-target reporting;
-- preserve optional target names;
-- record normalization actions in provenance.
+### 7.4 Oversized CIGAR policy
 
-The program shall never infer whether an interval file is one-based.
+BAM records that use the `CG` tag representation for more than 65,535 CIGAR
+operations shall be either:
 
-### 8.4 Coordinate order
+- expanded correctly by the pinned backend and processed; or
+- rejected explicitly as unsupported.
 
-The header sort-order declaration is insufficient by itself. During processing, the engine shall detect material coordinate regressions. An unsorted input shall fail with a clear diagnostic unless a future explicitly named unsorted mode is implemented.
+Undefined behavior is prohibited. The pinned backend behavior shall be tested with
+a named fixture before v0.1 is released.
 
-## 9. Output contracts
+### 7.5 Untrusted input
 
-### 9.1 Atomic output behavior
+Alignment fields, tags, read-group values, contig names, and paths are untrusted.
 
-All outputs shall be written to a staging directory inside the selected output filesystem. The completed output set shall be published atomically where the platform permits.
+The implementation shall:
+
+- enforce checked integer conversions;
+- bound allocations derived from file values;
+- avoid using record content as a format string or path;
+- avoid implicit subprocess execution;
+- avoid implicit network access;
+- redact read names from routine errors unless diagnostic mode is explicitly
+  enabled.
+
+## 8. v0.2 CRAM reference contract
+
+This section is normative for v0.2 and shall influence the v0.1 I/O boundary.
+
+Before opening any CRAM handle, BamGauge shall configure HTSlib for local-only
+reference resolution.
+
+Requirements:
+
+- pin the exact HTSlib/rust-htslib version;
+- verify that `REF_PATH`, `REF_CACHE`, and any version-specific reference provider
+  cannot trigger remote retrieval;
+- override inherited environment state with local-only values;
+- prohibit HTTP/HTTPS reference resolution;
+- run CRAM differential tests in a network-disabled sandbox;
+- fail if a required sequence cannot be resolved locally;
+- name the missing contig and expected MD5 in the diagnostic where available;
+- record the actual FASTA identity and per-contig validation in provenance.
+
+A supplied but mismatched FASTA shall not cause fallback to another local or remote
+reference.
+
+## 9. BED contract for v0.3
+
+BED coordinates are zero-based and half-open.
+
+The parser shall skip:
+
+- blank lines;
+- lines beginning with `#`;
+- UCSC `track` lines;
+- UCSC `browser` lines.
+
+It shall accept CRLF and trailing whitespace.
+
+An interval line is fatal when it contains:
+
+- non-numeric required coordinates;
+- negative coordinates;
+- start greater than end;
+- arithmetic overflow;
+- a contig not permitted by the selected unknown-contig policy.
+
+The parser shall:
+
+- normalize line endings;
+- preserve original interval identity and optional name;
+- sort deterministically;
+- merge overlaps for aggregate metrics while retaining the mapping back to source
+  intervals;
+- record every normalization action in provenance.
+
+BamGauge shall never infer one-based coordinates.
+
+## 10. Canonical output contract
+
+### 10.1 Required files
+
+A completed v0.1 output directory contains:
+
+- `summary.json`
+- `provenance.json`
+- optional requested compatibility files
+- `_SUCCESS`
+
+### 10.2 Atomic publication
+
+Outputs are built in a staging directory on the same filesystem as the final
+destination.
+
+Publication order:
+
+1. write all required files into staging;
+2. flush and synchronize required file contents;
+3. write `_SUCCESS` into staging as the final file;
+4. synchronize staging metadata where supported;
+5. atomically rename staging to the destination.
+
+`_SUCCESS` is retained for ecosystem compatibility. It is never written after
+publication.
+
+If the platform cannot provide the required atomic rename semantics, BamGauge shall
+fail before processing unless a future explicitly named non-atomic mode is selected.
 
 On failure:
 
-- no completed-success marker shall be emitted;
-- incomplete compatibility outputs shall not be presented as valid;
-- temporary files shall be removed by default;
-- an explicit diagnostic option may preserve temporary files for debugging.
+- the destination must not expose a partial completed run;
+- `_SUCCESS` must not exist at the destination;
+- staging is removed by default;
+- `--preserve-failed-staging` may preserve it under a clearly incomplete name.
 
-### 9.2 Canonical native outputs
+### 10.3 Canonical JSON
 
-Required files:
-
-- `summary.json`: canonical versioned metrics;
-- `provenance.json`: resolved configuration, algorithms, versions, backends, filters, input identities, warnings, and timings;
-- `run.log` or structured log stream when requested;
-- `_SUCCESS`: created only after all required outputs are complete and synchronized.
-
-The JSON schema shall include:
+`summary.json` shall contain:
 
 - `schema_version`;
 - application version and Git commit;
-- analysis profile;
-- input and reference identity;
-- filter definitions;
 - metric definitions and units;
-- per-sample/read-group/library breakdowns;
-- execution plan;
-- CPU and GPU device information;
+- alignment counters;
+- per-reference counters;
+- coverage policy;
+- coverage histogram and thresholds;
+- unavailable metrics represented explicitly, never as zero;
+- warning summary.
+
+`provenance.json` shall contain:
+
+- resolved configuration;
+- input path and identity;
+- input size and checksum policy;
+- header identity;
+- backend library versions;
+- analysis plan;
+- resource limits;
 - stage timings;
-- compatibility differences;
-- warning and error summaries.
+- normalization actions;
+- compatibility profiles;
+- warnings and errors;
+- operating-system and CPU information needed for reproducibility.
 
-### 9.3 Compatibility outputs
+No GPU fields are required before a released GPU feature exists.
 
-Compatibility output shall be generated from the canonical internal model, not accumulated independently where avoidable.
+### 10.4 Schema evolution
 
-Initial targets:
+The schema version is independent of the application version.
 
-- Samtools-like flag statistics;
-- Samtools-like per-contig counts;
-- selected Samtools statistics sections required by common MultiQC reports;
-- mosdepth-like summary, global distribution, and region tables;
-- selected Picard-like alignment, insert-size, WGS, and hybrid-selection metrics;
-- MultiQC-discoverable filenames and metadata.
+Rules:
 
-Every compatibility format shall have:
+- additive optional fields may retain the schema major version;
+- semantic changes require a schema version change;
+- unknown required fields are not ignored by strict consumers;
+- golden schemas are committed and tested.
 
-- a named profile;
-- a pinned reference-tool version during validation;
-- documented exact matches;
-- documented tolerated numeric differences;
-- documented unsupported fields;
-- golden fixtures.
+## 11. v0.1 alignment classification
 
-Compatibility exporters shall fail if required source metrics were not collected. They shall not emit zeros or empty sections as substitutes for missing analysis.
+### 11.1 Counter partitions
 
-## 10. Metrics
-
-### 10.1 Alignment and flag counters
-
-At minimum:
+At minimum, v0.1 records:
 
 - total records;
+- QC-pass and QC-fail totals;
 - primary records;
 - secondary records;
 - supplementary records;
@@ -351,732 +535,444 @@ At minimum:
 - read 1 and read 2;
 - mate mapped and mate unmapped;
 - duplicates;
+- singletons;
+- per-reference mapped counts;
+- per-reference unmapped counts where the compatibility definition supports them.
+
+### 11.2 Classification priority
+
+A record carrying both secondary and supplementary bits shall follow the pinned
+`samtools flagstat` compatibility profile’s classification priority. It shall not
+be independently added to both mutually exclusive top-level categories.
+
+The exact pinned Samtools version and expected fixture outputs are owned by the test
+manifest.
+
+### 11.3 Counter types
+
+Counters use checked `u64` accumulation. Overflow is fatal.
+
+No counter saturates silently.
+
+## 12. v0.1 coverage semantics
+
+### 12.1 Named default profile
+
+The v0.1 canonical coverage profile is `bamgauge-v0.1`.
+
+It includes records that are:
+
+- mapped;
+- primary;
+- QC-pass;
+- not marked duplicate.
+
+It excludes:
+
+- unmapped records;
+- secondary records;
+- supplementary records;
 - QC-fail records;
-- singleton records;
-- inward-, outward-, and other-orientation pairs where defined;
-- records by mapping-quality bin;
-- records by reference sequence;
-- passing and failing quality-control partitions where compatibility requires them.
+- duplicate records.
 
-Classification order shall be explicit. In particular, records carrying both secondary and supplementary bits must follow the selected compatibility profile's priority rather than being accidentally double-counted.
+The profile has:
 
-### 10.2 Histograms and distributions
+- minimum MAPQ: `0`;
+- no base-quality filter;
+- no mate-overlap correction;
+- no implicit clipping adjustment beyond CIGAR semantics.
 
-When enabled and available:
+This is a project-defined canonical profile. Compatibility with a particular
+mosdepth or Picard profile is not claimed until separately validated and named.
 
-- read length;
-- aligned query length;
-- reference span;
-- mapping quality;
-- insert size/template length;
-- clipping by type and cycle;
-- sequence GC percentage;
-- base quality;
-- per-cycle base composition;
-- per-cycle quality;
-- mismatch/edit-distance metrics from validated tags or reference comparison.
+### 12.2 CIGAR semantics
 
-Missing optional tags shall not be silently interpreted as zero. The metric shall either use a documented alternate derivation or report unavailable data.
+Covered reference bases are emitted for:
 
-### 10.3 Coverage
+- `M`
+- `=`
+- `X`
 
-Coverage shall support:
+Not covered:
 
-- whole-genome per-base accumulation;
-- fixed windows;
-- arbitrary normalized target intervals;
-- coverage histograms;
-- cumulative threshold percentages;
-- per-contig summaries;
-- uncovered runs;
-- callable coverage under a named policy;
-- optional duplicate-inclusive and duplicate-excluded tracks;
-- optional base-quality and mapping-quality filters.
+- `I`
+- `D`
+- `N`
+- `S`
+- `H`
+- `P`
 
-Each coverage result shall state:
+CIGAR arithmetic uses checked coordinates. An operation extending past the declared
+reference length is fatal.
 
-- accepted flag mask;
-- minimum mapping quality;
-- minimum base quality, if any;
-- treatment of deletions;
-- treatment of reference skips;
-- treatment of overlapping mates;
-- treatment of secondary and supplementary records;
-- duplicate policy;
-- QC-fail policy.
+### 12.3 Chunked sweep
 
-### 10.4 Targeted metrics
+v0.1 shall implement one exact coverage accumulator: a parameterized chunked sweep
+over coordinate-sorted records.
 
-For WES and panels:
+Whole-contig processing is the case where the selected chunk spans the contig.
+Target-focused processing in v0.3 is a scheduling parameterization over normalized
+target regions, not an independent coverage algorithm.
 
-- target territory;
-- aligned bases;
-- on-target bases;
-- near-target bases when flanks are configured;
-- off-target bases;
-- mean and median target depth;
-- minimum and maximum target depth;
-- percentages at configured thresholds;
-- zero-coverage target bases and intervals;
-- per-target and optionally per-gene summaries;
-- fold enrichment;
-- coverage uniformity;
-- fold-80 base penalty or an explicitly documented equivalent;
-- duplicate-adjusted metrics;
-- target dropout lists.
+The implementation shall preserve exactness across chunk boundaries, including:
 
-Target aggregation must retain enough information to explain how overlapping input intervals affected the result.
+- blocks ending in a future chunk;
+- very long deletions or reference skips;
+- supplementary records under profiles that later include them;
+- empty regions;
+- contig transitions.
 
-### 10.5 Read-group hierarchy
+Chunk size is selected by the planner under the memory limit and recorded in
+provenance.
 
-Metrics shall be available at applicable levels:
+### 12.4 Multiple tracks
 
-- complete input;
-- sample;
-- library;
-- read group;
-- platform unit.
+Every distinct coverage policy requires its own logical track.
 
-Malformed or contradictory read-group metadata shall produce explicit diagnostics. Unknown read-group identifiers in records shall not be silently assigned to a synthetic group unless the selected policy explicitly requests it.
+The planner’s memory estimate shall include:
 
-## 11. Filtering model
+- number of active tracks;
+- bytes per delta entry;
+- chunk length;
+- pending cross-chunk events;
+- histogram/reduction state;
+- reader buffers;
+- output buffers;
+- safety margin.
 
-Filtering shall be represented by immutable named structures rather than scattered booleans.
+A plan exceeding `--memory-limit` is rejected before traversal.
 
-```rust
-pub struct RecordFilter {
-    pub include_unmapped: bool,
-    pub include_secondary: bool,
-    pub include_supplementary: bool,
-    pub include_duplicates: bool,
-    pub include_qc_fail: bool,
-    pub min_mapq: u8,
-}
+### 12.5 Coverage outputs
 
-pub struct BaseFilter {
-    pub min_base_quality: Option<u8>,
-    pub count_deletions: bool,
-    pub count_reference_skips: bool,
-    pub correct_overlapping_mates: bool,
-}
-```
+v0.1 produces:
 
-Compatibility profiles may instantiate these structures, but resolved values shall always be visible in output provenance.
+- total accepted aligned bases;
+- per-reference covered bases;
+- per-reference mean depth;
+- whole-run depth histogram;
+- cumulative percentages at configured thresholds;
+- uncovered reference bases where reference lengths are known.
 
-## 12. Core architecture
+Median and percentile calculations shall use integer histogram counts and documented
+rounding.
 
-### 12.1 Workspace layout
+### 12.6 Mate-overlap correction
 
-The initial workspace should use narrowly scoped crates:
+Mate-overlap correction is not part of v0.1.
+
+When added, it shall have its own named policy. Exact overlap correction shall force
+a supported execution mode that can guarantee pair semantics. Indexed partition
+parallelism shall not be combined with exact overlap correction until a design and
+differential proof exist.
+
+The specification shall name the reference tool being matched; “reference-tool
+profile” without a named tool and version is insufficient.
+
+## 13. Architecture
+
+### 13.1 Initial workspace
+
+The initial workspace should remain small:
 
 ```text
 crates/
-├── rds-cli/               # CLI and process lifecycle
-├── rds-core/              # shared types, plans, errors, canonical results
-├── rds-hts/               # rust-htslib boundary and record views
-├── rds-metrics/           # alignment and histogram collectors
-├── rds-coverage/          # coverage events, scans, windows, intervals
-├── rds-targets/           # BED normalization and targeted metrics
-├── rds-output/            # JSON and compatibility exporters
-├── rds-gpu/               # optional CUDA runtime and kernels
-└── rds-test-support/      # fixture builders and differential helpers
+├── bamgauge-cli/
+├── bamgauge-core/
+├── bamgauge-hts/
+├── bamgauge-metrics/
+├── bamgauge-coverage/
+├── bamgauge-formats/
+└── bamgauge-testkit/
 ```
 
-Crate boundaries may be consolidated during early implementation if compile-time or API overhead outweighs the benefit. Public library APIs shall remain intentionally small until semantics stabilize.
+Crates may be merged if the boundaries add more ceremony than value. The walking
+skeleton should be implemented before these boundaries are treated as stable.
 
-### 12.2 Input boundary
+### 13.2 I/O boundary
 
-The initial input backend shall use `rust-htslib` and HTSlib. This provides mature BAM/CRAM support while allowing the project to focus on analysis rather than codec implementation.
+The I/O layer wraps rust-htslib and exposes only the validated fields required by
+the active plan.
 
-All unsafe or FFI behavior shall be contained in the input and CUDA boundary crates. Safe borrowed views shall be exposed to the analysis layer.
+A conceptual interface is:
 
 ```rust
 pub trait AlignmentSource {
     fn header(&self) -> &AlignmentHeader;
-    fn next_record(&mut self) -> Result<Option<RecordView<'_>>, InputError>;
+    fn next_record(&mut self) -> Result<Option<RecordView<'_>>>;
 }
 ```
 
-The exact trait may change to support batched reading, but analysis code shall not depend directly on raw HTSlib pointers.
-
-### 12.3 Analysis plan
-
-Before processing, the system shall compile the resolved configuration into an immutable `AnalysisPlan`.
-
-```rust
-pub struct AnalysisPlan {
-    pub required_fields: RequiredFields,
-    pub record_filter: RecordFilter,
-    pub coverage_plan: Option<CoveragePlan>,
-    pub target_plan: Option<TargetPlan>,
-    pub metric_plan: MetricPlan,
-    pub execution_plan: ExecutionPlan,
-    pub output_plan: OutputPlan,
-}
-```
-
-The plan shall determine:
-
-- which record fields are required;
-- which collectors are active;
-- the coverage memory strategy;
-- CPU thread counts;
-- CUDA eligibility;
-- batching thresholds;
-- compatibility profiles;
-- expected output files.
-
-Invalid combinations shall fail before reading the full input.
-
-### 12.4 Hot-path processing
-
-The hot path shall:
-
-1. reuse decoded record storage;
-2. perform common flag classification once;
-3. normalize frequently used integer identifiers;
-4. avoid formatting and logging;
-5. update fixed arrays or preallocated vectors;
-6. avoid hash lookups for common bins;
-7. emit coverage events from CIGAR blocks;
-8. dispatch only to enabled analysis code;
-9. accumulate into thread-local or batch-local state;
-10. reduce deterministically.
-
-Dynamic trait-object calls per record should be avoided. A statically composed collector set, generated enum, or explicit analysis loop is preferred.
-
-### 12.5 Parallel CPU modes
-
-#### Streaming mode
-
-- one ordered input stream;
-- HTSlib decompression threads;
-- one or more batched analysis workers where ordering permits;
-- bounded queues;
-- deterministic merge;
-- suitable for CRAM and slower storage.
-
-#### Indexed parallel mode
-
-- independent readers over disjoint reference partitions;
-- requires compatible index;
-- thread-local collectors;
-- deterministic reduction by reference order;
-- enabled only when profiling predicts benefit.
-
-`auto` may choose between modes, but the decision and evidence inputs must be recorded.
-
-## 13. Coverage algorithms
-
-### 13.1 Difference-array model
-
-For each accepted aligned reference block `[start, end)`:
-
-```text
-delta[start] += 1
-delta[end]   -= 1
-```
-
-An inclusive prefix scan over `delta` produces depth runs. Separate reductions then calculate histograms, thresholds, windows, and target summaries.
-
-Only CIGAR operations that meet the selected coverage semantics shall generate blocks. Insertions and clipping do not consume reference positions. Deletions and reference skips shall be treated according to explicit policy.
-
-### 13.2 Memory strategies
-
-The engine shall support at least:
-
-1. **Whole-contig arrays** for maximum speed when memory permits.
-2. **Chunked arrays** for bounded memory.
-3. **Target-focused arrays** for WES and small panels.
-
-The planner shall estimate required memory before processing and fail or choose an exact lower-memory strategy. It shall not silently lower precision.
-
-Coverage counters shall use checked arithmetic. If a configured representation cannot hold observed depth, the engine shall fail with an actionable diagnostic or restart only when an explicit restart policy permits it. Saturation is forbidden.
-
-### 13.3 Overlapping mates
-
-Overlap correction is required for exact fragment-oriented coverage profiles. Because it requires pairing information and CIGAR-aware overlap handling, it shall be implemented as a distinct tested stage.
-
-If overlap correction is requested but cannot be performed reliably because the necessary pairing constraints are violated, the engine shall fail or mark the requested output unavailable. It shall not quietly count both mates.
-
-### 13.4 Coverage output precision
-
-Internally accumulated integer counts shall remain integers. Floating-point means and percentages shall be calculated during deterministic reduction using documented precision and rounding. Compatibility exporters may apply profile-specific formatting without modifying canonical values.
-
-## 14. Optional NVIDIA CUDA acceleration
-
-### 14.1 Principles
-
-- CUDA is optional.
-- CPU results are authoritative.
-- Explicit `--backend cuda` requires a usable CUDA device or fails.
-- `--backend auto` may select CPU or CUDA, but must report the decision.
-- CPU fallback in `auto` is allowed only when semantics remain identical.
-- No GPU code may introduce an approximate algorithm under an exact profile.
-- GPU acceleration is accepted only after end-to-end benchmarks demonstrate benefit.
-
-### 14.2 Initial GPU candidates
-
-The first CUDA milestone should evaluate:
-
-- coverage event accumulation;
-- prefix scans;
-- coverage histogram and threshold reductions;
-- interval/target aggregation;
-- large fixed-bin histograms;
-- later, targeted SNP allele counting.
-
-BAM/CRAM parsing, header processing, reference validation, BED parsing, error handling, and compatibility output shall remain on the CPU initially.
-
-### 14.3 Batch representation
-
-Raw HTSlib records shall not be copied directly to the GPU. The CPU shall normalize enabled fields into structure-of-arrays batches.
-
-```rust
-pub struct GpuRecordBatch {
-    pub reference_ids: Vec<i32>,
-    pub starts: Vec<i64>,
-    pub flags: Vec<u16>,
-    pub mapqs: Vec<u8>,
-    pub template_lengths: Vec<i64>,
-    pub cigar_offsets: Vec<u32>,
-    pub cigar_lengths: Vec<u16>,
-    pub cigar_ops: Vec<u32>,
-    pub sequence_offsets: Option<Vec<u32>>,
-    pub packed_sequences: Option<Vec<u8>>,
-    pub qualities: Option<Vec<u8>>,
-}
-```
-
-Only required arrays shall be materialized. Pinned host buffers and multiple CUDA streams should be used after profiling confirms benefit.
-
-### 14.4 Execution plan
-
-```rust
-pub enum Backend {
-    Cpu,
-    Cuda { device: usize },
-    Auto,
-}
-
-pub struct ExecutionPlan {
-    pub input_backend: Backend,
-    pub alignment_metrics_backend: Backend,
-    pub coverage_backend: Backend,
-    pub target_backend: Backend,
-    pub histogram_backend: Backend,
-}
-```
-
-The actual plan shall be printed before analysis unless quiet mode is requested and shall always be written to provenance.
-
-### 14.5 GPU acceptance gate
-
-A CUDA implementation shall not become the default for a workload until:
-
-- it matches CPU canonical results across the full differential corpus;
-- it passes repeated determinism tests;
-- it passes compute-sanitizer or equivalent checks;
-- it handles device-memory exhaustion without corrupting output;
-- it improves end-to-end wall-clock time by a documented minimum threshold on at least one supported workload class;
-- it does not cause unacceptable regressions on smaller workloads;
-- its selection threshold is derived from benchmark data rather than guessed.
-
-## 15. Error handling and failure policy
-
-Errors shall use typed categories, including:
-
-- input open/read/decode errors;
-- malformed header;
-- unsupported format or feature;
-- sort-order violation;
-- missing or incompatible index;
-- reference mismatch;
-- invalid target intervals;
-- arithmetic overflow;
-- resource-limit violation;
-- CUDA initialization, transfer, launch, or synchronization failure;
-- collector failure;
-- exporter failure;
-- output publication failure.
-
-Rules:
-
-1. Required collector failure fails the run.
-2. Unsupported requested output fails before expensive processing where possible.
-3. No empty file may stand in for failed output.
-4. Warnings shall never claim successful calculation of unavailable metrics.
-5. `auto` backend fallback shall be recorded with the original reason.
-6. Explicit CUDA mode shall not fall back to CPU.
-7. Partial output is never marked successful.
-8. Error messages shall identify the input, stage, and actionable cause without exposing raw sensitive sequence data unnecessarily.
-
-## 16. Determinism
-
-Given identical:
-
-- application version;
-- configuration;
-- input bytes;
-- reference bytes;
-- target bytes;
-- compatibility profile;
-
-canonical metric values and ordering shall be identical across repeated runs. CPU and CUDA backends shall produce identical integer results. Floating-point reductions shall use a deterministic order or compensated deterministic method.
-
-Timestamps, hostnames, device identifiers, and timings belong in provenance and are excluded from canonical metrics equivalence.
-
-## 17. Test-data strategy
-
-### 17.1 Committed synthetic fixtures
-
-The repository shall contain small redistributable synthetic BAM/CRAM fixtures covering:
-
-- all major CIGAR operations;
-- overlapping mates;
-- secondary alignments;
-- supplementary alignments;
-- records carrying both secondary and supplementary flags;
+This is illustrative, not frozen API. The walking skeleton shall determine whether
+borrowed views, owned normalized records, or batched records provide the safest
+ergonomics.
+
+### 13.3 Collector dispatch
+
+The hot path shall avoid per-record heap allocation and avoid unnecessary dynamic
+dispatch.
+
+Acceptable designs include:
+
+- a statically composed collector tuple;
+- an enum-based plan compiled before traversal;
+- generated or macro-assisted dispatch;
+- batched normalized records where profiling justifies copying.
+
+The project shall not commit to a complex planner abstraction until the walking
+skeleton and first real collectors expose actual requirements.
+
+### 13.4 Execution model by release
+
+v0.1:
+
+- one streaming alignment reader;
+- HTSlib I/O/decompression threads where safe;
+- deterministic collector accumulation;
+- deterministic final reduction.
+
+Later indexed parallel mode may use independent readers over disjoint partitions,
+but its planner must account for:
+
+- one file descriptor per reader;
+- one set of HTSlib buffers per reader;
+- decompression thread pools;
+- duplicated index/reference state;
+- memory-limit impact;
+- overlap-correction incompatibilities.
+
+## 14. Error taxonomy
+
+The specification owns the error taxonomy. The TODO references this section.
+
+Required categories:
+
+- `usage`
+- `configuration`
+- `input_not_found`
+- `input_format`
+- `input_corrupt`
+- `input_unsorted`
+- `unsupported_record`
+- `reference_required`
+- `reference_mismatch`
+- `target_format`
+- `target_contig`
+- `resource_limit`
+- `output_exists`
+- `output_io`
+- `compatibility_unavailable`
+- `internal_invariant`
+
+Errors shall provide:
+
+- stable category;
+- human-readable message;
+- causal context;
+- nonzero exit code;
+- optional structured details;
+- no misleading fallback advice.
+
+Warnings are reserved for conditions where all requested outputs remain correct and
+fully defined.
+
+## 15. Test corpus
+
+The specification owns the required fixture set.
+
+### 15.1 Synthetic fixtures
+
+The fixture generator shall cover:
+
+- empty valid BAM;
+- mapped and unmapped records;
+- every ordinary CIGAR operation;
+- long CIGAR via `CG`;
+- clipping combinations;
+- insertions, deletions, and long reference skips;
+- secondary records;
+- supplementary records;
+- records carrying both bits;
 - duplicate and QC-fail records;
-- mapped read with unmapped mate;
-- unmapped read with mapped mate;
-- missing and malformed optional tags;
-- multiple read groups and libraries;
-- unknown read-group identifiers;
-- extreme template lengths;
+- paired, singleton, orphan, and discordant records;
+- missing `NM` and `MD` tags;
+- malformed optional tags;
+- missing or contradictory read groups;
+- unknown read-group IDs;
+- coordinate regressions;
+- unmapped tails;
+- contig-name mismatches;
 - zero-length references where legal;
-- high-depth overflow boundaries;
-- contig naming mismatches;
-- unsorted records;
-- truncated BAM and CRAM;
-- reference mismatch;
-- BED overlaps and invalid coordinates.
+- pads where supported;
+- integer-boundary cases;
+- truncated BGZF blocks;
+- malformed BAM record lengths;
+- chunk-boundary coverage events;
+- multiple simultaneous coverage tracks.
 
-Fixtures should be generated from auditable SAM/reference source files, not opaque binaries alone.
+Each fixture has:
 
-### 17.2 GIAB HG002 development subsets
+- generation source;
+- expected validity;
+- expected error category or canonical result;
+- pinned reference-tool outputs where applicable.
 
-The project shall provide reproducible scripts and manifests to prepare small HG002 subsets, initially:
+### 15.2 Small real dataset
 
-- approximately 1 Mb on GRCh38 chromosome 20 at several downsampled depths;
-- a larger approximately 10 Mb region for scaling;
-- an HG002 exome or target subset with the exact matching capture intervals;
-- later, a full approximately 30× WGS validation sample.
+v0.1 shall validate on a documented HG002 GRCh38 subset, initially approximately
+one megabase of chromosome 20 at representative depth.
 
-Large data shall not be committed to Git. Each manifest entry shall record:
+The manifest records:
 
-- source accession or URL;
-- source checksum when published;
-- local SHA-256;
-- reference identity;
-- extraction region;
+- source URL or accession;
+- source checksum;
+- region;
 - downsampling seed and fraction;
+- local SHA-256;
+- reference build;
 - generation commands;
 - tool versions;
-- redistribution restrictions.
+- redistribution policy.
 
-### 17.3 Differential reference tools
+Large data are downloaded or generated, not committed.
 
-The validation harness shall compare against pinned versions of:
+### 15.3 Differential tools
 
-- Samtools;
-- mosdepth;
-- Picard;
-- optionally Qualimap where a metric is directly comparable;
-- MultiQC parsing for compatibility outputs.
+v0.1 differential baselines:
 
-Pinned versions and containers shall be recorded in the test manifest.
+- pinned Samtools `flagstat`;
+- pinned Samtools `idxstats`;
+- pinned coverage baseline selected and documented by ADR.
 
-## 18. Validation strategy
+Later versions add Picard, mosdepth, and MultiQC baselines as their profiles enter
+scope.
 
-### 18.1 Unit tests
+Differential tests run in a network-disabled environment.
 
-Required areas:
+## 16. Document ownership
 
-- flag classification;
-- CIGAR parsing and block emission;
-- interval normalization;
-- filter evaluation;
-- histogram updates;
-- deterministic merges;
-- JSON schema serialization;
-- compatibility formatting;
-- execution planner decisions;
-- checked arithmetic and resource limits.
+To prevent divergence:
 
-### 18.2 Property tests
+### 16.1 This specification owns
 
-Properties shall include:
+- product scope;
+- version boundaries;
+- metric semantics;
+- input/output contracts;
+- error taxonomy;
+- fixture requirements;
+- compatibility claims;
+- release acceptance criteria.
 
-- emitted reference blocks never exceed declared reference bounds;
-- coverage deltas sum to zero at the end of a complete contig;
-- total covered-base contribution equals the sum of accepted CIGAR block lengths before overlap correction;
-- primary/secondary/supplementary categories obey the chosen priority and invariants;
-- interval normalization preserves union territory;
-- chunked and whole-contig coverage produce identical results;
-- parallel merges equal serial results;
-- CPU and CUDA integer outputs match.
+### 16.2 The TODO owns
 
-### 18.3 Fuzzing
+- task decomposition;
+- implementation sequence;
+- milestone gates;
+- evidence files;
+- status checkboxes.
 
-Fuzz targets shall cover:
+The TODO shall reference specification sections instead of duplicating lists or
+definitions.
 
-- SAM header interpretation;
-- CIGAR decoding;
-- optional-tag access;
-- BED parsing;
-- interval normalization;
-- canonical JSON deserialization where supported;
-- compatibility exporters;
-- batch normalization for CUDA.
+## 17. Performance methodology
 
-### 18.4 Differential tests
+Performance claims require:
 
-For each fixture and real-data subset:
-
-- run the reference tool;
-- run Rust DNA Sequencer with the matching compatibility profile;
-- compare exact integers;
-- compare floating values with metric-specific tolerances;
-- compare output schema and required sections;
-- reject unexplained differences;
-- store concise expected artifacts, not large source data.
-
-### 18.5 End-to-end tests
-
-An end-to-end test must verify:
-
-1. input and reference validation;
-2. completed analysis;
-3. atomic output publication;
-4. `_SUCCESS` creation;
-5. canonical JSON schema validation;
-6. compatibility output generation;
-7. MultiQC discovery where enabled;
-8. deterministic rerun equivalence;
-9. absence of hidden partial failures.
-
-## 19. Benchmark strategy
-
-### 19.1 Required measurements
-
+- exact input identity;
+- tool and commit identity;
+- CPU, RAM, storage, OS, and filesystem;
+- cold/warm-cache distinction;
+- thread counts;
+- minimum three measured runs after warm-up where practical;
 - wall-clock time;
 - CPU time;
-- peak resident memory;
-- bytes read and written;
-- records per second;
-- aligned bases per second;
-- decompression time;
-- record normalization time;
-- collector time;
-- coverage scan/reduction time;
-- output time;
-- GPU transfer and kernel time;
-- GPU utilization and peak VRAM;
-- backend-planner decision.
+- peak RSS;
+- bytes read where measurable;
+- output equivalence status.
 
-### 19.2 Dataset classes
+v0.1 performance gates are modest:
 
-- tiny synthetic fixtures;
-- 1 Mb HG002 subsets at 1×, 10×, 30×, and high depth;
-- 10 Mb HG002 subset;
-- representative WES/panel subset;
-- full approximately 30× HG002 WGS;
-- BAM and CRAM equivalents where practical.
+- no pathological regression versus a simple rust-htslib traversal;
+- memory remains within the configured limit;
+- the single-pass implementation demonstrates that enabling counters plus coverage
+  does not trigger a second input traversal.
 
-### 19.3 Baselines
+No specific speedup factor is promised before measurements exist.
 
-Compare:
+## 18. Security and privacy
 
-- serial Rust implementation;
-- optimized multithreaded CPU implementation;
-- CUDA hybrid implementation;
-- sequential reference-tool workflow;
-- each major reference tool individually.
-
-### 19.4 Performance release criteria
-
-Correctness has priority over speed. Subject to correctness:
-
-- the combined CPU workflow should materially reduce wall-clock time relative to the sequential sum of equivalent reference tools on representative WGS and WES workloads;
-- the optimized CPU path must not regress more than a documented tolerance against the serial baseline on small inputs;
-- CUDA shall only be selected automatically where it provides a repeatable end-to-end improvement;
-- benchmark variance and storage-cache state shall be reported;
-- no performance claim shall be made from a single run.
-
-Exact numeric thresholds shall be finalized after the first benchmark harness is operational and before GPU auto-selection is enabled.
-
-## 20. Security and robustness
-
-Alignment, reference, BED, configuration, and index files shall be treated as untrusted input.
+BamGauge processes potentially identifying genomic data.
 
 Requirements:
 
-- bounds-check all coordinates and lengths;
-- use checked arithmetic for offsets and counts;
-- cap allocations through a configured memory budget;
-- reject absurd header declarations before allocation;
-- avoid following unsafe output-directory symlinks where practical;
-- create temporary files with restrictive permissions;
-- avoid including sequence or read names in routine errors and telemetry;
-- audit every `unsafe` block and explain its invariant;
-- isolate FFI and CUDA pointer handling;
-- run dependency vulnerability and license checks;
-- fuzz parsers and boundary adapters;
-- test truncated and corrupted compressed input;
-- never execute content from input files.
+- local processing by default;
+- no telemetry by default;
+- no implicit network access;
+- no read names in routine logs;
+- no sample identifiers in crash reports unless explicitly enabled;
+- restrictive temporary-file permissions;
+- deterministic cleanup;
+- dependency auditing;
+- fuzzing of untrusted parsers and record boundaries;
+- clear warning that outputs may contain sensitive genomic summaries.
 
-## 21. Observability
+## 19. Release acceptance criteria
 
-Human logs shall be concise. Structured logs shall include stage, severity, input identity, and error category.
+### 19.1 v0.1
 
-Progress reporting may include:
+v0.1 is complete only when:
 
-- bytes or records processed;
-- current reference;
-- throughput;
-- estimated completion only when based on reliable input size/index information;
-- current CPU/GPU execution stage.
+1. the walking skeleton has been replaced by production code;
+2. coordinate-sorted BAM input is validated;
+3. truncated/corrupt/unsorted fixtures fail with correct categories;
+4. flag classification matches the pinned Samtools profile on all applicable
+   fixtures;
+5. per-reference counts match the pinned profile;
+6. canonical coverage matches the defined `bamgauge-v0.1` semantics;
+7. chunk boundaries do not alter results;
+8. multi-track memory planning is enforced;
+9. canonical JSON and provenance validate against committed schemas;
+10. missing metrics are never represented as zero;
+11. output publication is atomic and `_SUCCESS` ordering is tested;
+12. repeated runs produce identical canonical output after excluding explicitly
+    volatile timing fields;
+13. the small HG002 subset has a reconciled validation report;
+14. permanent CI passes on the exact release commit;
+15. documentation states all non-goals and known limitations.
 
-Progress UI shall not alter output semantics and shall be disabled automatically when inappropriate.
+### 19.2 v0.2
 
-Stage timings and planner decisions shall always be captured in provenance even when console progress is disabled.
+v0.2 additionally requires:
 
-## 22. Dependency and toolchain policy
+- CRAM reference retrieval cannot access the network;
+- missing/mismatched references fail;
+- BAM and equivalent CRAM canonical results agree;
+- CRAM corruption fixtures pass;
+- reference provenance identifies actual local data used.
 
-- Pin a minimum supported Rust version once the initial workspace compiles.
-- Commit `Cargo.lock` for the application workspace.
-- Use `rust-htslib` for initial BAM/CRAM support.
-- Keep CUDA dependencies optional behind a feature and runtime capability check.
-- Prefer mature crates with clear maintenance and licensing.
-- Avoid introducing a framework into the record hot path without benchmarks.
-- Run `cargo fmt`, strict Clippy, unit tests, integration tests, docs tests, dependency audit, and license checks in CI.
-- Pin GitHub Actions by immutable commit SHA.
+### 19.3 v0.3 and later
 
-The repository license is authoritative for project code. Third-party compatibility formats and copied reference fixtures require separate provenance review.
+Each later release has an evidence report mapping every added compatibility or
+metric claim to:
 
-## 23. CI and release gates
+- a specification section;
+- fixtures;
+- differential output;
+- unresolved differences;
+- performance impact;
+- release commit and CI result.
 
-Permanent CI shall include:
+## 20. Open ADRs
 
-- formatting;
-- strict Clippy with warnings denied;
-- build on supported Linux targets;
-- unit and integration tests;
-- documentation tests;
-- JSON schema validation;
-- synthetic differential tests;
-- malformed-input tests;
-- deterministic rerun tests;
-- dependency and license audit;
-- fuzz target compilation;
-- CPU benchmark smoke test with non-regression thresholds only after stable baselines exist.
+The following decisions shall be captured as ADRs before their milestone begins:
 
-CUDA CI may run on a separate trusted runner. CUDA absence on ordinary CI must not weaken CPU coverage.
-
-A release shall require:
-
-- all permanent gates passing on the exact release commit;
-- completed release checklist;
-- versioned schema and changelog;
-- benchmark report for supported workloads;
-- validation report with known differences;
-- signed checksums for release artifacts;
-- no unresolved P0 correctness or data-integrity defects.
-
-## 24. Compatibility and stability policy
-
-Until 1.0:
-
-- internal APIs may change freely;
-- public library APIs shall be minimal and explicitly marked unstable;
-- the CLI may evolve, but breaking changes require changelog entries;
-- canonical JSON schema changes require a schema-version change and migration notes;
-- compatibility profiles shall include the validated reference-tool version;
-- output files shall never change semantics under an unchanged profile name.
-
-## 25. Initial repository layout
-
-```text
-.
-├── Cargo.toml
-├── Cargo.lock
-├── rust-toolchain.toml
-├── README.md
-├── docs/
-│   ├── DNA_QC_ENGINE_SPEC.md
-│   ├── DNA_QC_ENGINE_TODO.md
-│   ├── architecture/
-│   ├── validation/
-│   └── benchmarks/
-├── crates/
-│   ├── rds-cli/
-│   ├── rds-core/
-│   ├── rds-hts/
-│   ├── rds-metrics/
-│   ├── rds-coverage/
-│   ├── rds-targets/
-│   ├── rds-output/
-│   ├── rds-gpu/
-│   └── rds-test-support/
-├── testdata/
-│   ├── README.md
-│   ├── manifest.toml
-│   ├── fixtures/
-│   ├── generators/
-│   └── expected/
-├── benches/
-└── .github/workflows/
-```
-
-## 26. v0.1 acceptance criteria
-
-v0.1 is complete only when all of the following are true:
-
-1. A fresh checkout builds using documented commands.
-2. Coordinate-sorted BAM and CRAM are supported on the primary Linux target.
-3. CRAM reference mismatch fails before valid-looking metrics are emitted.
-4. Core alignment counters pass synthetic and HG002 differential tests.
-5. Whole-contig and chunked exact coverage match on the same data.
-6. Targeted metrics pass validated WES/panel fixtures.
-7. Canonical JSON validates against a versioned schema.
-8. Required compatibility outputs are parsed successfully by their intended consumers.
-9. CPU parallel output is deterministic and equals serial output.
-10. Malformed, truncated, unsorted, and incompatible inputs fail closed.
-11. Required outputs are published atomically and `_SUCCESS` is trustworthy.
-12. No silent collector failure or approximate fallback exists.
-13. HG002 development subsets can be reproduced from documented manifests.
-14. A full approximately 30× WGS benchmark and validation report exists.
-15. All permanent CI gates pass on the exact release commit.
-16. Known differences and unsupported features are documented.
-17. CUDA, if shipped in v0.1, passes CPU equivalence and performance gates; otherwise the CPU release remains complete without it.
-
-## 27. Deferred design decisions
-
-The following decisions are intentionally deferred until measurement or implementation evidence exists:
-
-- whether Noodles becomes an additional or replacement input backend;
-- whether D4 output is included in v0.1 or v0.2;
-- exact CPU indexed-parallel scheduling policy;
-- exact CUDA batch-size and auto-selection thresholds;
-- whether targeted identity SNP extraction enters v0.1;
-- whether remote HTTP/S3/GCS input is supported before 1.0;
-- which full set of Picard-compatible fields is practical;
-- final short CLI alias;
-- minimum supported NVIDIA compute capability.
-
-Deferred decisions must not be resolved through undocumented behavior. Each shall be recorded in an architecture decision record before implementation becomes permanent.
-
-## 28. Reference standards and comparison projects
-
-Implementation and validation should consult and pin the relevant maintained primary sources, including:
-
-- GA4GH/Samtools SAM, BAM, CRAM, VCF, BED-related, and index specifications;
-- HTSlib and Samtools documentation and source behavior;
-- mosdepth documentation and source behavior;
-- Picard metric definitions and source behavior;
-- MultiQC parser expectations;
-- NIST Genome in a Bottle documentation and HG002 manifests;
-- NVIDIA CUDA, CUB, and compute-sanitizer documentation for optional acceleration.
-
-Reference-tool behavior is evidence, but this specification's named semantics and canonical schema remain authoritative for Rust DNA Sequencer.
+1. pinned rust-htslib/HTSlib versions;
+2. v0.1 coverage baseline tool;
+3. canonical checksum strategy for large inputs;
+4. output-directory overwrite policy;
+5. exact BED unknown-contig policy;
+6. fold-80 compatibility versus named equivalent;
+7. indexed partition execution design;
+8. exact mate-overlap correction profile;
+9. long-read/oversized-CIGAR support policy;
+10. any hardware-acceleration admission decision.
