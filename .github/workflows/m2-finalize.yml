@@ -32,7 +32,7 @@ jobs:
         run: |
           test -f docs/evidence/M2_TEST_CORPUS.md
           grep -F 'Milestone 2 complete; Milestone 3 next' docs/DNA_QC_ENGINE_TODO.md
-          grep -F 'Implementation SHA: `45211236419e5bebc7c0d09d5cb35d65174cc11a`' \
+          grep -F '**Implementation SHA:** `45211236419e5bebc7c0d09d5cb35d65174cc11a`' \
             docs/evidence/M2_TEST_CORPUS.md
           test ! -e tools/m2_finalize.py
           test ! -e .github/workflows/m2-finalize.yml
