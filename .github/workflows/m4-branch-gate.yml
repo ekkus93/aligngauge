@@ -25,8 +25,20 @@ jobs:
 
       - name: Apply Milestone 4 implementation
         run: |
-          base64 --decode tools/m4_apply.py.gz.b64 | gzip --decompress > /tmp/m4_apply.py
+          git show 9e64a34af76116138873ec77bc457d8ff7f5e273:tools/m4_apply.py.gz.b64 \
+            | base64 --decode \
+            | gzip --decompress \
+            > /tmp/m4_apply.py
           python /tmp/m4_apply.py
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("crates/aligngauge-core/src/model.rs")
+          text = path.read_text(encoding="utf-8")
+          old = "        let per_reference_counters = per_reference_counters;\n"
+          if text.count(old) != 1:
+              raise SystemExit("expected exactly one redundant per-reference binding")
+          path.write_text(text.replace(old, "", 1), encoding="utf-8")
+          PY
 
       - name: Format source
         run: cargo fmt --all
