@@ -1,6 +1,6 @@
 name: M2 Bootstrap
 
-# Retry after mapped/unmapped serialization invariant repair.
+# Retry after exact ADR filename correction.
 on:
   push:
     branches: [master]
