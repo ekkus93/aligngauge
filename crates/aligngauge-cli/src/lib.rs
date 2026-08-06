@@ -1,4 +1,4 @@
-//! Minimal BAM counting boundary for the AlignGauge walking skeleton.
+//! Minimal BAM counting boundary for the `AlignGauge` walking skeleton.
 
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
@@ -20,18 +20,18 @@ pub struct BamCounts {
 /// Failure to open, decode, or count a BAM input.
 #[derive(Debug)]
 pub enum BamCountError {
-    /// HTSlib could not open the requested path as an alignment input.
+    /// `HTSlib` could not open the requested path as an alignment input.
     Open {
         /// Input path.
         path: PathBuf,
-        /// Original HTSlib error.
+        /// Original `HTSlib` error.
         source: rust_htslib::errors::Error,
     },
-    /// HTSlib reported a record-decoding failure after opening the input.
+    /// `HTSlib` reported a record-decoding failure after opening the input.
     Read {
         /// Input path.
         path: PathBuf,
-        /// Original HTSlib error.
+        /// Original `HTSlib` error.
         source: rust_htslib::errors::Error,
     },
     /// A counter exceeded the representable `u64` range.
@@ -80,7 +80,7 @@ impl Error for BamCountError {
 ///
 /// # Errors
 ///
-/// Returns [`BamCountError`] if HTSlib cannot open or decode the input, or if a
+/// Returns [`BamCountError`] if `HTSlib` cannot open or decode the input, or if a
 /// counter overflows.
 pub fn count_bam(path: impl AsRef<Path>) -> Result<BamCounts, BamCountError> {
     let path = path.as_ref();
