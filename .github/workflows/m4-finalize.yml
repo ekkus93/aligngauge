@@ -1,0 +1,54 @@
+name: M4 Finalize
+
+on:
+  push:
+    branches: [agent/milestone-4]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: m4-finalize-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  finalize:
+    if: contains(github.event.head_commit.message, '[m4-finalize]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out validated product branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: true
+          fetch-depth: 0
+
+      - name: Create Milestone 4 evidence
+        run: python tools/m4_finalize.py
+
+      - name: Remove temporary finalizer
+        run: rm .github/workflows/m4-finalize.yml tools/m4_finalize.py
+
+      - name: Validate documentation-only final state
+        run: |
+          git diff --check
+          test -f docs/evidence/M4_COUNTERS.md
+          grep -F '**Status:** Ralph Loop active — Milestone 4 complete; Milestone 5 next' \
+            docs/DNA_QC_ENGINE_TODO.md
+          test "$(sed -n '/## Milestone 4 —/,/## Milestone 5 —/p' docs/DNA_QC_ENGINE_TODO.md | grep -c -- '- \[ \]')" = "0"
+          changed=$(git status --short | awk '{print $2}' | sort)
+          expected=$(printf '%s\n' \
+            .github/workflows/m4-finalize.yml \
+            docs/DNA_QC_ENGINE_TODO.md \
+            docs/evidence/M4_COUNTERS.md \
+            tools/m4_finalize.py | sort)
+          test "$changed" = "$expected"
+
+      - name: Commit Milestone 4 evidence
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'docs: complete Milestone 4 evidence'
+          git push origin HEAD:agent/milestone-4
