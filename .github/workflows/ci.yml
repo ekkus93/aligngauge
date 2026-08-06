@@ -3,18 +3,18 @@ name: Permanent CI
 on:
   push:
     branches: [master]
-    paths:
-      - ".github/workflows/ci.yml"
+  pull_request:
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: permanent-ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  repair:
+  quality:
     name: ci/permanent
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -23,7 +23,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          persist-credentials: true
+          persist-credentials: false
 
       - name: Show pinned toolchain
         run: |
@@ -33,38 +33,10 @@ jobs:
       - name: Verify dependency lockfile
         run: cargo update --workspace --locked --dry-run
 
-      - name: Apply exact Clippy repairs
-        run: python tools/m1_clippy_repairs.py
+      - name: Check formatting
+        run: cargo fmt --all --check
 
-      - name: Update typed-error walking-skeleton assertions
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          path = Path("crates/aligngauge-cli/tests/walking_skeleton.rs")
-          text = path.read_text(encoding="utf-8")
-          replacements = [
-              (
-                  'String::from_utf8_lossy(&output.stderr).contains("failed to open BAM")',
-                  'String::from_utf8_lossy(&output.stderr).contains("[input_not_found]")',
-              ),
-              (
-                  'stderr.contains("failed to open BAM") || stderr.contains("failed to read BAM")',
-                  'stderr.contains("[input_corrupt]")',
-              ),
-          ]
-          for old, new in replacements:
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f"expected one assertion match for {old!r}, found {count}")
-              text = text.replace(old, new)
-          path.write_text(text, encoding="utf-8")
-          PY
-
-      - name: Format repaired sources
-        run: cargo fmt --all
-
-      - name: Validate schemas
+      - name: Validate committed JSON schemas
         run: |
           python - <<'PY'
           import json
@@ -74,7 +46,7 @@ jobs:
                   json.load(handle)
           PY
 
-      - name: Validate repaired sources with Clippy
+      - name: Run Clippy
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
       - name: Run tests
@@ -85,13 +57,10 @@ jobs:
           RUSTDOCFLAGS: -D warnings
         run: cargo doc --workspace --all-features --no-deps --locked
 
-      - name: Restore repair-control files
-        run: git restore .github/workflows/ci.yml tools/m1_clippy_repairs.py
-
-      - name: Commit validated source and test repairs
+      - name: Verify repository remains clean
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add crates/aligngauge-cli/tests/walking_skeleton.rs crates/aligngauge-core
-          git commit -m "fix: satisfy strict Milestone 1 contracts"
-          git push origin HEAD:master
+          if [[ -n "$(git status --porcelain)" ]]; then
+            git status --short
+            git diff --check
+            exit 1
+          fi
