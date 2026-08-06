@@ -1,7 +1,7 @@
-# BamGauge Implementation TODO
+# AlignGauge Implementation TODO
 
 **Current repository:** `ekkus93/rust-dna-sequencer`  
-**Recommended repository name:** `ekkus93/bamgauge`  
+**Recommended repository name:** `ekkus93/aligngauge`  
 **Companion specification:** `docs/DNA_QC_ENGINE_SPEC.md`  
 **Status:** Revised staged implementation plan  
 **Last updated:** 2026-08-06  
@@ -64,12 +64,13 @@ These rules apply to all milestones:
 
 ### 0.1 Project identity
 
-- [ ] Rename the GitHub repository to `bamgauge`, or record an ADR explaining why
+- [ ] Rename the GitHub repository to `aligngauge`, or record an ADR explaining why
       the old name is retained.
 - [ ] Set the repository description to the wording in SPEC §1.2.
 - [ ] Update README title and product boundary.
-- [ ] Reserve the binary name `bamgauge`.
-- [ ] Use `bamgauge-*` crate prefixes; do not use the old `rds-*` prefix.
+- [ ] Reserve the binary name `aligngauge`.
+- [ ] Use `aligngauge-*` crate prefixes; do not use the old `rds-*` or
+      `bamgauge-*` prefixes.
 
 ### 0.2 Minimal repository files
 
@@ -109,7 +110,7 @@ Create `docs/evidence/M0_REPOSITORY_FOUNDATION.md` containing:
 ### Milestone 0 acceptance gate
 
 - [ ] Permanent CI succeeds on the exact evidence commit.
-- [ ] README accurately states that BamGauge analyzes aligned data and is not a
+- [ ] README accurately states that AlignGauge analyzes aligned data and is not a
       physical sequencer or basecaller.
 
 ---
@@ -124,7 +125,7 @@ This milestone intentionally precedes elaborate abstractions.
 - [ ] Implement:
 
   ```bash
-  bamgauge qc --input sample.bam
+  aligngauge qc --input sample.bam
   ```
 
 - [ ] Open BAM through pinned `rust-htslib`.
@@ -405,7 +406,7 @@ Keep v0.1 planning minimal.
 
 Implement SPEC §12.1–§12.2.
 
-- [ ] Apply the `bamgauge-v0.1` record policy.
+- [ ] Apply the `aligngauge-v0.1` record policy.
 - [ ] Emit blocks for `M`, `=`, and `X`.
 - [ ] Exclude `I`, `D`, `N`, `S`, `H`, and `P`.
 - [ ] Use checked coordinate arithmetic.
@@ -707,7 +708,7 @@ Only implement if measured value justifies complexity.
 - [ ] Prepare approximately 30× HG002 WGS with exact manifest.
 - [ ] Provision sufficient local storage.
 - [ ] Run pinned reference tools.
-- [ ] Run BamGauge streaming CPU.
+- [ ] Run AlignGauge streaming CPU.
 - [ ] Run any released parallel CPU mode.
 - [ ] Reconcile every claimed metric.
 - [ ] Repeat enough runs for variance.
