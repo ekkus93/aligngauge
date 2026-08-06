@@ -1,51 +1,94 @@
-# ADR-0001: HTSlib Record Boundary for the Walking Skeleton
+# ADR-0001: HTSlib Record Boundary
 
-**Status:** Accepted for Milestone 0.5; subject to refinement in Milestone 3  
+**Status:** Accepted for Milestone 3  
 **Date:** 2026-08-06
 
 ## Context
 
-The first vertical slice must establish how AlignGauge opens BAM input, reuses record storage, propagates corruption, and presents decoded records without freezing a broad multi-crate abstraction prematurely.
+The walking skeleton established that `rust-htslib::bam::Read::read` can reuse one
+caller-owned record and preserve decoder failures. Milestone 3 must turn that probe
+into the production v0.1 BAM boundary without freezing Milestone 4 counters or
+Milestone 5 coverage collectors into the I/O layer.
+
+The boundary must also resolve the deferred questions about long CIGARs, header
+trust, coordinate order, optional tags, read groups, resource limits, and which
+record fields consumers may access.
 
 ## Decision
 
-Milestone 0.5 uses `rust-htslib` 1.0.1 with default features disabled. The CLI calls a small library function that owns a `bam::Reader`, allocates one `bam::Record`, and repeatedly invokes `Read::read(&mut record)` until end of input.
+AlignGauge uses a dedicated `aligngauge-hts` crate over pinned `rust-htslib` 1.0.1
+with default features disabled. The crate owns the HTSlib reader and one reusable
+`bam::Record`. `BamReader::next_record` returns a validated record borrowed until
+the next call, so consumers cannot retain pointers into storage that HTSlib will
+reuse.
 
-This avoids the per-record allocation performed by the convenience `records()` iterator. No normalized record type, collector trait, planner, JSON schema, staging directory, or GPU dimension is introduced.
+The v0.1 boundary accepts local BGZF-compressed BAM only. It verifies compressed
+and decompressed magic before opening HTSlib. SAM, CRAM, non-BGZF input, malformed
+headers, decoder failures, and unsupported record representations fail with stable
+typed errors.
 
-## Findings
+## Header contract
 
-### Record borrowing and reuse
+The reader parses and bounds the raw SAM header, then cross-checks textual `@SQ`
+declarations against the BAM binary reference table in order, name, and length.
+Duplicate or contradictory reference declarations are fatal. Sort-order metadata
+is retained but never trusted as proof of actual ordering.
 
-`Read::read` fills a caller-owned `Record`, permitting one allocation to be reused for the complete traversal. Data borrowed from the record cannot outlive the next read without being copied. The production boundary must make that lifetime explicit.
+Read-group declarations are retained as untrusted values. A unique ID is `known`,
+a missing ID is `unknown`, and duplicate IDs are `ambiguous`; AlignGauge never
+selects one duplicate declaration or invents a replacement group.
 
-### CIGAR access
+A domain-separated SHA-256 over the raw header and binary reference table is
+recorded as the header identity for provenance.
 
-The high-level `Record::cigar()` API constructs an unpacked CIGAR view and is not needed by the walking skeleton. Coverage work must benchmark `raw_cigar`, `cigar`, and `cache_cigar` before selecting the hot-path representation.
+## Record and ordering contract
 
-### Auxiliary tags
+Every record is validated before it reaches a collector:
 
-Tag access is fallible and returns data tied to the current record. Missing tags must remain distinguishable from zero values. The walking skeleton does not read auxiliary tags.
+- record, query-name, sequence, CIGAR, auxiliary-field, and thread counts are
+  bounded;
+- flags use only the standard BAM mask and required pair-bit relationships are
+  checked;
+- target IDs and positions use explicit sentinel rules;
+- CIGAR query/reference spans use checked integer arithmetic;
+- query span must equal sequence length when a CIGAR is present;
+- mapped records require a CIGAR and coordinate;
+- reference-consuming spans may not cross the declared reference length;
+- every auxiliary field is parsed so malformed trailing data cannot be ignored;
+- requested `NM`, `MD`, and `RG` values preserve missing and unknown states.
 
-### Truncation and decoder errors
+Actual coordinate order is enforced independently of `@HD SO`. Coordinate-bearing
+records must be nondecreasing by target ID and position. Once a no-coordinate tail
+begins, a later coordinate-bearing record is fatal. Diagnostics include prior and
+current coordinates while read names remain sensitive details.
 
-Failure can occur while opening the file or while reading a later record. Both are preserved as separate error variants and cause a nonzero exit without printing plausible counts.
+## Oversized CIGAR result
 
-### Multithreaded decoding
+The committed `long_cigar` fixture contains 66,000 operations in BAM `CG:B,I`
+representation. The pinned HTSlib backend expands it into the record CIGAR before
+AlignGauge validation. The reader requires the expanded operation count to exceed
+65,535; a remaining `CG` tag with a short placeholder CIGAR is rejected as
+`unsupported_record`. Undefined or silently truncated behavior is not accepted.
 
-HTSlib exposes `Read::set_threads`. Milestone 0.5 intentionally leaves it disabled so the vertical slice measures the simplest boundary. Thread configuration belongs to the production reader milestone.
+## Required-field planning
 
-### Oversized CIGAR / `CG`
+`FieldPlan` is immutable and deterministic. The counters plan exposes flags and
+coordinates; the coverage plan adds CIGAR data; optional-tag access is explicit.
+Sequence and qualities are not materialized by v0.1 plans. The resolved plan has a
+stable JSON provenance form and contains no backend, GPU, or CUDA dimension.
 
-The backend's exact expansion behavior has not yet been proven by a committed fixture. AlignGauge therefore makes no support claim at this milestone. Milestone 3 must either prove correct expansion or reject such records explicitly.
-
-### Need for a normalized record view
-
-The three counters require only `is_unmapped`. A normalized record view would add ceremony without evidence. The decision is deferred until flag counters and coverage expose the actual required field set.
+Validation may inspect fields that are not exposed because corruption and bounds
+checks are not optional collector work.
 
 ## Consequences
 
-- The walking skeleton has a real CLI-to-HTSlib-to-result path.
-- Corruption cannot be mistaken for an empty or partially counted file.
-- The production design remains free to choose borrowed, owned, or batched normalized records.
-- Long-CIGAR support, tag semantics, and thread configuration remain explicit future validation obligations rather than assumptions.
+- All v0.1 collectors share one validated record stream.
+- Corruption, unsupported records, and coordinate regressions cannot produce
+  plausible completed counts.
+- Missing tags cannot become metric zero.
+- Unknown and contradictory read groups remain visible rather than silently
+  normalized.
+- No owned normalized batch is introduced before collector requirements justify
+  one.
+- CRAM reference resolution remains a v0.2 decision and will receive a separate
+  ADR.
