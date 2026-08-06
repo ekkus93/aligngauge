@@ -1,5 +1,9 @@
 [workspace]
-members = ["crates/aligngauge-cli", "crates/aligngauge-core"]
+members = [
+    "crates/aligngauge-cli",
+    "crates/aligngauge-core",
+    "crates/aligngauge-testkit",
+]
 resolver = "3"
 
 [workspace.package]
