@@ -1,4 +1,4 @@
-//! Deterministic test-data and differential-validation support for AlignGauge.
+//! Deterministic test-data and differential-validation support for `AlignGauge`.
 //!
 //! Ordinary library and test operations perform local filesystem access only.
 //! External datasets are prepared exclusively by explicitly invoked scripts.

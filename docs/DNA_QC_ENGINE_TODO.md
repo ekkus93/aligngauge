@@ -3,7 +3,7 @@
 **Repository:** `ekkus93/aligngauge`
 
 **Companion specification:** `docs/DNA_QC_ENGINE_SPEC.md`  
-**Status:** Ralph Loop active — Milestone 1 complete; Milestone 2 next
+**Status:** Ralph Loop active — Milestone 2 implementation in progress
 **Last updated:** 2026-08-06  
 **Supersedes:** Initial `DNA_QC_ENGINE_TODO.md` dated 2026-08-05
 
@@ -237,6 +237,8 @@ Implement the exact ordering in SPEC §10.2.
 
 ## Milestone 2 — Test corpus and differential harness
 
+**Status:** Implementation in progress.
+
 ### 2.1 Test-data manifest
 
 - [ ] Define a versioned manifest format.
@@ -263,7 +265,7 @@ Implement all cases owned by SPEC §15.1.
 
 - [ ] Pin Samtools version and container digest.
 - [ ] Add scripts for `flagstat` and `idxstats`.
-- [ ] Select and document the v0.1 coverage baseline in ADR-0002.
+- [ ] Select and document the v0.1 coverage baseline in `ADR-0003-COVERAGE_BASELINE.md`.
 - [ ] Run differential tools in a network-disabled sandbox.
 - [ ] Capture stdout, stderr, exit status, wall time, and tool version.
 - [ ] Fail when a baseline command fails or emits an incomplete artifact.
@@ -545,7 +547,7 @@ Verify every criterion in SPEC §19.1.
 - [ ] Verify version-specific `REF_PATH` and `REF_CACHE` behavior.
 - [ ] Identify every implicit reference-provider path.
 - [ ] Confirm how to disable HTTP/HTTPS reference retrieval.
-- [ ] Record findings in `ADR-0003-CRAM_REFERENCE_RESOLUTION.md`.
+- [ ] Record findings in `ADR-0004-CRAM_REFERENCE_RESOLUTION.md`.
 
 ### 7.2 Enforce local-only resolution
 

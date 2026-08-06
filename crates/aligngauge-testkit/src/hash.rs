@@ -11,11 +11,15 @@ use crate::error::{Result, TestkitError};
 /// Return the lowercase SHA-256 digest of a local file.
 ///
 /// This function performs no network access.
+///
+/// # Errors
+/// Returns an error when the local file cannot be opened or read.
 pub fn sha256_file(path: &Path) -> Result<String> {
-    let file = File::open(path).map_err(|source| TestkitError::io("open for hashing", path, source))?;
+    let file =
+        File::open(path).map_err(|source| TestkitError::io("open for hashing", path, source))?;
     let mut reader = BufReader::new(file);
     let mut hasher = Sha256::new();
-    let mut buffer = [0_u8; 64 * 1024];
+    let mut buffer = vec![0_u8; 64 * 1024];
 
     loop {
         let read = reader
@@ -31,6 +35,10 @@ pub fn sha256_file(path: &Path) -> Result<String> {
 }
 
 /// Verify a local file against a lowercase SHA-256 digest.
+///
+/// # Errors
+/// Returns an error for noncanonical digest text, local I/O failure, or a
+/// checksum mismatch.
 pub fn verify_sha256(path: &Path, expected: &str) -> Result<()> {
     validate_sha256(expected)?;
     let actual = sha256_file(path)?;
@@ -42,6 +50,10 @@ pub fn verify_sha256(path: &Path, expected: &str) -> Result<()> {
 }
 
 /// Validate the canonical lowercase SHA-256 text form.
+///
+/// # Errors
+/// Returns an error unless the value is exactly 64 lowercase hexadecimal
+/// characters.
 pub fn validate_sha256(value: &str) -> Result<()> {
     let valid = value.len() == 64
         && value
@@ -65,10 +77,8 @@ mod tests {
 
     #[test]
     fn hashes_local_files_deterministically() {
-        let root = std::env::temp_dir().join(format!(
-            "aligngauge-hash-test-{}",
-            std::process::id()
-        ));
+        let root =
+            std::env::temp_dir().join(format!("aligngauge-hash-test-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).expect("create test directory");
         let path = root.join("payload");

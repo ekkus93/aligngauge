@@ -99,13 +99,17 @@ pub struct ManifestEntry {
 
 impl ManifestEntry {
     /// Verify all committed local files without performing network access.
+    ///
+    /// # Errors
+    /// Returns an error for an incomplete identity, missing local file, checksum
+    /// mismatch, or missing expected-metrics file.
     pub fn verify_local(&self, repository_root: &Path) -> Result<()> {
         if self.kind == ArtifactKind::External {
             return Ok(());
         }
 
-        let path = required_path(&self.path, "path", &self.id)?;
-        let digest = required_text(&self.sha256, "sha256", &self.id)?;
+        let path = required_path(self.path.as_deref(), "path", &self.id)?;
+        let digest = required_text(self.sha256.as_deref(), "sha256", &self.id)?;
         verify_sha256(&repository_root.join(path), digest)?;
 
         match (&self.index_path, &self.index_sha256) {
@@ -126,8 +130,9 @@ impl ManifestEntry {
 
         if let Some(metrics) = &self.expected_metrics {
             let metrics_path = repository_root.join(metrics);
-            fs::metadata(&metrics_path)
-                .map_err(|source| TestkitError::io("read expected metrics", metrics_path, source))?;
+            fs::metadata(&metrics_path).map_err(|source| {
+                TestkitError::io("read expected metrics", metrics_path, source)
+            })?;
         }
 
         Ok(())
@@ -143,6 +148,10 @@ pub struct TestDataManifest {
 
 impl TestDataManifest {
     /// Parse strict UTF-8 TSV text.
+    ///
+    /// # Errors
+    /// Returns an error for any schema, field-count, identity, checksum-text,
+    /// duplicate-key, or expected-validity contract violation.
     pub fn parse(text: &str) -> Result<Self> {
         let normalized = text.replace("\r\n", "\n");
         let mut lines = normalized.lines();
@@ -193,7 +202,7 @@ impl TestDataManifest {
             let sha256 = optional_text(fields[4]);
             let index_path = optional_path(fields[5]);
             let index_sha256 = optional_text(fields[6]);
-            validate_local_identity(line_number, kind, &path, &sha256)?;
+            validate_local_identity(line_number, kind, path.as_deref(), sha256.as_deref())?;
             if let Some(digest) = &sha256 {
                 validate_sha256(digest)?;
             }
@@ -209,13 +218,12 @@ impl TestDataManifest {
 
             let source_url = required_field(line_number, "source_url", fields[7])?.to_owned();
             let source_checksum = optional_text(fields[8]);
-            validate_source_checksum(line_number, &source_checksum)?;
+            validate_source_checksum(line_number, source_checksum.as_deref())?;
             let reference_build =
                 required_field(line_number, "reference_build", fields[9])?.to_owned();
             let generation = required_field(line_number, "generation", fields[10])?.to_owned();
             let license = required_field(line_number, "license", fields[11])?.to_owned();
-            let expected_validity =
-                ExpectedValidity::parse(line_number, fields[12], fields[13])?;
+            let expected_validity = ExpectedValidity::parse(line_number, fields[12], fields[13])?;
             let expected_metrics = optional_path(fields[14]);
 
             entries.push(ManifestEntry {
@@ -243,6 +251,9 @@ impl TestDataManifest {
     }
 
     /// Load and parse a manifest from a local path.
+    ///
+    /// # Errors
+    /// Returns local read failures or any manifest parsing error.
     pub fn load(path: &Path) -> Result<Self> {
         let text = fs::read_to_string(path)
             .map_err(|source| TestkitError::io("read manifest", path, source))?;
@@ -250,6 +261,9 @@ impl TestDataManifest {
     }
 
     /// Verify every committed artifact using local filesystem reads only.
+    ///
+    /// # Errors
+    /// Returns the first committed-entry identity, local I/O, or checksum error.
     pub fn verify_local(&self, repository_root: &Path) -> Result<()> {
         for entry in &self.entries {
             entry.verify_local(repository_root)?;
@@ -269,10 +283,7 @@ impl TestDataManifest {
 
 fn required_field<'a>(line: usize, name: &str, value: &'a str) -> Result<&'a str> {
     if value.is_empty() || value == "-" {
-        Err(TestkitError::manifest(
-            line,
-            format!("{name} is required"),
-        ))
+        Err(TestkitError::manifest(line, format!("{name} is required")))
     } else {
         Ok(value)
     }
@@ -286,39 +297,37 @@ fn optional_path(value: &str) -> Option<PathBuf> {
     (value != "-").then(|| PathBuf::from(value))
 }
 
-fn required_path<'a>(value: &'a Option<PathBuf>, name: &str, id: &str) -> Result<&'a Path> {
-    value.as_deref().ok_or_else(|| {
-        TestkitError::manifest(0, format!("committed entry {id} is missing {name}"))
-    })
+fn required_path<'a>(value: Option<&'a Path>, name: &str, id: &str) -> Result<&'a Path> {
+    value
+        .ok_or_else(|| TestkitError::manifest(0, format!("committed entry {id} is missing {name}")))
 }
 
-fn required_text<'a>(value: &'a Option<String>, name: &str, id: &str) -> Result<&'a str> {
-    value.as_deref().ok_or_else(|| {
-        TestkitError::manifest(0, format!("committed entry {id} is missing {name}"))
-    })
+fn required_text<'a>(value: Option<&'a str>, name: &str, id: &str) -> Result<&'a str> {
+    value
+        .ok_or_else(|| TestkitError::manifest(0, format!("committed entry {id} is missing {name}")))
 }
 
 fn validate_local_identity(
     line: usize,
     kind: ArtifactKind,
-    path: &Option<PathBuf>,
-    sha256: &Option<String>,
+    path: Option<&Path>,
+    sha256: Option<&str>,
 ) -> Result<()> {
     match kind {
         ArtifactKind::Committed if path.is_none() || sha256.is_none() => Err(
             TestkitError::manifest(line, "committed entry requires path and sha256"),
         ),
-        ArtifactKind::External if path.is_some() || sha256.is_some() => Err(
-            TestkitError::manifest(
+        ArtifactKind::External if path.is_some() || sha256.is_some() => {
+            Err(TestkitError::manifest(
                 line,
                 "external entry must not claim an unprepared local path or SHA-256",
-            ),
-        ),
+            ))
+        }
         ArtifactKind::Committed | ArtifactKind::External => Ok(()),
     }
 }
 
-fn validate_source_checksum(line: usize, value: &Option<String>) -> Result<()> {
+fn validate_source_checksum(line: usize, value: Option<&str>) -> Result<()> {
     let Some(value) = value else {
         return Ok(());
     };

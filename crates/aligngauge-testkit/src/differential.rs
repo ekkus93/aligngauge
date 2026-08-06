@@ -8,8 +8,7 @@ use aligngauge_core::JsonValue;
 
 use crate::error::{Result, TestkitError};
 
-const EXPECTED_HEADER: &str =
-    "metric\ttype\texpected\trounding_decimals\tcompatibility_note";
+const EXPECTED_HEADER: &str = "metric\ttype\texpected\trounding_decimals\tcompatibility_note";
 const ACTUAL_HEADER: &str = "metric\ttype\tactual";
 
 /// Metric comparison type.
@@ -157,10 +156,7 @@ impl DifferentialReport {
                 String::from("expected_count"),
                 JsonValue::Unsigned(self.expected_count as u64),
             ),
-            (
-                String::from("match"),
-                JsonValue::Bool(self.is_match()),
-            ),
+            (String::from("match"), JsonValue::Bool(self.is_match())),
             (String::from("discrepancies"), JsonValue::Array(mismatches)),
         ]))
         .to_compact_string()
@@ -168,6 +164,10 @@ impl DifferentialReport {
 }
 
 /// Parse expected-result TSV.
+///
+/// # Errors
+/// Returns an error for malformed rows, duplicate keys, invalid types, invalid
+/// values, or missing per-field decimal-rounding rules.
 pub fn parse_expected(text: &str) -> Result<Vec<ExpectedMetric>> {
     let rows = parse_rows(text, EXPECTED_HEADER, 5)?;
     let mut metrics = Vec::with_capacity(rows.len());
@@ -183,7 +183,12 @@ pub fn parse_expected(text: &str) -> Result<Vec<ExpectedMetric>> {
         let metric_type = MetricType::parse(&fields[1])?;
         let expected = required(&fields[2], line, "expected")?.to_owned();
         let rounding_decimals = match (metric_type, fields[3].as_str()) {
-            (MetricType::Decimal, value) if value != "-" => {
+            (MetricType::Decimal, "-") => {
+                return Err(TestkitError::differential(format!(
+                    "line {line}: decimal metric requires rounding_decimals"
+                )));
+            }
+            (MetricType::Decimal, value) => {
                 let parsed = value.parse::<u32>().map_err(|error| {
                     TestkitError::differential(format!(
                         "line {line}: invalid rounding_decimals {value:?}: {error}"
@@ -195,11 +200,6 @@ pub fn parse_expected(text: &str) -> Result<Vec<ExpectedMetric>> {
                     )));
                 }
                 Some(parsed)
-            }
-            (MetricType::Decimal, "-") => {
-                return Err(TestkitError::differential(format!(
-                    "line {line}: decimal metric requires rounding_decimals"
-                )));
             }
             (MetricType::Integer | MetricType::Text, "-") => None,
             (MetricType::Integer | MetricType::Text, _) => {
@@ -224,6 +224,10 @@ pub fn parse_expected(text: &str) -> Result<Vec<ExpectedMetric>> {
 }
 
 /// Parse actual-result TSV.
+///
+/// # Errors
+/// Returns an error for malformed rows, duplicate keys, invalid types, or
+/// missing values.
 pub fn parse_actual(text: &str) -> Result<Vec<ActualMetric>> {
     let rows = parse_rows(text, ACTUAL_HEADER, 3)?;
     let mut metrics = Vec::with_capacity(rows.len());
@@ -249,6 +253,10 @@ pub fn parse_actual(text: &str) -> Result<Vec<ActualMetric>> {
 }
 
 /// Compare expected and actual metric vectors.
+///
+/// # Errors
+/// Returns an error when a declared integer or decimal value is invalid, a
+/// decimal rule is absent, or an internal comparison invariant fails.
 pub fn compare(expected: &[ExpectedMetric], actual: &[ActualMetric]) -> Result<DifferentialReport> {
     let expected_by_key: BTreeMap<&str, &ExpectedMetric> = expected
         .iter()
@@ -302,6 +310,9 @@ pub fn compare(expected: &[ExpectedMetric], actual: &[ActualMetric]) -> Result<D
 }
 
 /// Compare two TSV files and write a deterministic JSON report.
+///
+/// # Errors
+/// Returns local I/O, parsing, comparison, or report-publication failures.
 pub fn compare_files(expected: &Path, actual: &Path, report: &Path) -> Result<DifferentialReport> {
     let expected_text = fs::read_to_string(expected)
         .map_err(|source| TestkitError::io("read expected metrics", expected, source))?;
@@ -347,8 +358,7 @@ fn compare_one(
             let decimals = expected.rounding_decimals.ok_or_else(|| {
                 TestkitError::differential("decimal metric lacks explicit rounding")
             })?;
-            round_decimal(&expected.expected, decimals)?
-                == round_decimal(&actual.actual, decimals)?
+            round_decimal(&expected.expected, decimals)? == round_decimal(&actual.actual, decimals)?
         }
         MetricType::Text => expected.expected == actual.actual,
     };
@@ -425,9 +435,8 @@ fn validate_value(
         MetricType::Decimal => {
             round_decimal(
                 value,
-                rounding_decimals.ok_or_else(|| {
-                    TestkitError::differential("decimal metric lacks rounding")
-                })?,
+                rounding_decimals
+                    .ok_or_else(|| TestkitError::differential("decimal metric lacks rounding"))?,
             )?;
         }
         MetricType::Text => {}
@@ -436,15 +445,15 @@ fn validate_value(
 }
 
 fn parse_integer(value: &str) -> Result<i128> {
-    value.parse::<i128>().map_err(|error| {
-        TestkitError::differential(format!("invalid integer {value:?}: {error}"))
-    })
+    value
+        .parse::<i128>()
+        .map_err(|error| TestkitError::differential(format!("invalid integer {value:?}: {error}")))
 }
 
 fn round_decimal(value: &str, decimals: u32) -> Result<i128> {
-    let (negative, unsigned) = value.strip_prefix('-').map_or((false, value), |rest| {
-        (true, rest)
-    });
+    let (negative, unsigned) = value
+        .strip_prefix('-')
+        .map_or((false, value), |rest| (true, rest));
     let unsigned = unsigned.strip_prefix('+').unwrap_or(unsigned);
     let (whole_text, fractional_text) = unsigned.split_once('.').unwrap_or((unsigned, ""));
     if whole_text.is_empty()
@@ -531,8 +540,8 @@ mod tests {
             "mean\tdecimal\t1.234\t3\t-\n"
         ))
         .expect("parse expected");
-        let actual = parse_actual("metric\ttype\tactual\nmean\tdecimal\t1.235\n")
-            .expect("parse actual");
+        let actual =
+            parse_actual("metric\ttype\tactual\nmean\tdecimal\t1.235\n").expect("parse actual");
 
         let report = compare(&expected, &actual).expect("compare");
         assert!(!report.is_match());
@@ -546,8 +555,8 @@ mod tests {
             "expected_only\tinteger\t1\t-\tprofile-note\n"
         ))
         .expect("parse expected");
-        let actual = parse_actual("metric\ttype\tactual\nactual_only\tinteger\t2\n")
-            .expect("parse actual");
+        let actual =
+            parse_actual("metric\ttype\tactual\nactual_only\tinteger\t2\n").expect("parse actual");
 
         let report = compare(&expected, &actual).expect("compare");
         assert_eq!(report.discrepancies.len(), 2);

@@ -7,7 +7,8 @@ use std::process::ExitCode;
 use aligngauge_testkit::{TestDataManifest, compare_files, generate_corpus};
 
 fn main() -> ExitCode {
-    match run(env::args_os().skip(1).collect()) {
+    let arguments: Vec<_> = env::args_os().skip(1).collect();
+    match run(&arguments) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("aligngauge-testkit: {error}");
@@ -16,7 +17,7 @@ fn main() -> ExitCode {
     }
 }
 
-fn run(arguments: Vec<std::ffi::OsString>) -> aligngauge_testkit::Result<()> {
+fn run(arguments: &[std::ffi::OsString]) -> aligngauge_testkit::Result<()> {
     let Some(command) = arguments.first().and_then(|value| value.to_str()) else {
         return Err(aligngauge_testkit::TestkitError::generation(usage()));
     };
@@ -35,11 +36,8 @@ fn run(arguments: Vec<std::ffi::OsString>) -> aligngauge_testkit::Result<()> {
             let expected = parse_required_option(&arguments[1..], "--expected")?;
             let actual = parse_required_option(&arguments[1..], "--actual")?;
             let report = parse_required_option(&arguments[1..], "--report")?;
-            let comparison = compare_files(
-                Path::new(&expected),
-                Path::new(&actual),
-                Path::new(&report),
-            )?;
+            let comparison =
+                compare_files(Path::new(&expected), Path::new(&actual), Path::new(&report))?;
             if comparison.is_match() {
                 Ok(())
             } else {
@@ -110,20 +108,15 @@ mod tests {
 
     #[test]
     fn rejects_missing_command() {
-        let error = run(Vec::new()).expect_err("missing command must fail");
+        let error = run(&[]).expect_err("missing command must fail");
         assert!(error.to_string().contains("usage:"));
     }
 
     #[test]
     fn rejects_duplicate_option() {
-        let arguments = vec![
-            "--root".into(),
-            ".".into(),
-            "--root".into(),
-            ".".into(),
-        ];
-        let error = parse_single_path_option(&arguments, "--root")
-            .expect_err("duplicate option must fail");
+        let arguments = vec!["--root".into(), ".".into(), "--root".into(), ".".into()];
+        let error =
+            parse_single_path_option(&arguments, "--root").expect_err("duplicate option must fail");
         assert!(error.to_string().contains("duplicate option"));
     }
 }

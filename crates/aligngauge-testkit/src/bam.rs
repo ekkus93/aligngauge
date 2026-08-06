@@ -14,8 +14,7 @@ use crate::error::{Result, TestkitError};
 const BAM_MAGIC: &[u8; 4] = b"BAM\x01";
 const BGZF_PAYLOAD_CHUNK: usize = 32 * 1024;
 const BGZF_EOF: [u8; 28] = [
-    31, 139, 8, 4, 0, 0, 0, 0, 0, 255, 6, 0, 66, 67, 2, 0, 27, 0, 3, 0, 0, 0, 0, 0, 0,
-    0, 0, 0,
+    31, 139, 8, 4, 0, 0, 0, 0, 0, 255, 6, 0, 66, 67, 2, 0, 27, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 ];
 
 /// One BAM reference declaration.
@@ -157,6 +156,7 @@ impl RecordSpec {
 }
 
 /// Build a `TAG:i` auxiliary field.
+#[must_use]
 pub fn aux_i32(tag: [u8; 2], value: i32) -> Vec<u8> {
     let mut output = Vec::with_capacity(7);
     output.extend_from_slice(&tag);
@@ -166,6 +166,7 @@ pub fn aux_i32(tag: [u8; 2], value: i32) -> Vec<u8> {
 }
 
 /// Build a `TAG:Z` auxiliary field.
+#[must_use]
 pub fn aux_string(tag: [u8; 2], value: &str) -> Vec<u8> {
     let mut output = Vec::with_capacity(value.len() + 4);
     output.extend_from_slice(&tag);
@@ -176,6 +177,10 @@ pub fn aux_string(tag: [u8; 2], value: &str) -> Vec<u8> {
 }
 
 /// Serialize a complete deterministic BAM file.
+///
+/// # Errors
+/// Returns an error when a header, reference, record, CIGAR, sequence, or BGZF
+/// value cannot be represented without overflow or violates the BAM contract.
 pub fn serialize_bam(
     header_text: &str,
     references: &[ReferenceSpec],
@@ -224,6 +229,10 @@ pub fn serialize_bam(
 }
 
 /// Serialize a BAM whose final record declares a larger block than is present.
+///
+/// # Errors
+/// Returns an error when the requested header or reference table cannot be
+/// represented as BAM/BGZF data.
 pub fn serialize_malformed_record_length(
     header_text: &str,
     references: &[ReferenceSpec],
@@ -235,6 +244,9 @@ pub fn serialize_malformed_record_length(
 }
 
 /// Write a deterministic BAM file.
+///
+/// # Errors
+/// Returns serialization failures or the underlying filesystem write error.
 pub fn write_bam(
     path: &Path,
     header_text: &str,
@@ -246,12 +258,18 @@ pub fn write_bam(
 }
 
 /// Build a BAI index for a valid coordinate-sorted BAM.
+///
+/// # Errors
+/// Returns an error when `HTSlib` rejects the BAM or cannot write its index.
 pub fn build_bai(path: &Path) -> Result<()> {
     bam::index::build(path, None, bam::index::Type::Bai, 1)
         .map_err(|error| TestkitError::htslib(format!("index {}: {error}", path.display())))
 }
 
 /// Remove bytes from the middle of a BGZF stream to create deterministic corruption.
+///
+/// # Errors
+/// Returns an error when the stream is too small to truncate deterministically.
 pub fn truncate_midstream(bytes: &[u8]) -> Result<Vec<u8>> {
     if bytes.len() < 96 {
         return Err(TestkitError::generation(
@@ -310,7 +328,7 @@ fn serialize_record(record: &RecordSpec) -> Result<Vec<u8>> {
     }
 
     let query_length = cigar_query_length(&record.cigar)?;
-    if query_length != record.sequence.len() {
+    if !record.cigar.is_empty() && query_length != record.sequence.len() {
         return Err(TestkitError::generation(format!(
             "record {} CIGAR consumes {query_length} query bases but sequence has {}",
             record.name,
@@ -599,15 +617,9 @@ mod tests {
             name: String::from("chr1"),
             length: 1000,
         }];
-        let record = RecordSpec::mapped(
-            "read1",
-            0,
-            10,
-            vec![CigarOp::new(4, 'M')],
-            "ACGT",
-        );
-        let first = serialize_bam("", &references, std::slice::from_ref(&record))
-            .expect("serialize first");
+        let record = RecordSpec::mapped("read1", 0, 10, vec![CigarOp::new(4, 'M')], "ACGT");
+        let first =
+            serialize_bam("", &references, std::slice::from_ref(&record)).expect("serialize first");
         let second = serialize_bam("", &references, &[record]).expect("serialize second");
         assert_eq!(first, second);
         assert!(first.ends_with(&BGZF_EOF));

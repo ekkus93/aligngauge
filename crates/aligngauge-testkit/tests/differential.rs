@@ -5,10 +5,7 @@ use aligngauge_testkit::compare_files;
 
 #[test]
 fn writes_machine_readable_discrepancy_report() {
-    let root = std::env::temp_dir().join(format!(
-        "aligngauge-differential-{}",
-        std::process::id()
-    ));
+    let root = std::env::temp_dir().join(format!("aligngauge-differential-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).expect("create test directory");
 
@@ -43,8 +40,8 @@ fn committed_expected_files_use_strict_headers() {
     for name in ["basic.tsv", "cigar_ops.tsv", "flags_and_pairs.tsv"] {
         let text = fs::read_to_string(root.join("testdata/expected").join(name))
             .expect("read expected file");
-        assert!(text.starts_with(
-            "metric\ttype\texpected\trounding_decimals\tcompatibility_note\n"
-        ));
+        assert!(
+            text.starts_with("metric\ttype\texpected\trounding_decimals\tcompatibility_note\n")
+        );
     }
 }

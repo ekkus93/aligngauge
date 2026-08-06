@@ -45,7 +45,7 @@ pub enum TestkitError {
         /// Failure explanation.
         message: String,
     },
-    /// HTSlib rejected a generated fixture or index operation.
+    /// `HTSlib` rejected a generated fixture or index operation.
     Htslib {
         /// Failure explanation.
         message: String,
@@ -55,7 +55,11 @@ pub enum TestkitError {
 impl TestkitError {
     /// Wrap a filesystem failure with operation context.
     #[must_use]
-    pub fn io(context: impl Into<String>, path: impl Into<PathBuf>, source: std::io::Error) -> Self {
+    pub fn io(
+        context: impl Into<String>,
+        path: impl Into<PathBuf>,
+        source: std::io::Error,
+    ) -> Self {
         Self::Io {
             context: context.into(),
             path: path.into(),
@@ -102,7 +106,7 @@ impl TestkitError {
         }
     }
 
-    /// Construct an HTSlib failure.
+    /// Construct an `HTSlib` failure.
     #[must_use]
     pub fn htslib(message: impl Into<String>) -> Self {
         Self::Htslib {

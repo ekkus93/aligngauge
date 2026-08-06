@@ -11,8 +11,10 @@ use crate::error::{Result, TestkitError};
 use crate::hash::sha256_file;
 use crate::manifest::MANIFEST_SCHEMA;
 
-const FIXTURE_COMMAND: &str = "cargo run -p aligngauge-testkit --locked -- generate-corpus --root .";
-const HEADER: &str = "@HD\tVN:1.6\tSO:coordinate\n@SQ\tSN:chr1\tLN:1000000\n@SQ\tSN:chr2\tLN:1000000\n";
+const FIXTURE_COMMAND: &str =
+    "cargo run -p aligngauge-testkit --locked -- generate-corpus --root .";
+const HEADER: &str =
+    "@HD\tVN:1.6\tSO:coordinate\n@SQ\tSN:chr1\tLN:1000000\n@SQ\tSN:chr2\tLN:1000000\n";
 
 /// Generated fixture metadata used to construct the manifest.
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -28,18 +30,28 @@ struct GeneratedFixture {
 /// Generate the complete version-1 synthetic corpus and manifest.
 ///
 /// The function creates only local files and performs no network access.
+///
+/// # Errors
+/// Returns an error on invalid fixture definitions, serialization/indexing
+/// failure, checksum failure, or any local filesystem failure.
+///
+/// The body is intentionally the canonical declarative fixture catalog. Keeping
+/// the entries together makes manifest ordering and corpus review explicit.
+#[allow(clippy::too_many_lines)]
 pub fn generate_corpus(repository_root: &Path) -> Result<()> {
     let testdata = repository_root.join("testdata");
     let fixtures = testdata.join("fixtures");
     let expected = testdata.join("expected");
 
     if fixtures.exists() {
-        fs::remove_dir_all(&fixtures)
-            .map_err(|source| TestkitError::io("remove old fixture directory", &fixtures, source))?;
+        fs::remove_dir_all(&fixtures).map_err(|source| {
+            TestkitError::io("remove old fixture directory", &fixtures, source)
+        })?;
     }
     if expected.exists() {
-        fs::remove_dir_all(&expected)
-            .map_err(|source| TestkitError::io("remove old expected directory", &expected, source))?;
+        fs::remove_dir_all(&expected).map_err(|source| {
+            TestkitError::io("remove old expected directory", &expected, source)
+        })?;
     }
     fs::create_dir_all(&fixtures)
         .map_err(|source| TestkitError::io("create fixture directory", &fixtures, source))?;
@@ -73,7 +85,11 @@ pub fn generate_corpus(repository_root: &Path) -> Result<()> {
             "mapped-2",
             1,
             200,
-            vec![CigarOp::new(4, 'M'), CigarOp::new(1, 'I'), CigarOp::new(5, 'M')],
+            vec![
+                CigarOp::new(4, 'M'),
+                CigarOp::new(1, 'I'),
+                CigarOp::new(5, 'M'),
+            ],
             "AAAACGGGGG",
         ),
         RecordSpec::unmapped("unmapped-1", "NNNN"),
@@ -163,95 +179,47 @@ pub fn generate_corpus(repository_root: &Path) -> Result<()> {
         "@SQ\tSN:chr2\tLN:1000000\n",
         "@RG\tID:rg1\tSM:synthetic\n"
     );
-    let mut first = RecordSpec::mapped(
-        "pair-a",
-        0,
-        100,
-        vec![CigarOp::new(10, 'M')],
-        "AAAAAAAAAA",
-    );
+    let mut first = RecordSpec::mapped("pair-a", 0, 100, vec![CigarOp::new(10, 'M')], "AAAAAAAAAA");
     first.flags = 0x1 | 0x2 | 0x40;
     first.mate_reference_id = 0;
     first.mate_position = 160;
     first.template_length = 70;
     first.auxiliary = aux_string(*b"RG", "rg1");
 
-    let mut second = RecordSpec::mapped(
-        "pair-a",
-        0,
-        160,
-        vec![CigarOp::new(10, 'M')],
-        "CCCCCCCCCC",
-    );
+    let mut second =
+        RecordSpec::mapped("pair-a", 0, 160, vec![CigarOp::new(10, 'M')], "CCCCCCCCCC");
     second.flags = 0x1 | 0x2 | 0x80 | 0x10 | 0x20;
     second.mate_reference_id = 0;
     second.mate_position = 100;
     second.template_length = -70;
     second.auxiliary = aux_string(*b"RG", "rg1");
 
-    let mut secondary = RecordSpec::mapped(
-        "secondary",
-        0,
-        300,
-        vec![CigarOp::new(5, 'M')],
-        "GGGGG",
-    );
+    let mut secondary =
+        RecordSpec::mapped("secondary", 0, 300, vec![CigarOp::new(5, 'M')], "GGGGG");
     secondary.flags = 0x100;
 
-    let mut supplementary = RecordSpec::mapped(
-        "supplementary",
-        0,
-        350,
-        vec![CigarOp::new(5, 'M')],
-        "TTTTT",
-    );
+    let mut supplementary =
+        RecordSpec::mapped("supplementary", 0, 350, vec![CigarOp::new(5, 'M')], "TTTTT");
     supplementary.flags = 0x800;
 
-    let mut dual = RecordSpec::mapped(
-        "dual",
-        0,
-        400,
-        vec![CigarOp::new(5, 'M')],
-        "AAAAA",
-    );
+    let mut dual = RecordSpec::mapped("dual", 0, 400, vec![CigarOp::new(5, 'M')], "AAAAA");
     dual.flags = 0x100 | 0x800;
 
-    let mut duplicate = RecordSpec::mapped(
-        "duplicate",
-        0,
-        450,
-        vec![CigarOp::new(5, 'M')],
-        "CCCCC",
-    );
+    let mut duplicate =
+        RecordSpec::mapped("duplicate", 0, 450, vec![CigarOp::new(5, 'M')], "CCCCC");
     duplicate.flags = 0x400;
 
-    let mut qc_fail = RecordSpec::mapped(
-        "qc-fail",
-        0,
-        500,
-        vec![CigarOp::new(5, 'M')],
-        "GGGGG",
-    );
+    let mut qc_fail = RecordSpec::mapped("qc-fail", 0, 500, vec![CigarOp::new(5, 'M')], "GGGGG");
     qc_fail.flags = 0x200;
 
-    let mut singleton = RecordSpec::mapped(
-        "singleton",
-        0,
-        550,
-        vec![CigarOp::new(5, 'M')],
-        "TTTTT",
-    );
+    let mut singleton =
+        RecordSpec::mapped("singleton", 0, 550, vec![CigarOp::new(5, 'M')], "TTTTT");
     singleton.flags = 0x1 | 0x8 | 0x40;
     singleton.mate_reference_id = -1;
     singleton.mate_position = -1;
 
-    let mut discordant = RecordSpec::mapped(
-        "discordant",
-        0,
-        600,
-        vec![CigarOp::new(5, 'M')],
-        "AAAAA",
-    );
+    let mut discordant =
+        RecordSpec::mapped("discordant", 0, 600, vec![CigarOp::new(5, 'M')], "AAAAA");
     discordant.flags = 0x1 | 0x40;
     discordant.mate_reference_id = 1;
     discordant.mate_position = 100;
@@ -261,8 +229,20 @@ pub fn generate_corpus(repository_root: &Path) -> Result<()> {
         &repository_root.join(&flags_expected),
         &[
             ("total_records", "integer", "9", "-", "-"),
-            ("secondary_records", "integer", "2", "-", "samtools-priority-profile"),
-            ("supplementary_records", "integer", "1", "-", "samtools-priority-profile"),
+            (
+                "secondary_records",
+                "integer",
+                "2",
+                "-",
+                "samtools-priority-profile",
+            ),
+            (
+                "supplementary_records",
+                "integer",
+                "1",
+                "-",
+                "samtools-priority-profile",
+            ),
             ("duplicate_records", "integer", "1", "-", "-"),
             ("qc_fail_records", "integer", "1", "-", "-"),
             ("paired_records", "integer", "4", "-", "-"),
@@ -298,32 +278,19 @@ pub fn generate_corpus(repository_root: &Path) -> Result<()> {
         "@RG\tID:contradictory\tSM:first\n",
         "@RG\tID:contradictory\tSM:second\n"
     );
-    let mut complete_tags = RecordSpec::mapped(
-        "complete-tags",
-        0,
-        700,
-        vec![CigarOp::new(5, 'M')],
-        "ACGTA",
-    );
+    let mut complete_tags =
+        RecordSpec::mapped("complete-tags", 0, 700, vec![CigarOp::new(5, 'M')], "ACGTA");
     complete_tags.auxiliary.extend(aux_i32(*b"NM", 1));
     complete_tags.auxiliary.extend(aux_string(*b"MD", "2A2"));
     complete_tags.auxiliary.extend(aux_string(*b"RG", "known"));
 
-    let missing_tags = RecordSpec::mapped(
-        "missing-tags",
-        0,
-        710,
-        vec![CigarOp::new(5, 'M')],
-        "ACGTA",
-    );
-    let mut unknown_rg = RecordSpec::mapped(
-        "unknown-rg",
-        0,
-        720,
-        vec![CigarOp::new(5, 'M')],
-        "ACGTA",
-    );
-    unknown_rg.auxiliary.extend(aux_string(*b"RG", "not-declared"));
+    let missing_tags =
+        RecordSpec::mapped("missing-tags", 0, 710, vec![CigarOp::new(5, 'M')], "ACGTA");
+    let mut unknown_rg =
+        RecordSpec::mapped("unknown-rg", 0, 720, vec![CigarOp::new(5, 'M')], "ACGTA");
+    unknown_rg
+        .auxiliary
+        .extend(aux_string(*b"RG", "not-declared"));
     generated.push(write_fixture(
         repository_root,
         "tags_and_read_groups",
@@ -446,7 +413,11 @@ pub fn generate_corpus(repository_root: &Path) -> Result<()> {
             "chunk-right",
             0,
             65_536,
-            vec![CigarOp::new(4, 'M'), CigarOp::new(20, 'N'), CigarOp::new(4, 'M')],
+            vec![
+                CigarOp::new(4, 'M'),
+                CigarOp::new(20, 'N'),
+                CigarOp::new(4, 'M'),
+            ],
             "CCCCCCCC",
         ),
     ];
@@ -519,7 +490,11 @@ pub fn generate_corpus(repository_root: &Path) -> Result<()> {
     let malformed_length_path = fixtures.join("malformed_record_length.bam");
     let malformed_length = serialize_malformed_record_length(HEADER, &references)?;
     fs::write(&malformed_length_path, malformed_length).map_err(|source| {
-        TestkitError::io("write malformed record-length BAM", &malformed_length_path, source)
+        TestkitError::io(
+            "write malformed record-length BAM",
+            &malformed_length_path,
+            source,
+        )
     })?;
     generated.push(GeneratedFixture {
         id: String::from("malformed_record_length"),
@@ -606,9 +581,8 @@ fn relative_fixture(file_name: &str) -> PathBuf {
 }
 
 fn write_expected(path: &Path, rows: &[(&str, &str, &str, &str, &str)]) -> Result<()> {
-    let mut output = String::from(
-        "metric\ttype\texpected\trounding_decimals\tcompatibility_note\n",
-    );
+    let mut output =
+        String::from("metric\ttype\texpected\trounding_decimals\tcompatibility_note\n");
     for (metric, metric_type, expected, rounding, note) in rows {
         output.push_str(metric);
         output.push('\t');
@@ -626,12 +600,9 @@ fn write_expected(path: &Path, rows: &[(&str, &str, &str, &str, &str)]) -> Resul
 }
 
 fn write_manifest(repository_root: &Path, fixtures: &[GeneratedFixture]) -> Result<()> {
-    let mut output = String::from(
-        "schema\tid\tkind\tpath\tsha256\tindex_path\tindex_sha256\tsource_url\t",
-    );
-    output.push_str(
-        "source_checksum\treference_build\tgeneration\tlicense\texpected_validity\t",
-    );
+    let mut output =
+        String::from("schema\tid\tkind\tpath\tsha256\tindex_path\tindex_sha256\tsource_url\t");
+    output.push_str("source_checksum\treference_build\tgeneration\tlicense\texpected_validity\t");
     output.push_str("expected_error\texpected_metrics\n");
 
     for fixture in fixtures {

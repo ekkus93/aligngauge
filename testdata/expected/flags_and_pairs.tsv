@@ -1,0 +1,7 @@
+metric	type	expected	rounding_decimals	compatibility_note
+total_records	integer	9	-	-
+secondary_records	integer	2	-	samtools-priority-profile
+supplementary_records	integer	1	-	samtools-priority-profile
+duplicate_records	integer	1	-	-
+qc_fail_records	integer	1	-	-
+paired_records	integer	4	-	-
