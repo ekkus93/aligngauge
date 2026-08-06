@@ -1,0 +1,97 @@
+name: M5 Branch Gate
+
+on:
+  push:
+    branches: [agent/milestone-5]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: m5-branch-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    if: contains(github.event.head_commit.message, '[m5-gate]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out work branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Apply Milestone 5 implementation
+        run: |
+          base64 --decode tools/m5_apply.py.gz.b64 \
+            | gzip --decompress \
+            > /tmp/m5_apply.py
+          echo 'f8ef4cd20d1a46e43617e26871120378db741dd1d4faa64afafc07bed02652a9  /tmp/m5_apply.py' \
+            | sha256sum --check -
+          python /tmp/m5_apply.py
+
+      - name: Format source
+        run: cargo fmt --all
+
+      - name: Resolve workspace lockfile
+        run: cargo check --workspace --all-targets
+
+      - name: Verify dependency lockfile
+        run: cargo update --workspace --locked --dry-run
+
+      - name: Validate scripts
+        run: |
+          bash -n tools/reference/samtools/run-reference.sh
+          bash -n tools/reference/samtools/compare-coverage.sh
+          python -m py_compile tools/reference/samtools/compare-coverage.py
+
+      - name: Run strict Clippy
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+      - name: Run tests
+        run: cargo test --workspace --all-features --locked
+
+      - name: Build documentation
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --workspace --all-features --no-deps --locked
+
+      - name: Verify generated corpus is unchanged
+        run: |
+          regenerated="$(mktemp -d)"
+          trap 'rm -rf "$regenerated"' EXIT
+          cargo run -p aligngauge-testkit --locked -- generate-corpus --root "$regenerated"
+          diff -ru -- testdata/fixtures "$regenerated/testdata/fixtures"
+          diff -ru -- testdata/expected "$regenerated/testdata/expected"
+          diff -u -- testdata/manifest.v1.tsv "$regenerated/testdata/manifest.v1.tsv"
+
+      - name: Run pinned Samtools counter differential
+        run: tools/reference/samtools/compare-counters.sh
+
+      - name: Run exact coverage differential
+        run: tools/reference/samtools/compare-coverage.sh
+
+      - name: Validate final diff
+        run: |
+          git diff --check
+          git status --short
+          git diff --stat
+
+      - name: Upload validated source tree
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: m5-validated-source-${{ github.sha }}
+          path: |
+            Cargo.toml
+            Cargo.lock
+            crates/aligngauge-coverage/**
+            crates/aligngauge-cli/**
+            crates/aligngauge-core/**
+            tools/reference/samtools/compare-coverage.py
+            tools/reference/samtools/compare-coverage.sh
+            tools/reference/samtools/run-reference.sh
+          if-no-files-found: error
+          retention-days: 7
