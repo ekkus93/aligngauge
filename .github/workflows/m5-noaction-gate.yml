@@ -1,0 +1,101 @@
+name: M5 No-Action Gate
+
+on:
+  push:
+    branches: [agent/milestone-5]
+    paths:
+      - ".github/workflows/m5-noaction-gate.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: m5-noaction-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Fetch exact branch commit without checkout action
+        env:
+          REPOSITORY: ${{ github.repository }}
+          REVISION: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          git init source
+          cd source
+          git remote add origin "https://github.com/${REPOSITORY}.git"
+          git fetch --depth=1 origin "${REVISION}"
+          git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "${REVISION}"
+
+      - name: Apply checksum-pinned Milestone 5 implementation
+        working-directory: source
+        run: |
+          set -euo pipefail
+          base64 --decode tools/m5_apply.py.gz.b64 \
+            | gzip --decompress \
+            > /tmp/m5_apply.py
+          echo 'f8ef4cd20d1a46e43617e26871120378db741dd1d4faa64afafc07bed02652a9  /tmp/m5_apply.py' \
+            | sha256sum --check -
+          python /tmp/m5_apply.py
+
+      - name: Format and compile workspace
+        working-directory: source
+        run: |
+          set -euo pipefail
+          cargo fmt --all
+          cargo check --workspace --all-targets
+          cargo update --workspace --locked --dry-run
+
+      - name: Validate reference scripts
+        working-directory: source
+        run: |
+          set -euo pipefail
+          bash -n tools/reference/samtools/run-reference.sh
+          bash -n tools/reference/samtools/compare-coverage.sh
+          python -m py_compile tools/reference/samtools/compare-coverage.py
+
+      - name: Run strict Clippy
+        working-directory: source
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+      - name: Run all tests
+        working-directory: source
+        run: cargo test --workspace --all-features --locked
+
+      - name: Build documentation with warnings denied
+        working-directory: source
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --workspace --all-features --no-deps --locked
+
+      - name: Prove generated corpus is byte-identical
+        working-directory: source
+        run: |
+          set -euo pipefail
+          regenerated="$(mktemp -d)"
+          trap 'rm -rf "$regenerated"' EXIT
+          cargo run -p aligngauge-testkit --locked -- generate-corpus --root "$regenerated"
+          diff -ru -- testdata/fixtures "$regenerated/testdata/fixtures"
+          diff -ru -- testdata/expected "$regenerated/testdata/expected"
+          diff -u -- testdata/manifest.v1.tsv "$regenerated/testdata/manifest.v1.tsv"
+
+      - name: Run pinned Samtools counter differential
+        working-directory: source
+        run: tools/reference/samtools/compare-counters.sh
+
+      - name: Run exact coverage differential
+        working-directory: source
+        run: tools/reference/samtools/compare-coverage.sh
+
+      - name: Validate final product diff
+        working-directory: source
+        run: |
+          set -euo pipefail
+          git diff --check
+          git status --short
+          git diff --stat
