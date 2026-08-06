@@ -19,7 +19,7 @@ replace_once(
 )
 replace_once(
     "- [ ] Select and document the v0.1 coverage baseline in ADR-0002.",
-    "- [ ] Select and document the v0.1 coverage baseline in ADR-0003.",
+    "- [ ] Select and document the v0.1 coverage baseline in `ADR-0003-COVERAGE_BASELINE.md`.",
     "coverage ADR number",
 )
 replace_once(
