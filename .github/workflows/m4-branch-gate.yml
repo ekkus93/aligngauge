@@ -32,12 +32,39 @@ jobs:
           python /tmp/m4_apply.py
           python - <<'PY'
           from pathlib import Path
-          path = Path("crates/aligngauge-core/src/model.rs")
-          text = path.read_text(encoding="utf-8")
+
+          model = Path("crates/aligngauge-core/src/model.rs")
+          text = model.read_text(encoding="utf-8")
           old = "        let per_reference_counters = per_reference_counters;\n"
           if text.count(old) != 1:
               raise SystemExit("expected exactly one redundant per-reference binding")
-          path.write_text(text.replace(old, "", 1), encoding="utf-8")
+          model.write_text(text.replace(old, "", 1), encoding="utf-8")
+
+          metrics = Path("crates/aligngauge-metrics/src/lib.rs")
+          text = metrics.read_text(encoding="utf-8")
+          old = '''fn percentage(value: u64, total: u64) -> String {
+              if total == 0 {
+                  String::from("N/A")
+              } else {
+                  format!("{:.2}%", (value as f64 / total as f64) * 100.0)
+              }
+          }
+          '''
+          new = '''fn percentage(value: u64, total: u64) -> String {
+              if total == 0 {
+                  return String::from("N/A");
+              }
+
+              let numerator = u128::from(value) * 10_000;
+              let hundredths = (numerator + (u128::from(total) / 2)) / u128::from(total);
+              let whole = hundredths / 100;
+              let fraction = hundredths % 100;
+              format!("{whole}.{fraction:02}%")
+          }
+          '''
+          if text.count(old) != 1:
+              raise SystemExit("expected exactly one floating percentage formatter")
+          metrics.write_text(text.replace(old, new, 1), encoding="utf-8")
           PY
 
       - name: Format source
