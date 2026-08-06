@@ -35,6 +35,31 @@ jobs:
       - name: Apply exact Clippy repairs
         run: python tools/m1_clippy_repairs.py
 
+      - name: Update typed-error walking-skeleton assertions
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("crates/aligngauge-cli/tests/walking_skeleton.rs")
+          text = path.read_text(encoding="utf-8")
+          replacements = [
+              (
+                  'String::from_utf8_lossy(&output.stderr).contains("failed to open BAM")',
+                  'String::from_utf8_lossy(&output.stderr).contains("[input_not_found]")',
+              ),
+              (
+                  'stderr.contains("failed to open BAM") || stderr.contains("failed to read BAM")',
+                  'stderr.contains("[input_corrupt]")',
+              ),
+          ]
+          for old, new in replacements:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"expected one assertion match for {old!r}, found {count}")
+              text = text.replace(old, new)
+          path.write_text(text, encoding="utf-8")
+          PY
+
       - name: Format repaired sources
         run: cargo fmt --all
 
