@@ -1,14 +1,14 @@
-//! Minimal BAM counting boundary retained while production collectors are built.
+//! Minimal counting CLI over the production BAM validation boundary.
 
 use std::path::Path;
 
 use aligngauge_core::{AlignGaugeError, ErrorCategory};
-use rust_htslib::bam::{Read, Reader, Record};
+use aligngauge_hts::{BamReader, FieldPlan, ReaderOptions};
 
-/// Record counts emitted by the Milestone 0.5 walking skeleton.
+/// Record counts emitted while Milestone 4 collectors are built.
 #[derive(Debug, Clone, Copy, Default, Eq, PartialEq)]
 pub struct BamCounts {
-    /// Number of decoded records.
+    /// Number of decoded and validated records.
     pub total: u64,
     /// Number of records without the unmapped flag.
     pub mapped: u64,
@@ -16,45 +16,25 @@ pub struct BamCounts {
     pub unmapped: u64,
 }
 
-/// Count total, mapped, and unmapped records in a BAM input.
+/// Validate a BAM stream and count total, mapped, and unmapped records.
 ///
-/// A single reusable [`Record`] buffer is used for the entire traversal.
+/// The production reader reuses one rust-htslib record buffer. Counts are
+/// returned only after the entire stream passes header, record, tag, reference,
+/// and coordinate-order validation.
 ///
 /// # Errors
 ///
-/// Returns a typed [`AlignGaugeError`] if `HTSlib` cannot open or decode the input,
-/// or if a counter overflows.
+/// Returns a typed [`AlignGaugeError`] for any reader validation failure or
+/// checked-counter overflow.
 pub fn count_bam(path: impl AsRef<Path>) -> Result<BamCounts, AlignGaugeError> {
-    let path = path.as_ref();
-    if !path.exists() {
-        return Err(AlignGaugeError::new(
-            ErrorCategory::InputNotFound,
-            format!("input BAM '{}' does not exist", path.display()),
-        )
-        .with_detail("input", path.to_string_lossy().into_owned()));
-    }
-
-    let mut reader = Reader::from_path(path).map_err(|source| {
-        AlignGaugeError::new(
-            ErrorCategory::InputFormat,
-            format!("failed to open BAM '{}'", path.display()),
-        )
-        .with_detail("input", path.to_string_lossy().into_owned())
-        .with_source(source)
-    })?;
-    let mut record = Record::new();
+    let mut reader = BamReader::open(
+        path,
+        FieldPlan::counters(),
+        ReaderOptions::default(),
+    )?;
     let mut counts = BamCounts::default();
 
-    while let Some(result) = reader.read(&mut record) {
-        result.map_err(|source| {
-            AlignGaugeError::new(
-                ErrorCategory::InputCorrupt,
-                format!("failed to decode BAM record from '{}'", path.display()),
-            )
-            .with_detail("input", path.to_string_lossy().into_owned())
-            .with_source(source)
-        })?;
-
+    while let Some(record) = reader.next_record()? {
         increment(&mut counts.total, "total")?;
         if record.is_unmapped() {
             increment(&mut counts.unmapped, "unmapped")?;
