@@ -455,19 +455,19 @@ fn parse_config_file(path: &Path) -> Result<ConfigOverrides, AlignGaugeError> {
             "io_threads" => overrides.io_threads = Some(parse_usize(&value, &key)?),
             "memory_limit" => {
                 overrides.memory_limit_bytes =
-                    Some(parse_memory_limit(&parse_string(&value, &key)?)?)
+                    Some(parse_memory_limit(&parse_string(&value, &key)?)?);
             }
             "coverage_thresholds" => {
                 overrides.coverage_thresholds =
-                    Some(parse_coverage_thresholds(&parse_string(&value, &key)?)?)
+                    Some(parse_coverage_thresholds(&parse_string(&value, &key)?)?);
             }
             "log_format" => {
-                overrides.log_format = Some(LogFormat::parse(&parse_string(&value, &key)?, &key)?)
+                overrides.log_format = Some(LogFormat::parse(&parse_string(&value, &key)?, &key)?);
             }
             "quiet" => overrides.quiet = Some(parse_bool(&value, &key)?),
             "verbose" => overrides.verbose = Some(parse_bool(&value, &key)?),
             "preserve_failed_staging" => {
-                overrides.preserve_failed_staging = Some(parse_bool(&value, &key)?)
+                overrides.preserve_failed_staging = Some(parse_bool(&value, &key)?);
             }
             _ => {
                 return Err(configuration_error(format!(

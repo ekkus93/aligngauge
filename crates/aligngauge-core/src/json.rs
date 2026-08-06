@@ -45,7 +45,7 @@ impl JsonValue {
             Self::Null => output.push_str("null"),
             Self::Bool(value) => output.push_str(if *value { "true" } else { "false" }),
             Self::Signed(value) => {
-                write!(output, "{value}").expect("writing to String cannot fail")
+                write!(output, "{value}").expect("writing to String cannot fail");
             }
             Self::Unsigned(value) => {
                 write!(output, "{value}").expect("writing to String cannot fail");
@@ -54,6 +54,36 @@ impl JsonValue {
             Self::Array(values) => write_array(output, values, depth, pretty),
             Self::Object(values) => write_object(output, values, depth, pretty),
         }
+    }
+}
+
+impl From<String> for JsonValue {
+    fn from(value: String) -> Self {
+        Self::String(value)
+    }
+}
+
+impl From<&str> for JsonValue {
+    fn from(value: &str) -> Self {
+        Self::String(value.to_owned())
+    }
+}
+
+impl From<bool> for JsonValue {
+    fn from(value: bool) -> Self {
+        Self::Bool(value)
+    }
+}
+
+impl From<u32> for JsonValue {
+    fn from(value: u32) -> Self {
+        Self::Unsigned(u64::from(value))
+    }
+}
+
+impl From<u64> for JsonValue {
+    fn from(value: u64) -> Self {
+        Self::Unsigned(value)
     }
 }
 

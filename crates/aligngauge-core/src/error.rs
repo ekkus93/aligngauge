@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use std::error::Error;
 use std::fmt::{self, Display, Formatter, Write as _};
 
-use crate::json::{JsonValue, ToJson};
+use crate::json::JsonValue;
 
 /// Stable top-level error categories defined by the product specification.
 #[derive(Debug, Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -154,15 +154,19 @@ impl AlignGaugeError {
 
     /// Add a non-sensitive structured detail.
     #[must_use]
-    pub fn with_detail(mut self, key: impl Into<String>, value: impl ToJson) -> Self {
-        self.details.insert(key.into(), value.to_json());
+    pub fn with_detail(mut self, key: impl Into<String>, value: impl Into<JsonValue>) -> Self {
+        self.details.insert(key.into(), value.into());
         self
     }
 
     /// Add a detail that is redacted unless sensitive diagnostics are requested.
     #[must_use]
-    pub fn with_sensitive_detail(mut self, key: impl Into<String>, value: impl ToJson) -> Self {
-        self.sensitive_details.insert(key.into(), value.to_json());
+    pub fn with_sensitive_detail(
+        mut self,
+        key: impl Into<String>,
+        value: impl Into<JsonValue>,
+    ) -> Self {
+        self.sensitive_details.insert(key.into(), value.into());
         self
     }
 

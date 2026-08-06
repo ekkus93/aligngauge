@@ -298,7 +298,7 @@ fn create_staging_directory(parent: &Path, destination: &Path) -> Result<PathBuf
         builder.mode(0o700);
         match builder.create(&staging) {
             Ok(()) => return Ok(staging),
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
             Err(source) => {
                 return Err(output_error(format!(
                     "failed to create staging directory '{}'",

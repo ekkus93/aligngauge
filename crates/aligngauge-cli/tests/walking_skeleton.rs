@@ -71,7 +71,7 @@ fn missing_input_fails_without_counts() {
     assert!(!output.status.success());
     assert!(output.stdout.is_empty());
     assert!(
-        String::from_utf8_lossy(&output.stderr).contains("failed to open BAM"),
+        String::from_utf8_lossy(&output.stderr).contains("[input_not_found]"),
         "stderr: {}",
         String::from_utf8_lossy(&output.stderr)
     );
@@ -96,10 +96,7 @@ fn truncated_input_fails_without_plausible_counts() {
         String::from_utf8_lossy(&output.stdout)
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        stderr.contains("failed to open BAM") || stderr.contains("failed to read BAM"),
-        "stderr: {stderr}"
-    );
+    assert!(stderr.contains("[input_corrupt]"), "stderr: {stderr}");
 }
 
 fn run_qc(path: &Path) -> Output {

@@ -15,5 +15,6 @@ pub use error::{AlignGaugeError, ErrorCategory};
 pub use json::{JsonValue, ToJson};
 pub use model::{
     AlignmentCounters, Availability, BuildInfo, CoveragePolicy, CoverageSummary, InputIdentity,
-    MetricDefinition, PerReferenceCounters, Provenance, Summary, SystemInfo, Warning,
+    MateOverlapPolicy, MetricDefinition, PerReferenceCounters, Provenance, RecordInclusion,
+    Summary, SystemInfo, Warning,
 };

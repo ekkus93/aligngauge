@@ -174,6 +174,36 @@ impl ToJson for PerReferenceCounters {
     }
 }
 
+/// Inclusion policy for one alignment-record class.
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum RecordInclusion {
+    /// Include this record class.
+    Include,
+    /// Exclude this record class.
+    Exclude,
+}
+
+impl RecordInclusion {
+    const fn is_included(self) -> bool {
+        matches!(self, Self::Include)
+    }
+}
+
+/// Mate-overlap treatment for coverage.
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum MateOverlapPolicy {
+    /// Count both mates independently.
+    CountBoth,
+    /// Correct overlapping mates exactly.
+    Correct,
+}
+
+impl MateOverlapPolicy {
+    const fn uses_correction(self) -> bool {
+        matches!(self, Self::Correct)
+    }
+}
+
 /// Canonical coverage policy.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct CoveragePolicy {
@@ -181,16 +211,16 @@ pub struct CoveragePolicy {
     pub name: String,
     /// Minimum mapping quality.
     pub minimum_mapq: u32,
-    /// Whether duplicate records are included.
-    pub include_duplicates: bool,
-    /// Whether vendor-QC-fail records are included.
-    pub include_qc_fail: bool,
-    /// Whether secondary records are included.
-    pub include_secondary: bool,
-    /// Whether supplementary records are included.
-    pub include_supplementary: bool,
-    /// Whether exact mate-overlap correction is enabled.
-    pub mate_overlap_correction: bool,
+    /// Duplicate-record inclusion.
+    pub duplicates: RecordInclusion,
+    /// Vendor-QC-fail-record inclusion.
+    pub qc_fail: RecordInclusion,
+    /// Secondary-record inclusion.
+    pub secondary: RecordInclusion,
+    /// Supplementary-record inclusion.
+    pub supplementary: RecordInclusion,
+    /// Mate-overlap treatment.
+    pub mate_overlap: MateOverlapPolicy,
 }
 
 impl ToJson for CoveragePolicy {
@@ -198,23 +228,23 @@ impl ToJson for CoveragePolicy {
         JsonValue::Object(BTreeMap::from([
             (
                 String::from("include_duplicates"),
-                self.include_duplicates.to_json(),
+                self.duplicates.is_included().to_json(),
             ),
             (
                 String::from("include_qc_fail"),
-                self.include_qc_fail.to_json(),
+                self.qc_fail.is_included().to_json(),
             ),
             (
                 String::from("include_secondary"),
-                self.include_secondary.to_json(),
+                self.secondary.is_included().to_json(),
             ),
             (
                 String::from("include_supplementary"),
-                self.include_supplementary.to_json(),
+                self.supplementary.is_included().to_json(),
             ),
             (
                 String::from("mate_overlap_correction"),
-                self.mate_overlap_correction.to_json(),
+                self.mate_overlap.uses_correction().to_json(),
             ),
             (String::from("minimum_mapq"), self.minimum_mapq.to_json()),
             (String::from("name"), self.name.to_json()),
@@ -325,7 +355,7 @@ impl Summary {
                 counters.sort_by(|left, right| left.name.cmp(&right.name));
                 Availability::Available(counters)
             }
-            unavailable => unavailable,
+            unavailable @ Availability::Unavailable { .. } => unavailable,
         };
         Self {
             schema_version: SUMMARY_SCHEMA_VERSION.to_owned(),

@@ -3,8 +3,9 @@ use std::path::PathBuf;
 
 use aligngauge_core::{
     AlignmentCounters, Availability, BuildInfo, ConfigOverrides, CoveragePolicy, CoverageSummary,
-    InputIdentity, JsonValue, MapEnvironment, MetricDefinition, PerReferenceCounters, Provenance,
-    Summary, SystemInfo, ToJson, Warning, resolve_config,
+    InputIdentity, JsonValue, MapEnvironment, MateOverlapPolicy, MetricDefinition,
+    PerReferenceCounters, Provenance, RecordInclusion, Summary, SystemInfo, ToJson, Warning,
+    resolve_config,
 };
 
 #[test]
@@ -66,11 +67,11 @@ fn sample_summary() -> Summary {
         policy: CoveragePolicy {
             name: String::from("aligngauge-v0.1"),
             minimum_mapq: 0,
-            include_duplicates: false,
-            include_qc_fail: false,
-            include_secondary: false,
-            include_supplementary: false,
-            mate_overlap_correction: false,
+            duplicates: RecordInclusion::Exclude,
+            qc_fail: RecordInclusion::Exclude,
+            secondary: RecordInclusion::Exclude,
+            supplementary: RecordInclusion::Exclude,
+            mate_overlap: MateOverlapPolicy::CountBoth,
         },
         total_accepted_aligned_bases: 100,
         depth_histogram: BTreeMap::from([(String::from("0"), 900), (String::from("1"), 100)]),
