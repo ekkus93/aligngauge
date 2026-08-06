@@ -10,6 +10,9 @@ publish = false
 
 [dependencies]
 aligngauge-core = { path = "../aligngauge-core" }
+aligngauge-hts = { path = "../aligngauge-hts" }
+
+[dev-dependencies]
 rust-htslib = { version = "1.0.1", default-features = false }
 
 [[bin]]
