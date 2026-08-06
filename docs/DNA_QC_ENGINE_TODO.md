@@ -3,7 +3,7 @@
 **Repository:** `ekkus93/aligngauge`
 
 **Companion specification:** `docs/DNA_QC_ENGINE_SPEC.md`  
-**Status:** Ralph Loop active — Milestone 2 implementation in progress
+**Status:** Ralph Loop active — Milestone 2 complete; Milestone 3 next
 **Last updated:** 2026-08-06  
 **Supersedes:** Initial `DNA_QC_ENGINE_TODO.md` dated 2026-08-05
 
@@ -237,65 +237,65 @@ Implement the exact ordering in SPEC §10.2.
 
 ## Milestone 2 — Test corpus and differential harness
 
-**Status:** Implementation in progress.
+**Status:** Complete — implementation SHA `45211236419e5bebc7c0d09d5cb35d65174cc11a`; Permanent CI run `31100841806`, job `92613749893`; Reference Validation run `31100842135`, job `92613751393`; HG002 Preparation run `31100844104`, job `92613759310`; all successful.
 
 ### 2.1 Test-data manifest
 
-- [ ] Define a versioned manifest format.
-- [ ] Record source, checksums, generation commands, reference build, and licensing.
-- [ ] Enforce local checksum verification.
-- [ ] Refuse implicit downloads during ordinary tests.
-- [ ] Provide explicit preparation commands.
-- [ ] Keep large data out of Git.
+- [x] Define a versioned manifest format.
+- [x] Record source, checksums, generation commands, reference build, and licensing.
+- [x] Enforce local checksum verification.
+- [x] Refuse implicit downloads during ordinary tests.
+- [x] Provide explicit preparation commands.
+- [x] Keep large data out of Git.
 
 ### 2.2 Synthetic fixture generator
 
 Implement all cases owned by SPEC §15.1.
 
-- [ ] Generate fixtures deterministically.
-- [ ] Generate indexes where needed.
-- [ ] Include expected validity/error category.
-- [ ] Include expected canonical metrics where applicable.
-- [ ] Include long-CIGAR/`CG` fixture.
-- [ ] Include coordinate-regression fixture.
-- [ ] Include chunk-boundary fixtures.
-- [ ] Include multi-track memory fixture.
+- [x] Generate fixtures deterministically.
+- [x] Generate indexes where needed.
+- [x] Include expected validity/error category.
+- [x] Include expected canonical metrics where applicable.
+- [x] Include long-CIGAR/`CG` fixture.
+- [x] Include coordinate-regression fixture.
+- [x] Include chunk-boundary fixtures.
+- [x] Include multi-track memory fixture.
 
 ### 2.3 Reference-tool environment
 
-- [ ] Pin Samtools version and container digest.
-- [ ] Add scripts for `flagstat` and `idxstats`.
-- [ ] Select and document the v0.1 coverage baseline in `ADR-0003-COVERAGE_BASELINE.md`.
-- [ ] Run differential tools in a network-disabled sandbox.
-- [ ] Capture stdout, stderr, exit status, wall time, and tool version.
-- [ ] Fail when a baseline command fails or emits an incomplete artifact.
+- [x] Pin Samtools version and container digest.
+- [x] Add scripts for `flagstat` and `idxstats`.
+- [x] Select and document the v0.1 coverage baseline in `ADR-0003-COVERAGE_BASELINE.md`.
+- [x] Run differential tools in a network-disabled sandbox.
+- [x] Capture stdout, stderr, exit status, wall time, and tool version.
+- [x] Fail when a baseline command fails or emits an incomplete artifact.
 
 ### 2.4 HG002 small subset
 
-- [ ] Add explicit preparation script for the selected chr20 region.
-- [ ] Pin source URL/accession and checksum.
-- [ ] Pin downsampling seed/fraction.
-- [ ] Validate local SHA-256.
-- [ ] Record the matching reference build.
-- [ ] Generate a manifest entry and evidence README.
-- [ ] Do not commit the large source alignment.
+- [x] Add explicit preparation script for the selected chr20 region.
+- [x] Pin source URL/accession and checksum.
+- [x] Pin downsampling seed/fraction.
+- [x] Validate local SHA-256.
+- [x] Record the matching reference build.
+- [x] Generate a manifest entry and evidence README.
+- [x] Do not commit the large source alignment.
 
 ### 2.5 Differential harness
 
-- [ ] Structured expected-result format.
-- [ ] Field-level integer comparison.
-- [ ] Explicit float rounding comparison where needed.
-- [ ] Machine-readable discrepancy report.
-- [ ] No blanket tolerances.
-- [ ] Every expected difference requires a named compatibility note.
+- [x] Structured expected-result format.
+- [x] Field-level integer comparison.
+- [x] Explicit float rounding comparison where needed.
+- [x] Machine-readable discrepancy report.
+- [x] No blanket tolerances.
+- [x] Every expected difference requires a named compatibility note.
 
 ### Milestone 2 acceptance gate
 
-- [ ] All synthetic fixtures regenerate identically.
-- [ ] Baseline tools run network-isolated.
-- [ ] HG002 subset preparation is reproducible.
-- [ ] Create `docs/evidence/M2_TEST_CORPUS.md`.
-- [ ] Permanent CI succeeds on the exact evidence commit.
+- [x] All synthetic fixtures regenerate identically.
+- [x] Baseline tools run network-isolated.
+- [x] HG002 subset preparation is reproducible.
+- [x] Create `docs/evidence/M2_TEST_CORPUS.md`.
+- [x] Permanent CI succeeds on the exact evidence commit.
 
 ---
 

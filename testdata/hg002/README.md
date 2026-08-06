@@ -27,3 +27,10 @@ this preparation path.
 The prepared subset and index are written under `testdata/local/`, which is
 ignored by Git. `prepared.manifest` records local SHA-256 values and all
 parameters. Ordinary tests never invoke this script and never use the network.
+
+## Milestone 2 validation evidence
+
+Two-pass preparation succeeded on source SHA `45211236419e5bebc7c0d09d5cb35d65174cc11a` in workflow run
+`31100844104`, job `92613759310`. This documentation change intentionally retriggers
+the preparation workflow so the final Milestone 2 evidence commit receives its own
+exact-SHA validation.

@@ -1,71 +1,7 @@
-from pathlib import Path
-
-IMPLEMENTATION_SHA = "45211236419e5bebc7c0d09d5cb35d65174cc11a"
-PERMANENT_RUN = "31100841806"
-PERMANENT_JOB = "92613749893"
-REFERENCE_RUN = "31100842135"
-REFERENCE_JOB = "92613751393"
-HG002_RUN = "31100844104"
-HG002_JOB = "92613759310"
-
-
-def replace_once(text: str, old: str, new: str, label: str) -> str:
-    count = text.count(old)
-    if count != 1:
-        raise SystemExit(f"{label}: expected one match, found {count}")
-    return text.replace(old, new)
-
-
-todo_path = Path("docs/DNA_QC_ENGINE_TODO.md")
-todo = todo_path.read_text(encoding="utf-8")
-todo = replace_once(
-    todo,
-    "**Status:** Ralph Loop active — Milestone 2 implementation in progress",
-    "**Status:** Ralph Loop active — Milestone 2 complete; Milestone 3 next",
-    "document status",
-)
-
-start_marker = "## Milestone 2 — Test corpus and differential harness\n"
-end_marker = "\n---\n\n## Milestone 3 — Production BAM reader and validation"
-start = todo.find(start_marker)
-if start < 0:
-    raise SystemExit("Milestone 2 start marker not found")
-end = todo.find(end_marker, start)
-if end < 0:
-    raise SystemExit("Milestone 2 end marker not found")
-section = todo[start:end]
-section = replace_once(
-    section,
-    "**Status:** Implementation in progress.",
-    (
-        "**Status:** Complete — implementation SHA `"
-        + IMPLEMENTATION_SHA
-        + "`; Permanent CI run `"
-        + PERMANENT_RUN
-        + "`, job `"
-        + PERMANENT_JOB
-        + "`; Reference Validation run `"
-        + REFERENCE_RUN
-        + "`, job `"
-        + REFERENCE_JOB
-        + "`; HG002 Preparation run `"
-        + HG002_RUN
-        + "`, job `"
-        + HG002_JOB
-        + "`; all successful."
-    ),
-    "Milestone 2 status",
-)
-section = section.replace("- [ ]", "- [x]")
-if "- [ ]" in section:
-    raise SystemExit("unchecked Milestone 2 task remains")
-todo = todo[:start] + section + todo[end:]
-todo_path.write_text(todo, encoding="utf-8")
-
-evidence = f"""# Milestone 2 Evidence — Test Corpus and Differential Harness
+# Milestone 2 Evidence — Test Corpus and Differential Harness
 
 **Status:** Complete  
-**Implementation SHA:** `{IMPLEMENTATION_SHA}`  
+**Implementation SHA:** `45211236419e5bebc7c0d09d5cb35d65174cc11a`  
 **Evidence date:** 2026-08-06
 
 The commit containing this document is the Milestone 2 evidence commit. Completion
@@ -74,11 +10,11 @@ succeed on that exact commit.
 
 ## 1. Validated source evidence
 
-The implementation source was validated on `{IMPLEMENTATION_SHA}` by:
+The implementation source was validated on `45211236419e5bebc7c0d09d5cb35d65174cc11a` by:
 
-- Permanent CI run `{PERMANENT_RUN}`, job `{PERMANENT_JOB}` — success;
-- Reference Validation run `{REFERENCE_RUN}`, job `{REFERENCE_JOB}` — success;
-- HG002 Preparation run `{HG002_RUN}`, job `{HG002_JOB}` — success.
+- Permanent CI run `31100841806`, job `92613749893` — success;
+- Reference Validation run `31100842135`, job `92613751393` — success;
+- HG002 Preparation run `31100844104`, job `92613759310` — success.
 
 The user-reported job `92612115283` in run `31100344848` was an obsolete candidate
 run on SHA `9645b429bb9e874fc55ac04494241155919a1827`. It failed only because the
@@ -185,23 +121,3 @@ does not claim that AlignGauge already implements production BAM validation,
 Samtools-equivalent counters, or canonical coverage. Those remain Milestones 3,
 4, and 5. CRAM support and reference resolution remain v0.2 work under the future
 `ADR-0004-CRAM_REFERENCE_RESOLUTION.md`.
-"""
-Path("docs/evidence/M2_TEST_CORPUS.md").write_text(evidence, encoding="utf-8")
-
-hg002_readme_path = Path("testdata/hg002/README.md")
-hg002_readme = hg002_readme_path.read_text(encoding="utf-8")
-addition = f"""
-
-## Milestone 2 validation evidence
-
-Two-pass preparation succeeded on source SHA `{IMPLEMENTATION_SHA}` in workflow run
-`{HG002_RUN}`, job `{HG002_JOB}`. This documentation change intentionally retriggers
-the preparation workflow so the final Milestone 2 evidence commit receives its own
-exact-SHA validation.
-"""
-if "## Milestone 2 validation evidence" in hg002_readme:
-    raise SystemExit("HG002 validation evidence section already exists")
-hg002_readme_path.write_text(hg002_readme.rstrip() + addition, encoding="utf-8")
-
-Path("tools/m2_finalize.py").unlink()
-Path(".github/workflows/m2-finalize.yml").unlink()
