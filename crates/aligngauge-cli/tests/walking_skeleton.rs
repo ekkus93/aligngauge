@@ -99,6 +99,20 @@ fn truncated_input_fails_without_plausible_counts() {
     assert!(stderr.contains("[input_corrupt]"), "stderr: {stderr}");
 }
 
+#[test]
+fn coordinate_regression_fails_without_plausible_counts() {
+    let bam = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join("testdata/fixtures/coordinate_regression.bam");
+    let output = run_qc(&bam);
+
+    assert!(!output.status.success());
+    assert!(output.stdout.is_empty());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("[input_unsorted]"), "stderr: {stderr}");
+    assert!(!stderr.contains("earlier"), "read name leaked: {stderr}");
+}
+
 fn run_qc(path: &Path) -> Output {
     Command::new(env!("CARGO_BIN_EXE_aligngauge"))
         .arg("qc")
