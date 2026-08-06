@@ -20,6 +20,7 @@ script_directory=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 repository_root=$(cd -- "$script_directory/../../.." && pwd)
 # shellcheck disable=SC1091
 source "$script_directory/image.lock"
+container_user="$(id -u):$(id -g)"
 
 input_path="$repository_root/$input_relative"
 [[ -f "$input_path" ]] || {
@@ -70,6 +71,7 @@ printf '%s\n' "$SAMTOOLS_IMAGE" >"$staging/image.txt"
 
 docker pull "$SAMTOOLS_IMAGE" >/dev/null
 docker run --rm --network none --read-only --cap-drop ALL \
+  --user "$container_user" \
   --security-opt no-new-privileges --pids-limit 256 --memory 2g --cpus 2 \
   --tmpfs /tmp:rw,noexec,nosuid,size=64m \
   "$SAMTOOLS_IMAGE" samtools --version >"$staging/version.txt"
@@ -77,6 +79,7 @@ docker run --rm --network none --read-only --cap-drop ALL \
 set +e
 /usr/bin/time -f '%e' -o "$staging/wall_seconds.txt" \
   docker run --rm --network none --read-only --cap-drop ALL \
+    --user "$container_user" \
     --security-opt no-new-privileges --pids-limit 256 --memory 2g --cpus 2 \
     --tmpfs /tmp:rw,noexec,nosuid,size=64m \
     --volume "$repository_root:/work:ro" \
