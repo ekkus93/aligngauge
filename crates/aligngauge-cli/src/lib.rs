@@ -45,10 +45,18 @@ impl Display for BamCountError {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::Open { path, source } => {
-                write!(formatter, "failed to open BAM '{}': {source}", path.display())
+                write!(
+                    formatter,
+                    "failed to open BAM '{}': {source}",
+                    path.display()
+                )
             }
             Self::Read { path, source } => {
-                write!(formatter, "failed to read BAM '{}': {source}", path.display())
+                write!(
+                    formatter,
+                    "failed to read BAM '{}': {source}",
+                    path.display()
+                )
             }
             Self::CounterOverflow { field } => {
                 write!(formatter, "BAM record counter '{field}' overflowed")
