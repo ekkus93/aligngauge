@@ -158,9 +158,17 @@ implementation signoff commit listed above.
 - BAM production validation, differential fixtures, counters, and coverage remain
   owned by Milestones 2–5.
 
+## Evidence-commit signoff
+
+The evidence document was introduced by exact SHA
+`ffafa45c1d6dea99c50f61e05498690d594bae27`. Permanent CI passed on that SHA:
+
+- **Run:** `31095937384`
+- **Job:** `92597853728`
+- **Conclusion:** success
+
 ## Milestone conclusion
 
-The Milestone 1 implementation contracts pass on the exact implementation signoff
-SHA. Milestone closure additionally requires Permanent CI to pass on the evidence
-commit that introduces this document; that final evidence-run identity is recorded
-in the subsequent TODO signoff update.
+Milestone 1 is complete. The implementation and evidence commits both passed the
+permanent read-only workflow without skipped quality gates or known hidden
+fallbacks. Milestone 2 is the next implementation boundary.

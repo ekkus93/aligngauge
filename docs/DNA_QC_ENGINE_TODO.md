@@ -1,9 +1,9 @@
 # AlignGauge Implementation TODO
 
-**Current repository:** `ekkus93/rust-dna-sequencer`  
-**Recommended repository name:** `ekkus93/aligngauge`  
+**Repository:** `ekkus93/aligngauge`
+
 **Companion specification:** `docs/DNA_QC_ENGINE_SPEC.md`  
-**Status:** Revised staged implementation plan  
+**Status:** Ralph Loop active — Milestone 1 complete; Milestone 2 next
 **Last updated:** 2026-08-06  
 **Supersedes:** Initial `DNA_QC_ENGINE_TODO.md` dated 2026-08-05
 
@@ -171,65 +171,67 @@ Write `docs/adr/ADR-0001-HTSLIB_RECORD_BOUNDARY.md`.
 
 ## Milestone 1 — Core model, errors, and atomic output
 
+**Status:** Complete — evidence SHA `ffafa45c1d6dea99c50f61e05498690d594bae27`; Permanent CI run `31095937384`, job `92597853728`, success.
+
 ### 1.1 Error taxonomy
 
 Implement stable categories from SPEC §14.
 
-- [ ] Typed error enum.
-- [ ] Stable exit-code mapping.
-- [ ] Human rendering.
-- [ ] JSON rendering.
-- [ ] Source-chain preservation.
-- [ ] Redaction of read names by default.
-- [ ] Tests for every category used in v0.1.
+- [x] Typed error enum.
+- [x] Stable exit-code mapping.
+- [x] Human rendering.
+- [x] JSON rendering.
+- [x] Source-chain preservation.
+- [x] Redaction of read names by default.
+- [x] Tests for every category used in v0.1.
 
 Do not duplicate the category list here; tests shall iterate the specification-owned
 mapping encoded in source.
 
 ### 1.2 Configuration
 
-- [ ] Typed v0.1 configuration.
-- [ ] Deterministic precedence from SPEC §6.3.
-- [ ] Unknown-key rejection.
-- [ ] `--memory-limit` parser with checked units.
-- [ ] Coverage-threshold parser with duplicate/order normalization.
-- [ ] Resolved-config serialization for provenance.
-- [ ] Configuration schema/version field.
+- [x] Typed v0.1 configuration.
+- [x] Deterministic precedence from SPEC §6.3.
+- [x] Unknown-key rejection.
+- [x] Memory-limit parser with checked units; CLI exposure remains Milestone 6.
+- [x] Coverage-threshold parser with duplicate/order normalization.
+- [x] Resolved-config serialization for provenance.
+- [x] Configuration schema/version field.
 
 ### 1.3 Canonical output models
 
-- [ ] `summary.json` Rust types.
-- [ ] `provenance.json` Rust types.
-- [ ] Explicit unavailable-value representation.
-- [ ] Stable ordering.
-- [ ] JSON schemas.
-- [ ] Golden serialization fixtures.
-- [ ] Tests proving `None`/unavailable cannot serialize as metric zero.
+- [x] `summary.json` Rust types.
+- [x] `provenance.json` Rust types.
+- [x] Explicit unavailable-value representation.
+- [x] Stable ordering.
+- [x] JSON schemas.
+- [x] Golden serialization fixtures.
+- [x] Tests proving `None`/unavailable cannot serialize as metric zero.
 
 ### 1.4 Atomic publication
 
 Implement the exact ordering in SPEC §10.2.
 
-- [ ] Same-filesystem staging directory.
-- [ ] Required-file flush.
-- [ ] `_SUCCESS` written inside staging last.
-- [ ] Staging metadata synchronization where supported.
-- [ ] Atomic rename.
-- [ ] Destination-exists policy captured in ADR.
-- [ ] Cleanup on error.
-- [ ] `--preserve-failed-staging`.
-- [ ] Fault-injection tests at every publication step.
-- [ ] Observer test proving the destination never exposes a partially built run.
+- [x] Same-filesystem staging directory.
+- [x] Required-file flush.
+- [x] `_SUCCESS` written inside staging last.
+- [x] Staging metadata synchronization where supported.
+- [x] Atomic rename.
+- [x] Destination-exists policy captured in ADR.
+- [x] Cleanup on error.
+- [x] Preserve-failed-staging policy and resolved configuration field; CLI exposure remains Milestone 6.
+- [x] Fault-injection tests at every publication step.
+- [x] Observer test proving the destination never exposes a partially built run.
 
 ### 1.5 Milestone evidence
 
-Create `docs/evidence/M1_CORE_CONTRACTS.md`.
+- [x] Created `docs/evidence/M1_CORE_CONTRACTS.md`.
 
 ### Milestone 1 acceptance gate
 
-- [ ] Error and output contracts pass tests.
-- [ ] Atomic publication survives injected failures.
-- [ ] Permanent CI succeeds on the exact evidence commit.
+- [x] Error and output contracts pass tests.
+- [x] Atomic publication survives injected failures.
+- [x] Permanent CI succeeds on the exact evidence commit.
 
 ---
 
