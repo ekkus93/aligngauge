@@ -1,6 +1,6 @@
 name: M2 Bootstrap
 
-# Retry after strict Clippy contract repairs.
+# Retry after final strict Clippy contract repair.
 on:
   push:
     branches: [master]
@@ -31,6 +31,9 @@ jobs:
 
       - name: Apply strict Clippy repairs
         run: python tools/m2_clippy_fixes.py
+
+      - name: Apply final CLI Clippy repair
+        run: python tools/m2_clippy_fix2.py
 
       - name: Apply documentation corrections
         run: python tools/m2_patch_docs.py
