@@ -1,0 +1,47 @@
+name: M3 Finalize
+
+on:
+  push:
+    branches: [agent/milestone-3]
+    paths:
+      - ".github/workflows/m3-finalize.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: m3-finalize-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  finalize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out validated branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: true
+
+      - name: Create Milestone 3 evidence
+        run: python tools/m3_finalize_runner.py
+
+      - name: Validate documentation-only final state
+        run: |
+          test -f docs/evidence/M3_BAM_VALIDATION.md
+          grep -F 'Milestone 3 complete; Milestone 4 next' docs/DNA_QC_ENGINE_TODO.md
+          grep -F 'Implementation SHA:** `8d5cbb1d69764a8ba0d96ef96c03f24af1a77fe5`' docs/evidence/M3_BAM_VALIDATION.md
+          test ! -e tools/m3_finalize.py
+          test ! -e tools/m3_finalize_runner.py
+          test ! -e .github/workflows/m3-finalize.yml
+          git diff --check
+
+      - name: Commit Milestone 3 evidence
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "docs: complete Milestone 3 evidence"
+          git push origin HEAD:agent/milestone-3
