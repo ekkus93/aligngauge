@@ -31,6 +31,7 @@ parameters. Ordinary tests never invoke this script and never use the network.
 ## Milestone 2 validation evidence
 
 Two-pass preparation succeeded on source SHA `45211236419e5bebc7c0d09d5cb35d65174cc11a` in workflow run
-`31100844104`, job `92613759310`. This documentation change intentionally retriggers
-the preparation workflow so the final Milestone 2 evidence commit receives its own
-exact-SHA validation.
+`31100844104`, job `92613759310`. This maintainer-authored documentation update is
+the exact-SHA validation trigger for the final Milestone 2 evidence state; the
+resulting commit must independently pass Permanent CI, Reference Validation, and
+HG002 Preparation before Milestone 2 is considered complete.
