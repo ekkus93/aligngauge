@@ -1,9 +1,12 @@
 name: M5 Branch Gate
 
-# Read-only branch compiler and differential gate.
+# Read-only x64 compiler and differential gate.
 on:
   push:
     branches: [agent/milestone-5]
+    paths:
+      - ".github/workflows/m5-branch-gate.yml"
+      - "tools/m5_apply.py.gz.b64"
 
 permissions:
   contents: read
@@ -14,8 +17,7 @@ concurrency:
 
 jobs:
   validate:
-    if: contains(github.event.head_commit.message, '[m5-gate]')
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
 
     steps:
