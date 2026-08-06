@@ -136,9 +136,8 @@ impl ValidatedHeader {
                 .with_detail("maximum_header_bytes", u64_from_usize(MAX_HEADER_BYTES)?));
         }
 
-        let text = std::str::from_utf8(raw).map_err(|source| {
-            header_error("BAM header is not valid UTF-8").with_source(source)
-        })?;
+        let text = std::str::from_utf8(raw)
+            .map_err(|source| header_error("BAM header is not valid UTF-8").with_source(source))?;
         let parsed = ParsedTextHeader::parse(text)?;
         let references = validate_binary_references(view, &parsed.references)?;
         let identity = build_identity(raw, &references)?;
@@ -244,15 +243,16 @@ impl ParsedTextHeader {
                         ));
                     }
                     saw_hd = true;
-                    sort_order = fields.get("SO").map_or(SortOrder::Absent, |value| {
-                        match value.as_str() {
-                            "coordinate" => SortOrder::Coordinate,
-                            "queryname" => SortOrder::QueryName,
-                            "unsorted" => SortOrder::Unsorted,
-                            "unknown" => SortOrder::Unknown,
-                            other => SortOrder::Other(other.to_owned()),
-                        }
-                    });
+                    sort_order =
+                        fields
+                            .get("SO")
+                            .map_or(SortOrder::Absent, |value| match value.as_str() {
+                                "coordinate" => SortOrder::Coordinate,
+                                "queryname" => SortOrder::QueryName,
+                                "unsorted" => SortOrder::Unsorted,
+                                "unknown" => SortOrder::Unknown,
+                                other => SortOrder::Other(other.to_owned()),
+                            });
                 }
                 "@SQ" => {
                     if references.len() >= MAX_REFERENCE_COUNT {
@@ -337,18 +337,17 @@ fn parse_fields<'a>(
                 "header field exceeds the supported byte limit",
             ));
         }
-        let (tag, value) = field.split_once(':').ok_or_else(|| {
-            header_line_error(line_number, "header field does not contain ':'")
-        })?;
+        let (tag, value) = field
+            .split_once(':')
+            .ok_or_else(|| header_line_error(line_number, "header field does not contain ':'"))?;
         if tag.len() != 2 || !tag.bytes().all(|byte| byte.is_ascii_alphanumeric()) {
             return Err(header_line_error(line_number, "header tag is invalid"));
         }
         if fields.insert(tag.to_owned(), value.to_owned()).is_some() {
-            return Err(header_line_error(
-                line_number,
-                "header record repeats a field tag",
-            )
-            .with_detail("tag", tag.to_owned()));
+            return Err(
+                header_line_error(line_number, "header record repeats a field tag")
+                    .with_detail("tag", tag.to_owned()),
+            );
         }
     }
     Ok(fields)
@@ -377,8 +376,10 @@ fn validate_binary_references(
         header_error("binary reference count does not fit usize").with_source(source)
     })?;
     if count > MAX_REFERENCE_COUNT {
-        return Err(header_error("binary reference count exceeds the supported limit")
-            .with_detail("reference_count", u64_from_usize(count)?));
+        return Err(
+            header_error("binary reference count exceeds the supported limit")
+                .with_detail("reference_count", u64_from_usize(count)?),
+        );
     }
     if count != textual.len() {
         return Err(header_error(

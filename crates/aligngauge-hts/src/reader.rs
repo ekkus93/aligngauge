@@ -24,7 +24,7 @@ const LONG_CIGAR_LIMIT: usize = 65_535;
 /// Reader resource controls resolved before traversal.
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub struct ReaderOptions {
-    /// Number of HTSlib background decode threads. `1` keeps decoding serial.
+    /// Number of `HTSlib` background decode threads. `1` keeps decoding serial.
     pub io_threads: usize,
 }
 
@@ -78,7 +78,7 @@ pub struct CigarFacts {
     pub query_span: u64,
     /// Reference-consuming length.
     pub reference_span: u64,
-    /// Whether HTSlib expanded a BAM long-CIGAR representation.
+    /// Whether `HTSlib` expanded a BAM long-CIGAR representation.
     pub long_cigar_expanded: bool,
 }
 
@@ -168,7 +168,7 @@ impl BamReader {
     ///
     /// # Errors
     ///
-    /// Returns a typed error for missing/non-BAM input, invalid options, HTSlib
+    /// Returns a typed error for missing/non-BAM input, invalid options, `HTSlib`
     /// open/thread failures, or malformed header content.
     pub fn open(
         input: impl AsRef<Path>,
@@ -182,7 +182,7 @@ impl BamReader {
 
         let mut reader = Reader::from_path(&input).map_err(|source| {
             AlignGaugeError::new(
-                ErrorCategory::InputFormat,
+                ErrorCategory::InputCorrupt,
                 format!("failed to open BAM '{}'", input.display()),
             )
             .with_detail("input", input.to_string_lossy().into_owned())
@@ -194,7 +194,10 @@ impl BamReader {
                     ErrorCategory::ResourceLimit,
                     "failed to configure HTSlib BAM decode threads",
                 )
-                .with_detail("io_threads", u64_from_usize(options.io_threads).unwrap_or(u64::MAX))
+                .with_detail(
+                    "io_threads",
+                    u64_from_usize(options.io_threads).unwrap_or(u64::MAX),
+                )
                 .with_source(source)
             })?;
         }
@@ -237,13 +240,13 @@ impl BamReader {
         result.map_err(|source| {
             AlignGaugeError::new(
                 ErrorCategory::InputCorrupt,
-                format!("failed to decode BAM record from '{}'", self.input.display()),
+                format!(
+                    "failed to decode BAM record from '{}'",
+                    self.input.display()
+                ),
             )
             .with_detail("input", self.input.to_string_lossy().into_owned())
-            .with_detail(
-                "next_record_index",
-                self.record_index.checked_add(1).unwrap_or(u64::MAX),
-            )
+            .with_detail("next_record_index", self.record_index.saturating_add(1))
             .with_source(source)
         })?;
 
@@ -291,7 +294,10 @@ impl BamReader {
                 &self.record,
             ));
         }
-        if self.previous_coordinate.is_some_and(|previous| current < previous) {
+        if self
+            .previous_coordinate
+            .is_some_and(|previous| current < previous)
+        {
             return Err(order_error(
                 "BAM record coordinates regress",
                 self.record_index,
@@ -303,6 +309,106 @@ impl BamReader {
         self.previous_coordinate = Some(current);
         Ok(())
     }
+}
+
+struct RecordLayout {
+    query_name_bytes: usize,
+    sequence_bases: usize,
+}
+
+fn validate_record_layout(record: &Record, index: u64) -> Result<RecordLayout, AlignGaugeError> {
+    let inner = record.inner();
+    let data_len = usize::try_from(inner.l_data).map_err(|source| {
+        record_error_without_name(
+            ErrorCategory::InputCorrupt,
+            "BAM record has a negative or unrepresentable data length",
+            index,
+        )
+        .with_source(source)
+    })?;
+    if data_len > MAX_RECORD_BYTES {
+        return Err(record_error_without_name(
+            ErrorCategory::ResourceLimit,
+            "BAM record exceeds the supported byte limit",
+            index,
+        )
+        .with_detail("record_bytes", u64_from_usize(data_len)?)
+        .with_detail("maximum_record_bytes", u64_from_usize(MAX_RECORD_BYTES)?));
+    }
+
+    let query_name_bytes = usize::from(inner.core.l_qname);
+    let extra_nul_bytes = usize::from(inner.core.l_extranul);
+    if query_name_bytes == 0 || extra_nul_bytes > 3 || extra_nul_bytes >= query_name_bytes {
+        return Err(record_error_without_name(
+            ErrorCategory::InputCorrupt,
+            "BAM record has an invalid query-name layout",
+            index,
+        )
+        .with_detail(
+            "query_name_storage_bytes",
+            u64_from_usize(query_name_bytes)?,
+        )
+        .with_detail("extra_nul_bytes", u64_from_usize(extra_nul_bytes)?));
+    }
+
+    let cigar_operations = usize::try_from(inner.core.n_cigar).map_err(|source| {
+        record_error_without_name(
+            ErrorCategory::InputCorrupt,
+            "BAM CIGAR operation count does not fit usize",
+            index,
+        )
+        .with_source(source)
+    })?;
+    let cigar_bytes = cigar_operations.checked_mul(4).ok_or_else(|| {
+        record_error_without_name(
+            ErrorCategory::InputCorrupt,
+            "BAM CIGAR storage length overflows usize",
+            index,
+        )
+    })?;
+    let sequence_bases = usize::try_from(inner.core.l_qseq).map_err(|source| {
+        record_error_without_name(
+            ErrorCategory::InputCorrupt,
+            "BAM record has a negative or unrepresentable sequence length",
+            index,
+        )
+        .with_source(source)
+    })?;
+    let packed_sequence_bytes = sequence_bases
+        .checked_add(1)
+        .and_then(|value| value.checked_div(2))
+        .ok_or_else(|| {
+            record_error_without_name(
+                ErrorCategory::InputCorrupt,
+                "BAM packed-sequence storage length overflows usize",
+                index,
+            )
+        })?;
+    let minimum_data_bytes = query_name_bytes
+        .checked_add(cigar_bytes)
+        .and_then(|value| value.checked_add(packed_sequence_bytes))
+        .and_then(|value| value.checked_add(sequence_bases))
+        .ok_or_else(|| {
+            record_error_without_name(
+                ErrorCategory::InputCorrupt,
+                "BAM variable-data layout overflows usize",
+                index,
+            )
+        })?;
+    if minimum_data_bytes > data_len {
+        return Err(record_error_without_name(
+            ErrorCategory::InputCorrupt,
+            "BAM variable-data fields exceed the decoded record buffer",
+            index,
+        )
+        .with_detail("record_bytes", u64_from_usize(data_len)?)
+        .with_detail("minimum_record_bytes", u64_from_usize(minimum_data_bytes)?));
+    }
+
+    Ok(RecordLayout {
+        query_name_bytes,
+        sequence_bases,
+    })
 }
 
 struct RecordFacts {
@@ -321,26 +427,8 @@ fn validate_record(
     plan: &FieldPlan,
     index: u64,
 ) -> Result<RecordFacts, AlignGaugeError> {
-    let data_len = usize::try_from(record.inner().l_data).map_err(|source| {
-        record_error(
-            ErrorCategory::InputCorrupt,
-            "BAM record has a negative or unrepresentable data length",
-            index,
-            record,
-        )
-        .with_source(source)
-    })?;
-    if data_len > MAX_RECORD_BYTES {
-        return Err(record_error(
-            ErrorCategory::ResourceLimit,
-            "BAM record exceeds the supported byte limit",
-            index,
-            record,
-        )
-        .with_detail("record_bytes", u64_from_usize(data_len)?)
-        .with_detail("maximum_record_bytes", u64_from_usize(MAX_RECORD_BYTES)?));
-    }
-    if record.qname().len() > MAX_QUERY_NAME_BYTES {
+    let layout = validate_record_layout(record, index)?;
+    if layout.query_name_bytes > MAX_QUERY_NAME_BYTES {
         return Err(record_error(
             ErrorCategory::ResourceLimit,
             "BAM query name exceeds the supported byte limit",
@@ -348,14 +436,14 @@ fn validate_record(
             record,
         ));
     }
-    if record.seq_len() > MAX_SEQUENCE_BASES {
+    if layout.sequence_bases > MAX_SEQUENCE_BASES {
         return Err(record_error(
             ErrorCategory::ResourceLimit,
             "BAM sequence exceeds the supported base limit",
             index,
             record,
         )
-        .with_detail("sequence_bases", u64_from_usize(record.seq_len())?));
+        .with_detail("sequence_bases", u64_from_usize(layout.sequence_bases)?));
     }
 
     let flags = record.flags();
@@ -472,6 +560,7 @@ fn validate_coordinate(
     }))
 }
 
+#[allow(clippy::too_many_lines)]
 fn validate_cigar(
     record: &Record,
     header: &ValidatedHeader,
@@ -616,6 +705,7 @@ struct TagFacts {
     read_group: ReadGroupValue,
 }
 
+#[allow(clippy::too_many_lines)]
 fn validate_auxiliary(
     record: &Record,
     header: &ValidatedHeader,
@@ -678,7 +768,7 @@ fn validate_auxiliary(
                 if edit_distance.is_some() {
                     return Err(duplicate_tag_error("NM", index, record));
                 }
-                edit_distance = Some(parse_nonnegative_integer(value, "NM", index, record)?);
+                edit_distance = Some(parse_nonnegative_integer(&value, "NM", index, record)?);
             }
             b"MD" if plan.requires(RequiredField::MismatchDescriptor) => {
                 if mismatch_descriptor.is_some() {
@@ -755,18 +845,18 @@ fn validate_auxiliary(
 }
 
 fn parse_nonnegative_integer(
-    value: Aux<'_>,
+    value: &Aux<'_>,
     tag: &'static str,
     index: u64,
     record: &Record,
 ) -> Result<u64, AlignGaugeError> {
     let value = match value {
-        Aux::I8(value) => i64::from(value),
-        Aux::U8(value) => i64::from(value),
-        Aux::I16(value) => i64::from(value),
-        Aux::U16(value) => i64::from(value),
-        Aux::I32(value) => i64::from(value),
-        Aux::U32(value) => return Ok(u64::from(value)),
+        Aux::I8(value) => i64::from(*value),
+        Aux::U8(value) => i64::from(*value),
+        Aux::I16(value) => i64::from(*value),
+        Aux::U16(value) => i64::from(*value),
+        Aux::I32(value) => i64::from(*value),
+        Aux::U32(value) => return Ok(u64::from(*value)),
         _ => {
             return Err(record_error(
                 ErrorCategory::InputCorrupt,
@@ -900,6 +990,14 @@ fn order_error(
             .with_detail("previous_position", previous.position);
     }
     error
+}
+
+fn record_error_without_name(
+    category: ErrorCategory,
+    message: impl Into<String>,
+    index: u64,
+) -> AlignGaugeError {
+    AlignGaugeError::new(category, message).with_detail("record_index", index)
 }
 
 fn record_error(

@@ -27,11 +27,7 @@ pub struct BamCounts {
 /// Returns a typed [`AlignGaugeError`] for any reader validation failure or
 /// checked-counter overflow.
 pub fn count_bam(path: impl AsRef<Path>) -> Result<BamCounts, AlignGaugeError> {
-    let mut reader = BamReader::open(
-        path,
-        FieldPlan::counters(),
-        ReaderOptions::default(),
-    )?;
+    let mut reader = BamReader::open(path, FieldPlan::counters(), ReaderOptions::default())?;
     let mut counts = BamCounts::default();
 
     while let Some(record) = reader.next_record()? {

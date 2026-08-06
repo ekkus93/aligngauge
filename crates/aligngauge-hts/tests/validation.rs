@@ -4,12 +4,8 @@ use std::process;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use aligngauge_core::ErrorCategory;
-use aligngauge_hts::{
-    BamReader, FieldPlan, FieldValue, ReadGroupValue, ReaderOptions, SortOrder,
-};
-use aligngauge_testkit::bam::{
-    CigarOp, RecordSpec, ReferenceSpec, aux_string, write_bam,
-};
+use aligngauge_hts::{BamReader, FieldPlan, FieldValue, ReadGroupValue, ReaderOptions, SortOrder};
+use aligngauge_testkit::bam::{CigarOp, RecordSpec, ReferenceSpec, aux_string, write_bam};
 
 static NEXT_WORKSPACE_ID: AtomicU64 = AtomicU64::new(0);
 
@@ -20,10 +16,8 @@ struct TestWorkspace {
 impl TestWorkspace {
     fn create() -> Self {
         let id = NEXT_WORKSPACE_ID.fetch_add(1, Ordering::Relaxed);
-        let root = std::env::temp_dir().join(format!(
-            "aligngauge-m3-validation-{}-{id}",
-            process::id()
-        ));
+        let root =
+            std::env::temp_dir().join(format!("aligngauge-m3-validation-{}-{id}", process::id()));
         fs::create_dir_all(&root).expect("create test workspace");
         Self { root }
     }
@@ -158,10 +152,7 @@ fn duplicate_read_group_declarations_are_ambiguous_not_silently_selected() {
         ReaderOptions::default(),
     )
     .expect("open BAM");
-    let record = reader
-        .next_record()
-        .expect("read BAM")
-        .expect("record");
+    let record = reader.next_record().expect("read BAM").expect("record");
     assert_eq!(
         record.read_group(),
         &ReadGroupValue::Ambiguous(String::from("duplicate"))
@@ -207,11 +198,7 @@ fn invalid_reference_length_is_rejected() {
 #[test]
 fn actual_sorted_coordinates_are_accepted_without_a_coordinate_header_claim() {
     for (name, header, expected_sort_order) in [
-        (
-            "absent",
-            "@SQ\tSN:chr1\tLN:1000\n",
-            SortOrder::Absent,
-        ),
+        ("absent", "@SQ\tSN:chr1\tLN:1000\n", SortOrder::Absent),
         (
             "unknown",
             "@HD\tVN:1.6\tSO:unknown\n@SQ\tSN:chr1\tLN:1000\n",
@@ -268,13 +255,7 @@ fn reference_bound_violation_is_rejected() {
     let workspace = TestWorkspace::create();
     let path = workspace.path("past-reference.bam");
     let record = mapped_record("past-end", 0, 998, 4);
-    write_bam(
-        &path,
-        standard_header(),
-        &standard_references(),
-        &[record],
-    )
-    .expect("write BAM");
+    write_bam(&path, standard_header(), &standard_references(), &[record]).expect("write BAM");
 
     let error = stream_count(&path, FieldPlan::coverage()).expect_err("past-end record must fail");
     assert_eq!(error.category(), ErrorCategory::InputCorrupt);
@@ -287,13 +268,7 @@ fn reserved_flag_bits_are_rejected_as_unsupported() {
     let path = workspace.path("reserved-flags.bam");
     let mut record = mapped_record("reserved", 0, 10, 4);
     record.flags = 0x1000;
-    write_bam(
-        &path,
-        standard_header(),
-        &standard_references(),
-        &[record],
-    )
-    .expect("write BAM");
+    write_bam(&path, standard_header(), &standard_references(), &[record]).expect("write BAM");
 
     let error = stream_count(&path, FieldPlan::counters()).expect_err("reserved flag must fail");
     assert_eq!(error.category(), ErrorCategory::UnsupportedRecord);
@@ -302,10 +277,7 @@ fn reserved_flag_bits_are_rejected_as_unsupported() {
 #[test]
 fn unrequested_optional_fields_are_not_exposed() {
     let mut reader = open_fixture("tags_and_read_groups.bam", FieldPlan::counters());
-    let record = reader
-        .next_record()
-        .expect("read record")
-        .expect("record");
+    let record = reader.next_record().expect("read record").expect("record");
 
     assert_eq!(record.edit_distance(), &FieldValue::NotRequested);
     assert_eq!(record.mismatch_descriptor(), &FieldValue::NotRequested);

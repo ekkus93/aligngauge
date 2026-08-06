@@ -22,12 +22,24 @@ name = "aligngauge-cli"
 version = "0.0.0"
 dependencies = [
  "aligngauge-core",
+ "aligngauge-hts",
  "rust-htslib",
 ]
 
 [[package]]
 name = "aligngauge-core"
 version = "0.1.0"
+
+[[package]]
+name = "aligngauge-hts"
+version = "0.0.0"
+dependencies = [
+ "aligngauge-core",
+ "aligngauge-testkit",
+ "flate2",
+ "rust-htslib",
+ "sha2",
+]
 
 [[package]]
 name = "aligngauge-testkit"

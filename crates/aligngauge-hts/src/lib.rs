@@ -19,5 +19,5 @@ pub use reader::{
 /// Pinned Rust wrapper version used by the v0.1 BAM boundary.
 pub const RUST_HTSLIB_VERSION: &str = "1.0.1";
 
-/// HTSlib compatibility line supplied by the pinned rust-htslib release.
+/// `HTSlib` compatibility line supplied by the pinned rust-htslib release.
 pub const HTSLIB_COMPATIBILITY_VERSION: &str = "HTSlib 1.22 series via rust-htslib 1.0.1";
