@@ -137,6 +137,7 @@ fn write_bam(path: &Path, mapped_records: usize, unmapped_records: usize) {
         let mut record = Record::new();
         let qname = format!("mapped-{index}");
         record.set(qname.as_bytes(), Some(&cigar), b"ACGT", &qualities);
+        record.set_flags(0);
         record.set_tid(0);
         record.set_pos(i64::try_from(index).expect("test index fits i64") * 10);
         record.set_mapq(60);
