@@ -161,11 +161,7 @@ impl AlignGaugeError {
 
     /// Add a detail that is redacted unless sensitive diagnostics are requested.
     #[must_use]
-    pub fn with_sensitive_detail(
-        mut self,
-        key: impl Into<String>,
-        value: impl ToJson,
-    ) -> Self {
+    pub fn with_sensitive_detail(mut self, key: impl Into<String>, value: impl ToJson) -> Self {
         self.sensitive_details.insert(key.into(), value.to_json());
         self
     }

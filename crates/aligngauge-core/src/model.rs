@@ -133,10 +133,7 @@ impl ToJson for AlignmentCounters {
             (String::from("duplicate"), self.duplicate.to_json()),
             (String::from("mapped"), self.mapped.to_json()),
             (String::from("mate_mapped"), self.mate_mapped.to_json()),
-            (
-                String::from("mate_unmapped"),
-                self.mate_unmapped.to_json(),
-            ),
+            (String::from("mate_unmapped"), self.mate_unmapped.to_json()),
             (String::from("paired"), self.paired.to_json()),
             (String::from("primary"), self.primary.to_json()),
             (String::from("proper_pair"), self.proper_pair.to_json()),
@@ -146,10 +143,7 @@ impl ToJson for AlignmentCounters {
             (String::from("read2"), self.read2.to_json()),
             (String::from("secondary"), self.secondary.to_json()),
             (String::from("singleton"), self.singleton.to_json()),
-            (
-                String::from("supplementary"),
-                self.supplementary.to_json(),
-            ),
+            (String::from("supplementary"), self.supplementary.to_json()),
             (String::from("total"), self.total.to_json()),
             (String::from("unmapped"), self.unmapped.to_json()),
         ]))
@@ -222,10 +216,7 @@ impl ToJson for CoveragePolicy {
                 String::from("mate_overlap_correction"),
                 self.mate_overlap_correction.to_json(),
             ),
-            (
-                String::from("minimum_mapq"),
-                self.minimum_mapq.to_json(),
-            ),
+            (String::from("minimum_mapq"), self.minimum_mapq.to_json()),
             (String::from("name"), self.name.to_json()),
         ]))
     }
@@ -409,14 +400,8 @@ pub struct SystemInfo {
 impl ToJson for SystemInfo {
     fn to_json(&self) -> JsonValue {
         JsonValue::Object(BTreeMap::from([
-            (
-                String::from("architecture"),
-                self.architecture.to_json(),
-            ),
-            (
-                String::from("logical_cpus"),
-                self.logical_cpus.to_json(),
-            ),
+            (String::from("architecture"), self.architecture.to_json()),
+            (String::from("logical_cpus"), self.logical_cpus.to_json()),
             (String::from("os"), self.os.to_json()),
         ]))
     }
@@ -516,7 +501,10 @@ impl ToJson for Provenance {
                 String::from("compatibility_profiles"),
                 self.compatibility_profiles.to_json(),
             ),
-            (String::from("errors"), JsonValue::Array(self.errors.clone())),
+            (
+                String::from("errors"),
+                JsonValue::Array(self.errors.clone()),
+            ),
             (
                 String::from("header_identity"),
                 self.header_identity.to_json(),

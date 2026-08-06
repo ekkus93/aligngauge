@@ -44,7 +44,9 @@ impl JsonValue {
         match self {
             Self::Null => output.push_str("null"),
             Self::Bool(value) => output.push_str(if *value { "true" } else { "false" }),
-            Self::Signed(value) => write!(output, "{value}").expect("writing to String cannot fail"),
+            Self::Signed(value) => {
+                write!(output, "{value}").expect("writing to String cannot fail")
+            }
             Self::Unsigned(value) => {
                 write!(output, "{value}").expect("writing to String cannot fail");
             }

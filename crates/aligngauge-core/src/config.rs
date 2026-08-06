@@ -232,7 +232,9 @@ pub fn parse_memory_limit(value: &str) -> Result<u64, AlignGaugeError> {
         configuration_error(format!("invalid memory limit '{value}'")).with_source(source)
     })?;
     if amount == 0 {
-        return Err(configuration_error("memory limit must be greater than zero"));
+        return Err(configuration_error(
+            "memory limit must be greater than zero",
+        ));
     }
 
     let multiplier = match unit.trim().to_ascii_lowercase().as_str() {
@@ -268,8 +270,7 @@ pub fn parse_coverage_thresholds(value: &str) -> Result<Vec<u32>, AlignGaugeErro
             )));
         }
         let threshold = raw.parse::<u32>().map_err(|source| {
-            configuration_error(format!("invalid coverage threshold '{raw}'"))
-                .with_source(source)
+            configuration_error(format!("invalid coverage threshold '{raw}'")).with_source(source)
         })?;
         if threshold == 0 {
             return Err(configuration_error(
@@ -457,13 +458,11 @@ fn parse_config_file(path: &Path) -> Result<ConfigOverrides, AlignGaugeError> {
                     Some(parse_memory_limit(&parse_string(&value, &key)?)?)
             }
             "coverage_thresholds" => {
-                overrides.coverage_thresholds = Some(parse_coverage_thresholds(&parse_string(
-                    &value, &key,
-                )?)?)
+                overrides.coverage_thresholds =
+                    Some(parse_coverage_thresholds(&parse_string(&value, &key)?)?)
             }
             "log_format" => {
-                overrides.log_format =
-                    Some(LogFormat::parse(&parse_string(&value, &key)?, &key)?)
+                overrides.log_format = Some(LogFormat::parse(&parse_string(&value, &key)?, &key)?)
             }
             "quiet" => overrides.quiet = Some(parse_bool(&value, &key)?),
             "verbose" => overrides.verbose = Some(parse_bool(&value, &key)?),
@@ -589,15 +588,13 @@ fn parse_positive_usize(value: &str, source: &str) -> Result<usize, AlignGaugeEr
 
 fn parse_usize(value: &str, source: &str) -> Result<usize, AlignGaugeError> {
     value.trim().parse::<usize>().map_err(|error| {
-        configuration_error(format!("{source} must be a non-negative integer"))
-            .with_source(error)
+        configuration_error(format!("{source} must be a non-negative integer")).with_source(error)
     })
 }
 
 fn parse_u32(value: &str, source: &str) -> Result<u32, AlignGaugeError> {
     value.trim().parse::<u32>().map_err(|error| {
-        configuration_error(format!("{source} must be a non-negative integer"))
-            .with_source(error)
+        configuration_error(format!("{source} must be a non-negative integer")).with_source(error)
     })
 }
 
@@ -612,8 +609,8 @@ fn configuration_error(message: impl Into<String>) -> AlignGaugeError {
 #[cfg(test)]
 mod tests {
     use super::{
-        ConfigOverrides, LogFormat, MapEnvironment, parse_coverage_thresholds,
-        parse_memory_limit, resolve_config,
+        ConfigOverrides, LogFormat, MapEnvironment, parse_coverage_thresholds, parse_memory_limit,
+        resolve_config,
     };
     use crate::error::ErrorCategory;
     use crate::json::ToJson;
@@ -625,10 +622,7 @@ mod tests {
 
     #[test]
     fn memory_units_are_checked() {
-        assert_eq!(
-            parse_memory_limit("4GiB").expect("valid size"),
-            4_u64 << 30
-        );
+        assert_eq!(parse_memory_limit("4GiB").expect("valid size"), 4_u64 << 30);
         assert_eq!(
             parse_memory_limit("512MiB").expect("valid size"),
             512_u64 << 20
@@ -673,11 +667,7 @@ mod tests {
         assert_eq!(resolved.memory_limit_bytes, 2_u64 << 30);
         assert_eq!(resolved.coverage_thresholds, vec![1, 20]);
         assert_eq!(resolved.log_format, LogFormat::Json);
-        assert!(
-            resolved
-                .to_json_pretty()
-                .contains("\"schema_version\": 1")
-        );
+        assert!(resolved.to_json_pretty().contains("\"schema_version\": 1"));
         fs::remove_file(path).expect("remove config");
     }
 

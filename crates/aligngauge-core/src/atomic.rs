@@ -166,7 +166,10 @@ impl AtomicPublisher {
                     self.destination.display()
                 ),
             )
-            .with_detail("destination", self.destination.to_string_lossy().into_owned()));
+            .with_detail(
+                "destination",
+                self.destination.to_string_lossy().into_owned(),
+            ));
         }
 
         let parent = parent_or_current(&self.destination);
@@ -403,9 +406,8 @@ fn failed_staging_path(staging: &Path) -> Result<PathBuf, AlignGaugeError> {
 }
 
 fn parent_of(path: &Path) -> Result<&Path, AlignGaugeError> {
-    path.parent().ok_or_else(|| {
-        output_error(format!("path '{}' has no parent directory", path.display()))
-    })
+    path.parent()
+        .ok_or_else(|| output_error(format!("path '{}' has no parent directory", path.display())))
 }
 
 fn unique_id() -> Result<String, AlignGaugeError> {
@@ -423,9 +425,7 @@ fn output_error(message: impl Into<String>) -> AlignGaugeError {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        AtomicPublisher, OutputBundle, PublicationHook, PublicationStep, output_error,
-    };
+    use super::{AtomicPublisher, OutputBundle, PublicationHook, PublicationStep, output_error};
     use crate::error::ErrorCategory;
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -438,10 +438,7 @@ mod tests {
         let root = test_root("success");
         let destination = root.join("result");
         let publisher = AtomicPublisher::new(&destination, false);
-        let bundle = OutputBundle::new(
-            b"{\"summary\":true}\n",
-            b"{\"provenance\":true}\n",
-        );
+        let bundle = OutputBundle::new(b"{\"summary\":true}\n", b"{\"provenance\":true}\n");
         let mut observer = DestinationMustNotExist;
 
         publisher
@@ -514,7 +511,9 @@ mod tests {
         let publisher = AtomicPublisher::new(&destination, false);
         let bundle = OutputBundle::new(b"{}\n", b"{}\n");
 
-        let error = publisher.publish(&bundle).expect_err("existing output fails");
+        let error = publisher
+            .publish(&bundle)
+            .expect_err("existing output fails");
         assert_eq!(error.category(), ErrorCategory::OutputExists);
         assert_eq!(
             fs::read(destination.join("keep")).expect("read sentinel"),

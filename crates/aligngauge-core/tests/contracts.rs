@@ -73,10 +73,7 @@ fn sample_summary() -> Summary {
             mate_overlap_correction: false,
         },
         total_accepted_aligned_bases: 100,
-        depth_histogram: BTreeMap::from([
-            (String::from("0"), 900),
-            (String::from("1"), 100),
-        ]),
+        depth_histogram: BTreeMap::from([(String::from("0"), 900), (String::from("1"), 100)]),
         threshold_bases: BTreeMap::from([(String::from("1"), 100)]),
         covered_reference_bases: 100,
         uncovered_reference_bases: 900,
@@ -127,10 +124,7 @@ fn sample_provenance() -> Provenance {
             (String::from("htslib"), String::from("1.22")),
             (String::from("rust-htslib"), String::from("1.0.1")),
         ]),
-        BTreeMap::from([(
-            String::from("input_passes"),
-            JsonValue::Unsigned(1),
-        )]),
+        BTreeMap::from([(String::from("input_passes"), JsonValue::Unsigned(1))]),
         BTreeMap::from([(String::from("memory_limit_bytes"), 1_u64 << 30)]),
         BTreeMap::from([(String::from("total"), 123_456)]),
         vec![String::from("coverage_thresholds_sorted")],
