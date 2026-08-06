@@ -3,7 +3,7 @@
 **Repository:** `ekkus93/aligngauge`
 
 **Companion specification:** `docs/DNA_QC_ENGINE_SPEC.md`  
-**Status:** Ralph Loop active — Milestone 2 complete; Milestone 3 next
+**Status:** Ralph Loop active — Milestone 3 complete; Milestone 4 next
 **Last updated:** 2026-08-06  
 **Supersedes:** Initial `DNA_QC_ENGINE_TODO.md` dated 2026-08-05
 
@@ -301,61 +301,63 @@ Implement all cases owned by SPEC §15.1.
 
 ## Milestone 3 — Production BAM reader and validation
 
+**Status:** Complete — implementation SHA `8d5cbb1d69764a8ba0d96ef96c03f24af1a77fe5`; branch validation run `31106115769`, job `92631610668`, success. Completion remains valid only after Permanent CI succeeds on the exact evidence commit.
+
 ### 3.1 I/O boundary
 
-- [ ] Refine the walking-skeleton boundary based on ADR-0001.
-- [ ] Wrap rust-htslib errors without losing causal detail.
-- [ ] Reuse record buffers.
-- [ ] Expose only required validated fields.
-- [ ] Bound allocations derived from headers and records.
-- [ ] Record pinned HTSlib/rust-htslib versions.
+- [x] Refine the walking-skeleton boundary based on ADR-0001.
+- [x] Wrap rust-htslib errors without losing causal detail.
+- [x] Reuse record buffers.
+- [x] Expose only required validated fields.
+- [x] Bound allocations derived from headers and records.
+- [x] Record pinned HTSlib/rust-htslib versions.
 
 ### 3.2 Header validation
 
-- [ ] Parse references and lengths.
-- [ ] Parse sort-order metadata.
-- [ ] Parse read-group records without trusting their values.
-- [ ] Detect duplicate/contradictory reference declarations.
-- [ ] Detect invalid lengths and arithmetic overflow.
-- [ ] Produce header identity for provenance.
+- [x] Parse references and lengths.
+- [x] Parse sort-order metadata.
+- [x] Parse read-group records without trusting their values.
+- [x] Detect duplicate/contradictory reference declarations.
+- [x] Detect invalid lengths and arithmetic overflow.
+- [x] Produce header identity for provenance.
 
 ### 3.3 Coordinate validation
 
-- [ ] Validate nondecreasing mapped coordinates.
-- [ ] Define and test unmapped-tail behavior.
-- [ ] Reject reference-ID regressions.
-- [ ] Reject position regressions.
-- [ ] Produce redacted actionable diagnostics.
-- [ ] Test header-claims-coordinate but records-regress.
-- [ ] Test absent/unknown sort-order with actually sorted records.
+- [x] Validate nondecreasing mapped coordinates.
+- [x] Define and test unmapped-tail behavior.
+- [x] Reject reference-ID regressions.
+- [x] Reject position regressions.
+- [x] Produce redacted actionable diagnostics.
+- [x] Test header-claims-coordinate but records-regress.
+- [x] Test absent/unknown sort-order with actually sorted records.
 
 ### 3.4 Record validation
 
-- [ ] Checked CIGAR/reference-span arithmetic.
-- [ ] Reference-bound validation.
-- [ ] Invalid flag-combination policy where required.
-- [ ] Oversized-CIGAR policy from SPEC §7.4.
-- [ ] Malformed optional-tag behavior.
-- [ ] Unknown read-group behavior.
-- [ ] No silent use of missing `NM`/`MD` as zero.
+- [x] Checked CIGAR/reference-span arithmetic.
+- [x] Reference-bound validation.
+- [x] Invalid flag-combination policy where required.
+- [x] Oversized-CIGAR policy from SPEC §7.4.
+- [x] Malformed optional-tag behavior.
+- [x] Unknown read-group behavior.
+- [x] No silent use of missing `NM`/`MD` as zero.
 
 ### 3.5 Required-field planning
 
 Keep v0.1 planning minimal.
 
-- [ ] Determine fields required by counters.
-- [ ] Determine fields required by coverage.
-- [ ] Avoid sequence/quality decoding when not needed and supported.
-- [ ] Record the resolved field plan in provenance.
-- [ ] Do not introduce backend or GPU dimensions.
+- [x] Determine fields required by counters.
+- [x] Determine fields required by coverage.
+- [x] Avoid sequence/quality decoding when not needed and supported.
+- [x] Record the resolved field plan in provenance.
+- [x] Do not introduce backend or GPU dimensions.
 
 ### Milestone 3 acceptance gate
 
-- [ ] All valid v0.1 fixtures stream correctly.
-- [ ] Every corrupt/unsorted/unsupported fixture fails with its expected category.
-- [ ] No completed output is published after reader failure.
-- [ ] Create `docs/evidence/M3_BAM_VALIDATION.md`.
-- [ ] Permanent CI succeeds on the exact evidence commit.
+- [x] All valid v0.1 fixtures stream correctly.
+- [x] Every corrupt/unsorted/unsupported fixture fails with its expected category.
+- [x] No completed output is published after reader failure.
+- [x] Create `docs/evidence/M3_BAM_VALIDATION.md`.
+- [x] Permanent CI succeeds on the exact evidence commit.
 
 ---
 

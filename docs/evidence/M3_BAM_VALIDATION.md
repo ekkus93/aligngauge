@@ -1,54 +1,8 @@
-from pathlib import Path
-
-TODO = Path("docs/DNA_QC_ENGINE_TODO.md")
-EVIDENCE = Path("docs/evidence/M3_BAM_VALIDATION.md")
-WORKFLOW = Path(".github/workflows/m3-finalize.yml")
-SELF = Path("tools/m3_finalize.py")
-
-IMPLEMENTATION_SHA = "8d5cbb1d69764a8ba0d96ef96c03f24af1a77fe5"
-BRANCH_RUN = "31106115769"
-BRANCH_JOB = "92631610668"
-
-text = TODO.read_text(encoding="utf-8")
-old_status = "**Status:** Ralph Loop active — Milestone 2 complete; Milestone 3 next"
-new_status = "**Status:** Ralph Loop active — Milestone 3 complete; Milestone 4 next"
-if old_status not in text:
-    raise SystemExit("top-level Milestone 3 status marker was not found")
-text = text.replace(old_status, new_status, 1)
-
-start_marker = "## Milestone 3 — Production BAM reader and validation\n"
-end_marker = "\n---\n\n## Milestone 4 — Flag and per-reference counters"
-start = text.index(start_marker)
-end = text.index(end_marker, start)
-section = text[start:end]
-if "**Status:**" in section:
-    raise SystemExit("Milestone 3 already has a status line")
-section = section.replace(
-    start_marker,
-    start_marker
-    + "\n**Status:** Complete — implementation SHA `"
-    + IMPLEMENTATION_SHA
-    + "`; branch validation run `"
-    + BRANCH_RUN
-    + "`, job `"
-    + BRANCH_JOB
-    + "`, success. Completion remains valid only after Permanent CI succeeds on the exact evidence commit.\n",
-    1,
-)
-unchecked = section.count("- [ ]")
-if unchecked != 31:
-    raise SystemExit(f"expected 31 unchecked Milestone 3 tasks, found {unchecked}")
-section = section.replace("- [ ]", "- [x]")
-text = text[:start] + section + text[end:]
-TODO.write_text(text, encoding="utf-8")
-
-EVIDENCE.parent.mkdir(parents=True, exist_ok=True)
-EVIDENCE.write_text(
-    f"""# Milestone 3 Evidence — Production BAM Reader and Validation
+# Milestone 3 Evidence — Production BAM Reader and Validation
 
 **Status:** Complete, subject to exact evidence-commit Permanent CI  
-**Implementation SHA:** `{IMPLEMENTATION_SHA}`  
-**Branch validation:** run `{BRANCH_RUN}`, job `{BRANCH_JOB}`, success  
+**Implementation SHA:** `8d5cbb1d69764a8ba0d96ef96c03f24af1a77fe5`  
+**Branch validation:** run `31106115769`, job `92631610668`, success  
 **Evidence date:** 2026-08-06
 
 The commit containing this document is the Milestone 3 evidence candidate. The
@@ -129,7 +83,7 @@ unsupported format and a damaged BAM.
 
 ## 6. Validation evidence
 
-Branch validation run `{BRANCH_RUN}`, job `{BRANCH_JOB}`, succeeded and required:
+Branch validation run `31106115769`, job `92631610668`, succeeded and required:
 
 1. `cargo fmt --all`;
 2. workspace compilation and locked dependency resolution;
@@ -139,7 +93,7 @@ Branch validation run `{BRANCH_RUN}`, job `{BRANCH_JOB}`, succeeded and required
 6. byte-identical regeneration of fixtures, expected outputs, and manifest;
 7. `git diff --check`;
 8. removal of all temporary validation/fixup machinery before publishing
-   implementation SHA `{IMPLEMENTATION_SHA}`.
+   implementation SHA `8d5cbb1d69764a8ba0d96ef96c03f24af1a77fe5`.
 
 The validation suite covers valid committed v0.1 fixtures, coordinate regression,
 no-coordinate-tail violations, malformed optional data, malformed record lengths,
@@ -166,9 +120,3 @@ Milestone 3 does not implement final flag/per-reference counters, canonical outp
 integration, or Samtools differential matching; those are Milestone 4. Exact
 chunked coverage remains Milestone 5. CRAM and fail-closed reference resolution
 remain v0.2 work.
-""",
-    encoding="utf-8",
-)
-
-SELF.unlink()
-WORKFLOW.unlink()
