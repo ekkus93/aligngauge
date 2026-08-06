@@ -3,7 +3,8 @@ name: Permanent CI
 on:
   push:
     branches: [master]
-  workflow_dispatch:
+    paths:
+      - ".github/workflows/ci.yml"
 
 permissions:
   contents: write
@@ -14,7 +15,6 @@ concurrency:
 
 jobs:
   repair:
-    if: github.event_name == 'push' && github.event.head_commit.message == 'ci: publish validated Milestone 1 source repair'
     name: ci/permanent
     runs-on: ubuntu-24.04
     timeout-minutes: 30
