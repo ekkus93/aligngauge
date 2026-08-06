@@ -1,73 +1,11 @@
-from pathlib import Path
-
-TODO = Path("docs/DNA_QC_ENGINE_TODO.md")
-EVIDENCE = Path("docs/evidence/M4_COUNTERS.md")
-WORKFLOW = Path(".github/workflows/m4-finalize.yml")
-SELF = Path("tools/m4_finalize.py")
-
-PRODUCT_SHA = "54e7803835eb2a31207b36a44d44b178ae6b86ab"
-BRANCH_RUN = "31112508841"
-BRANCH_JOB = "92653647084"
-PERMANENT_RUN = "31113177504"
-PERMANENT_JOB = "92655944921"
-REFERENCE_RUN = "31113177567"
-REFERENCE_JOB = "92655945424"
-HG002_RUN = "31113177174"
-HG002_JOB = "92655943661"
-
-text = TODO.read_text(encoding="utf-8")
-old_status = "**Status:** Ralph Loop active — Milestone 3 complete; Milestone 4 next"
-new_status = "**Status:** Ralph Loop active — Milestone 4 complete; Milestone 5 next"
-if text.count(old_status) != 1:
-    raise SystemExit("top-level Milestone 4 status marker was not found exactly once")
-text = text.replace(old_status, new_status, 1)
-
-start_marker = "## Milestone 4 — Flag and per-reference counters\n"
-end_marker = "\n---\n\n## Milestone 5 — Exact chunked coverage"
-start = text.index(start_marker)
-end = text.index(end_marker, start)
-section = text[start:end]
-if "**Status:**" in section:
-    raise SystemExit("Milestone 4 already has a status line")
-status_line = (
-    "\n**Status:** Complete — product SHA `"
-    + PRODUCT_SHA
-    + "`; branch gate run `"
-    + BRANCH_RUN
-    + "`, job `"
-    + BRANCH_JOB
-    + "`; exact-product Permanent CI run `"
-    + PERMANENT_RUN
-    + "`, job `"
-    + PERMANENT_JOB
-    + "`; Reference Validation run `"
-    + REFERENCE_RUN
-    + "`, job `"
-    + REFERENCE_JOB
-    + "`; HG002 run `"
-    + HG002_RUN
-    + "`, job `"
-    + HG002_JOB
-    + "`; all successful. Completion remains valid only after Permanent CI succeeds on the exact evidence commit.\n"
-)
-section = section.replace(start_marker, start_marker + status_line, 1)
-unchecked = section.count("- [ ]")
-if unchecked != 25:
-    raise SystemExit(f"expected 25 unchecked Milestone 4 tasks, found {unchecked}")
-section = section.replace("- [ ]", "- [x]")
-text = text[:start] + section + text[end:]
-TODO.write_text(text, encoding="utf-8")
-
-EVIDENCE.parent.mkdir(parents=True, exist_ok=True)
-EVIDENCE.write_text(
-    f"""# Milestone 4 Evidence — Flag and Per-Reference Counters
+# Milestone 4 Evidence — Flag and Per-Reference Counters
 
 **Status:** Complete, subject to exact evidence-commit Permanent CI  
-**Product SHA:** `{PRODUCT_SHA}`  
-**Branch validation:** run `{BRANCH_RUN}`, job `{BRANCH_JOB}`, success  
-**Exact-product Permanent CI:** run `{PERMANENT_RUN}`, job `{PERMANENT_JOB}`, success  
-**Exact-product Reference Validation:** run `{REFERENCE_RUN}`, job `{REFERENCE_JOB}`, success  
-**Exact-product HG002 validation:** run `{HG002_RUN}`, job `{HG002_JOB}`, success  
+**Product SHA:** `54e7803835eb2a31207b36a44d44b178ae6b86ab`  
+**Branch validation:** run `31112508841`, job `92653647084`, success  
+**Exact-product Permanent CI:** run `31113177504`, job `92655944921`, success  
+**Exact-product Reference Validation:** run `31113177567`, job `92655945424`, success  
+**Exact-product HG002 validation:** run `31113177174`, job `92655943661`, success  
 **Evidence date:** 2026-08-06
 
 The commit containing this document is the Milestone 4 evidence candidate. The
@@ -180,7 +118,7 @@ host permissions or making generated alignments world-readable.
 
 ## 8. Validation evidence
 
-Branch validation run `{BRANCH_RUN}`, job `{BRANCH_JOB}`, required and passed:
+Branch validation run `31112508841`, job `92653647084`, required and passed:
 
 1. formatting and workspace compilation;
 2. locked dependency validation;
@@ -191,13 +129,13 @@ Branch validation run `{BRANCH_RUN}`, job `{BRANCH_JOB}`, required and passed:
 7. exact pinned-Samtools synthetic counter differential;
 8. clean-tree and temporary-gate removal checks.
 
-On exact product SHA `{PRODUCT_SHA}`:
+On exact product SHA `54e7803835eb2a31207b36a44d44b178ae6b86ab`:
 
-- Permanent CI run `{PERMANENT_RUN}`, job `{PERMANENT_JOB}`, passed every repository
+- Permanent CI run `31113177504`, job `92655944921`, passed every repository
   gate;
-- Reference Validation run `{REFERENCE_RUN}`, job `{REFERENCE_JOB}`, passed the exact
+- Reference Validation run `31113177567`, job `92655945424`, passed the exact
   synthetic counter differential and retained coverage baseline;
-- HG002 run `{HG002_RUN}`, job `{HG002_JOB}`, passed deterministic preparation,
+- HG002 run `31113177174`, job `92655943661`, passed deterministic preparation,
   exact public-data counter comparison, and evidence upload.
 
 ## 9. Fail-closed properties
@@ -218,10 +156,3 @@ Exact chunked coverage, memory planning, histograms, thresholds, and coverage
 differential validation remain Milestone 5. Final atomic output-directory CLI
 integration remains later v0.1 work; Milestone 4 establishes the canonical and
 compatibility counter projections consumed by that path.
-""",
-    encoding="utf-8",
-)
-
-for path in (WORKFLOW, SELF):
-    if not path.exists():
-        raise SystemExit(f"expected finalizer path is missing: {path}")

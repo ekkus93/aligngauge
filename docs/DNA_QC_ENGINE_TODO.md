@@ -3,7 +3,7 @@
 **Repository:** `ekkus93/aligngauge`
 
 **Companion specification:** `docs/DNA_QC_ENGINE_SPEC.md`  
-**Status:** Ralph Loop active — Milestone 3 complete; Milestone 4 next
+**Status:** Ralph Loop active — Milestone 4 complete; Milestone 5 next
 **Last updated:** 2026-08-06  
 **Supersedes:** Initial `DNA_QC_ENGINE_TODO.md` dated 2026-08-05
 
@@ -363,46 +363,48 @@ Keep v0.1 planning minimal.
 
 ## Milestone 4 — Flag and per-reference counters
 
+**Status:** Complete — product SHA `54e7803835eb2a31207b36a44d44b178ae6b86ab`; branch gate run `31112508841`, job `92653647084`; exact-product Permanent CI run `31113177504`, job `92655944921`; Reference Validation run `31113177567`, job `92655945424`; HG002 run `31113177174`, job `92655943661`; all successful. Completion remains valid only after Permanent CI succeeds on the exact evidence commit.
+
 ### 4.1 Classification model
 
-- [ ] Implement mutually defined primary/secondary/supplementary classification.
-- [ ] Match pinned Samtools priority for dual-flag records.
-- [ ] Implement QC-pass/QC-fail partitions.
-- [ ] Implement mapped/unmapped, paired, proper-pair, read1/read2, mate, duplicate,
+- [x] Implement mutually defined primary/secondary/supplementary classification.
+- [x] Match pinned Samtools priority for dual-flag records.
+- [x] Implement QC-pass/QC-fail partitions.
+- [x] Implement mapped/unmapped, paired, proper-pair, read1/read2, mate, duplicate,
       and singleton counters required by SPEC §11.
-- [ ] Use checked `u64`.
-- [ ] Prohibit saturating arithmetic.
+- [x] Use checked `u64`.
+- [x] Prohibit saturating arithmetic.
 
 ### 4.2 Per-reference model
 
-- [ ] Mapped counts by reference.
-- [ ] Unmapped/no-coordinate counts under the pinned profile.
-- [ ] Stable reference ordering from the header.
-- [ ] Empty reference behavior.
-- [ ] Unknown/invalid reference-ID failure.
+- [x] Mapped counts by reference.
+- [x] Unmapped/no-coordinate counts under the pinned profile.
+- [x] Stable reference ordering from the header.
+- [x] Empty reference behavior.
+- [x] Unknown/invalid reference-ID failure.
 
 ### 4.3 Canonical integration
 
-- [ ] Map counters into `summary.json`.
-- [ ] Record profile/tool version in provenance.
-- [ ] Explicitly mark counters not collected or not applicable.
-- [ ] Add human summary rendering.
-- [ ] Derive initial Samtools-like compatibility text from canonical values.
+- [x] Map counters into `summary.json`.
+- [x] Record profile/tool version in provenance.
+- [x] Explicitly mark counters not collected or not applicable.
+- [x] Add human summary rendering.
+- [x] Derive initial Samtools-like compatibility text from canonical values.
 
 ### 4.4 Differential validation
 
-- [ ] Compare every applicable synthetic fixture to pinned `samtools flagstat`.
-- [ ] Compare per-reference fixture results to pinned `samtools idxstats`.
-- [ ] Reconcile the dual-secondary/supplementary case.
-- [ ] Compare the HG002 subset.
-- [ ] Document every non-match.
+- [x] Compare every applicable synthetic fixture to pinned `samtools flagstat`.
+- [x] Compare per-reference fixture results to pinned `samtools idxstats`.
+- [x] Reconcile the dual-secondary/supplementary case.
+- [x] Compare the HG002 subset.
+- [x] Document every non-match.
 
 ### Milestone 4 acceptance gate
 
-- [ ] No unexplained integer discrepancy remains.
-- [ ] Repeated runs produce identical canonical counters.
-- [ ] Create `docs/evidence/M4_COUNTERS.md`.
-- [ ] Permanent CI succeeds on the exact evidence commit.
+- [x] No unexplained integer discrepancy remains.
+- [x] Repeated runs produce identical canonical counters.
+- [x] Create `docs/evidence/M4_COUNTERS.md`.
+- [x] Permanent CI succeeds on the exact evidence commit.
 
 ---
 
