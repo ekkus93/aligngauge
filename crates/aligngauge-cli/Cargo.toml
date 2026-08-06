@@ -9,6 +9,7 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+aligngauge-core = { path = "../aligngauge-core" }
 rust-htslib = { version = "1.0.1", default-features = false }
 
 [[bin]]

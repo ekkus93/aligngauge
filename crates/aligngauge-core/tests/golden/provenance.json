@@ -1,0 +1,70 @@
+{
+  "analysis_plan": {
+    "input_passes": 1
+  },
+  "application": {
+    "git_commit": {
+      "status": "available",
+      "value": "0123456789abcdef"
+    },
+    "version": "0.1.0-test"
+  },
+  "backend_versions": {
+    "htslib": "1.22",
+    "rust-htslib": "1.0.1"
+  },
+  "compatibility_profiles": [],
+  "errors": [],
+  "header_identity": {
+    "status": "available",
+    "value": "sha256:header"
+  },
+  "input": {
+    "checksum": {
+      "reason": "checksum_not_requested",
+      "status": "unavailable"
+    },
+    "path": "sample.bam",
+    "size_bytes": {
+      "status": "available",
+      "value": 4096
+    }
+  },
+  "normalization_actions": [
+    "coverage_thresholds_sorted"
+  ],
+  "resolved_config": {
+    "coverage_thresholds": [
+      1,
+      10,
+      20,
+      30
+    ],
+    "input": "sample.bam",
+    "io_threads": 1,
+    "log_format": "human",
+    "memory_limit_bytes": 1073741824,
+    "outdir": "results",
+    "preserve_failed_staging": false,
+    "quiet": false,
+    "schema_version": 1,
+    "threads": 2,
+    "verbose": false
+  },
+  "resource_limits": {
+    "memory_limit_bytes": 1073741824
+  },
+  "schema_version": "1.0.0",
+  "stage_timings_ns": {
+    "total": 123456
+  },
+  "system": {
+    "architecture": "x86_64",
+    "logical_cpus": {
+      "status": "available",
+      "value": 8
+    },
+    "os": "linux"
+  },
+  "warnings": []
+}
