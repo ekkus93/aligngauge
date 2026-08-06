@@ -46,6 +46,24 @@ jobs:
                   json.load(handle)
           PY
 
+      - name: Verify committed test-data manifest locally
+        run: cargo run -p aligngauge-testkit --locked -- verify-manifest --root .
+
+      - name: Prove synthetic corpus regenerates byte-identically
+        run: |
+          regenerated="$(mktemp -d)"
+          trap 'rm -rf "$regenerated"' EXIT
+          cargo run -p aligngauge-testkit --locked -- generate-corpus --root "$regenerated"
+          diff -ru -- testdata/fixtures "$regenerated/testdata/fixtures"
+          diff -ru -- testdata/expected "$regenerated/testdata/expected"
+          diff -u -- testdata/manifest.v1.tsv "$regenerated/testdata/manifest.v1.tsv"
+
+      - name: Validate reference and preparation scripts
+        run: |
+          bash -n tools/reference/samtools/run-reference.sh
+          bash -n tools/reference/samtools/run-baselines.sh
+          bash -n testdata/hg002/prepare.sh
+
       - name: Run Clippy
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 

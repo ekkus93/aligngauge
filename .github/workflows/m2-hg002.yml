@@ -1,0 +1,56 @@
+name: M2 HG002 Preparation Validation
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - ".github/workflows/m2-hg002.yml"
+      - "testdata/hg002/**"
+      - "tools/reference/samtools/image.lock"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    name: ci/hg002-preparation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Prepare HG002 subset twice
+        run: |
+          testdata/hg002/prepare.sh "$GITHUB_WORKSPACE/target/hg002-first"
+          testdata/hg002/prepare.sh "$GITHUB_WORKSPACE/target/hg002-second"
+
+      - name: Prove deterministic preparation identities
+        run: |
+          cmp target/hg002-first/prepared.manifest target/hg002-second/prepared.manifest
+          grep -F 'schema=aligngauge-hg002-preparation-v1' target/hg002-first/prepared.manifest
+          grep -F 'source_bam_md5=f5360b7adbc798c90a78f290de928eca' target/hg002-first/prepared.manifest
+          grep -F 'source_bai_md5=1d7fd88891eee203c02fb852cac95301' target/hg002-first/prepared.manifest
+          grep -F 'region=chr20:10000000-11000000' target/hg002-first/prepared.manifest
+          grep -F 'subsample_seed=42' target/hg002-first/prepared.manifest
+          grep -F 'subsample_fraction=0.37037037037037' target/hg002-first/prepared.manifest
+          test -s target/hg002-first/subset.bam
+          test -s target/hg002-first/subset.bam.bai
+          test -f target/hg002-first/_SUCCESS
+          test -f target/hg002-second/_SUCCESS
+
+      - name: Upload preparation evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: hg002-preparation-${{ github.sha }}
+          path: |
+            target/hg002-first/prepared.manifest
+            target/hg002-first/_SUCCESS
+            target/hg002-second/prepared.manifest
+            target/hg002-second/_SUCCESS
+          if-no-files-found: error
+          retention-days: 7

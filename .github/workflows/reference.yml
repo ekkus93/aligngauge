@@ -1,0 +1,52 @@
+name: Reference Validation
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reference-validation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  samtools:
+    name: ci/reference
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Verify committed fixture identity
+        run: cargo run -p aligngauge-testkit --locked -- verify-manifest --root .
+
+      - name: Run digest-pinned network-isolated Samtools baselines
+        run: |
+          tools/reference/samtools/run-baselines.sh \
+            testdata/fixtures/basic.bam \
+            target/reference/basic
+
+      - name: Validate complete captures
+        run: |
+          for command_name in flagstat idxstats depth; do
+            result="target/reference/basic/$command_name"
+            test -f "$result/_SUCCESS"
+            test -s "$result/invocation.txt"
+            test -s "$result/image.txt"
+            test -s "$result/version.txt"
+            test -s "$result/stdout.txt"
+            test -f "$result/stderr.txt"
+            test "$(cat "$result/exit_status.txt")" = "0"
+            test -s "$result/wall_seconds.txt"
+          done
+          grep -F 'samtools 1.24' target/reference/basic/flagstat/version.txt
+          grep -F 'sha256:a130447589651ed09252aa95a5e4f4132942cdb54d835d81a04a9a930d656561' \
+            target/reference/basic/flagstat/image.txt
