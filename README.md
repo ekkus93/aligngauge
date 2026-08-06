@@ -4,7 +4,7 @@ A validation-first Rust engine for fast, single-pass alignment QC and coverage a
 
 AlignGauge analyzes existing aligned sequencing data. It is not software for controlling a physical DNA sequencer, a basecaller, an aligner, or a variant caller.
 
-The project is currently in the specification and planning phase. The repository is expected to be renamed from `rust-dna-sequencer` to `aligngauge` before implementation begins.
+The project is currently in the specification and planning phase. The canonical repository is `ekkus93/aligngauge`.
 
 ## Planning documents
 
