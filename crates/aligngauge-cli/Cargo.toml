@@ -8,6 +8,9 @@ license.workspace = true
 repository.workspace = true
 publish = false
 
+[dependencies]
+rust-htslib = { version = "1.0.1", default-features = false }
+
 [[bin]]
 name = "aligngauge"
 path = "src/main.rs"
