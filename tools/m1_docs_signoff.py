@@ -15,13 +15,13 @@ todo = TODO_PATH.read_text(encoding="utf-8")
 todo = replace_once(
     todo,
     "**Current repository:** `ekkus93/rust-dna-sequencer`  \n**Recommended repository name:** `ekkus93/aligngauge`  ",
-    "**Repository:** `ekkus93/aligngauge`  ",
+    "**Repository:** `ekkus93/aligngauge`\n",
     "repository header",
 )
 todo = replace_once(
     todo,
     "**Status:** Revised staged implementation plan  ",
-    "**Status:** Ralph Loop active — Milestone 1 complete; Milestone 2 next  ",
+    "**Status:** Ralph Loop active — Milestone 1 complete; Milestone 2 next",
     "status header",
 )
 start_marker = "## Milestone 1 — Core model, errors, and atomic output\n"
