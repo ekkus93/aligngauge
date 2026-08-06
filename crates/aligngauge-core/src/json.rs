@@ -75,6 +75,18 @@ impl From<bool> for JsonValue {
     }
 }
 
+impl From<i32> for JsonValue {
+    fn from(value: i32) -> Self {
+        Self::Signed(i64::from(value))
+    }
+}
+
+impl From<i64> for JsonValue {
+    fn from(value: i64) -> Self {
+        Self::Signed(value)
+    }
+}
+
 impl From<u32> for JsonValue {
     fn from(value: u32) -> Self {
         Self::Unsigned(u64::from(value))
@@ -120,6 +132,18 @@ impl ToJson for str {
 impl ToJson for bool {
     fn to_json(&self) -> JsonValue {
         JsonValue::Bool(*self)
+    }
+}
+
+impl ToJson for i32 {
+    fn to_json(&self) -> JsonValue {
+        JsonValue::Signed(i64::from(*self))
+    }
+}
+
+impl ToJson for i64 {
+    fn to_json(&self) -> JsonValue {
+        JsonValue::Signed(*self)
     }
 }
 
@@ -254,5 +278,11 @@ mod tests {
             value.to_pretty_string(),
             "{\n  \"a\": 7,\n  \"z\": \"line\\nvalue\"\n}\n"
         );
+    }
+
+    #[test]
+    fn signed_integers_render_as_json_numbers() {
+        assert_eq!(JsonValue::from(-1_i32).to_compact_string(), "-1");
+        assert_eq!((-9_i64).to_json().to_compact_string(), "-9");
     }
 }
