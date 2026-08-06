@@ -5,8 +5,12 @@ on:
     branches: [master]
     paths:
       - ".github/workflows/m2-hg002.yml"
+      - "crates/aligngauge-cli/**"
+      - "crates/aligngauge-core/**"
+      - "crates/aligngauge-hts/**"
+      - "crates/aligngauge-metrics/**"
       - "testdata/hg002/**"
-      - "tools/reference/samtools/image.lock"
+      - "tools/reference/samtools/**"
   workflow_dispatch:
 
 permissions:
@@ -43,6 +47,32 @@ jobs:
           test -f target/hg002-first/_SUCCESS
           test -f target/hg002-second/_SUCCESS
 
+      - name: Compare HG002 counters to pinned Samtools
+        run: |
+          cargo build -p aligngauge-cli --locked
+          tools/reference/samtools/run-reference.sh \
+            flagstat \
+            target/hg002-first/subset.bam \
+            target/hg002-m4/reference-flagstat
+          tools/reference/samtools/run-reference.sh \
+            idxstats \
+            target/hg002-first/subset.bam \
+            target/hg002-m4/reference-idxstats
+          target/debug/aligngauge qc \
+            --input target/hg002-first/subset.bam \
+            --format samtools-flagstat \
+            > target/hg002-m4/aligngauge-flagstat.txt
+          target/debug/aligngauge qc \
+            --input target/hg002-first/subset.bam \
+            --format samtools-idxstats \
+            > target/hg002-m4/aligngauge-idxstats.txt
+          tools/reference/samtools/compare-flagstat.py \
+            target/hg002-m4/reference-flagstat/stdout.txt \
+            target/hg002-m4/aligngauge-flagstat.txt
+          diff -u \
+            target/hg002-m4/reference-idxstats/stdout.txt \
+            target/hg002-m4/aligngauge-idxstats.txt
+
       - name: Upload preparation evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
@@ -52,5 +82,9 @@ jobs:
             target/hg002-first/_SUCCESS
             target/hg002-second/prepared.manifest
             target/hg002-second/_SUCCESS
+            target/hg002-m4/reference-flagstat/stdout.txt
+            target/hg002-m4/reference-idxstats/stdout.txt
+            target/hg002-m4/aligngauge-flagstat.txt
+            target/hg002-m4/aligngauge-idxstats.txt
           if-no-files-found: error
           retention-days: 7
