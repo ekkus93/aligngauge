@@ -6,8 +6,8 @@ on:
   pull_request:
   workflow_dispatch:
 
-# Temporary write scope is used only to bootstrap the Milestone 1 local-package
-# lockfile update. It is removed immediately after Cargo.lock is committed.
+# Temporary write scope is used only to bootstrap pinned rustfmt output.
+# It is removed immediately after the formatter commit is created.
 permissions:
   contents: write
 
@@ -32,19 +32,22 @@ jobs:
           rustc --version --verbose
           cargo --version
 
-      - name: Generate Milestone 1 dependency lockfile
-        run: cargo generate-lockfile
+      - name: Verify dependency lockfile
+        run: cargo update --workspace --locked --dry-run
 
-      - name: Commit generated lockfile during bootstrap
+      - name: Format Milestone 1 sources
+        run: cargo fmt --all
+
+      - name: Commit pinned rustfmt output during bootstrap
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         run: |
-          if git diff --quiet -- Cargo.lock; then
+          if git diff --quiet -- '*.rs'; then
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.lock
-          git commit -m "build: lock Milestone 1 core contracts"
+          git add -- '*.rs'
+          git commit -m "style: apply pinned rustfmt to Milestone 1"
           git push origin HEAD:master
 
       - name: Check formatting
