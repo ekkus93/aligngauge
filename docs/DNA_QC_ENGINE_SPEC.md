@@ -1,8 +1,8 @@
-# BamGauge Product and Architecture Specification
+# AlignGauge Product and Architecture Specification
 
 **Current repository:** `ekkus93/rust-dna-sequencer`  
-**Recommended repository name:** `ekkus93/bamgauge`  
-**Binary name:** `bamgauge`  
+**Recommended repository name:** `ekkus93/aligngauge`  
+**Binary name:** `aligngauge`  
 **Status:** Revised planning specification  
 **Last updated:** 2026-08-06  
 **Supersedes:** Initial `DNA_QC_ENGINE_SPEC.md` dated 2026-08-05
@@ -11,48 +11,50 @@
 
 ### 1.1 Name
 
-The recommended project name is **BamGauge**.
+The project name is **AlignGauge**.
 
-“BAM” immediately identifies the primary input class for the first release, while
-“Gauge” communicates measurement rather than alignment, variant calling, basecalling,
-or physical sequencer control. Later CRAM support does not change the product’s core:
-quality control of aligned sequencing records.
+“Align” identifies the durable product boundary: analysis of aligned sequencing
+records rather than one particular file format. “Gauge” communicates measurement,
+quality control, and coverage assessment rather than alignment, variant calling,
+basecalling, or physical sequencer control. The name remains accurate as the
+project grows from BAM support in v0.1 to CRAM, WES, targeted-panel, and
+compatibility features in later releases.
 
 Recommended repository rename:
 
 ```text
 ekkus93/rust-dna-sequencer
     ↓
-ekkus93/bamgauge
+ekkus93/aligngauge
 ```
 
 Recommended crate namespace:
 
 ```text
-bamgauge
-bamgauge-core
-bamgauge-hts
-bamgauge-metrics
-bamgauge-coverage
-bamgauge-formats
-bamgauge-testkit
+aligngauge
+aligngauge-core
+aligngauge-hts
+aligngauge-metrics
+aligngauge-coverage
+aligngauge-formats
+aligngauge-testkit
 ```
 
 ### 1.2 Project description
 
-> **A validation-first Rust engine for fast, single-pass BAM/CRAM alignment QC and
-> coverage analysis for WGS, WES, and targeted sequencing.**
+> **A validation-first Rust engine for fast, single-pass alignment QC and coverage
+> analysis across BAM and CRAM data for WGS, WES, and targeted sequencing.**
 
 A slightly longer README description may use:
 
-> BamGauge reads each alignment record once and shares it across deterministic
+> AlignGauge reads each alignment record once and shares it across deterministic
 > quality-control collectors, producing canonical JSON, provenance, alignment
 > counters, coverage metrics, and compatibility exports without repeatedly scanning
 > the same BAM or CRAM file.
 
 ### 1.3 Product boundary
 
-BamGauge is not:
+AlignGauge is not:
 
 - software for controlling a physical DNA sequencer;
 - a basecaller;
@@ -78,8 +80,8 @@ large BAM or CRAM file. Each invocation may repeat:
 7. output formatting.
 
 For WGS data, repeated decoding and traversal can dominate the total QC cost.
-BamGauge shall coordinate compatible analyses around a shared record stream so that
-each decoded record is reused by all enabled collectors.
+AlignGauge shall coordinate compatible analyses around a shared record stream so
+that each decoded record is reused by all enabled collectors.
 
 The performance target is not “Rust is faster than C.” The target is:
 
@@ -103,7 +105,7 @@ hardware acceleration shall never be required to obtain correct results.
 
 ### 3.3 Fail closed
 
-BamGauge shall not:
+AlignGauge shall not:
 
 - substitute zero for missing data;
 - silently skip a failed collector;
@@ -272,7 +274,7 @@ the product until a feature passes this gate.
 The first code milestone may expose:
 
 ```bash
-bamgauge qc --input sample.bam
+aligngauge qc --input sample.bam
 ```
 
 It shall count total, mapped, and unmapped records, print a human-readable result,
@@ -284,7 +286,7 @@ schema or output contract.
 ### 6.2 v0.1 release interface
 
 ```bash
-bamgauge qc \
+aligngauge qc \
   --input sample.bam \
   --outdir results \
   --threads 8 \
@@ -342,7 +344,7 @@ may be inspected, but v0.1 correctness shall not depend on indexed partitioning.
 
 ### 7.2 Coordinate order
 
-The header sort declaration is not sufficient. During traversal, BamGauge shall
+The header sort declaration is not sufficient. During traversal, AlignGauge shall
 detect coordinate regressions among mapped records.
 
 Policy:
@@ -389,7 +391,7 @@ The implementation shall:
 
 This section is normative for v0.2 and shall influence the v0.1 I/O boundary.
 
-Before opening any CRAM handle, BamGauge shall configure HTSlib for local-only
+Before opening any CRAM handle, AlignGauge shall configure HTSlib for local-only
 reference resolution.
 
 Requirements:
@@ -437,7 +439,7 @@ The parser shall:
   intervals;
 - record every normalization action in provenance.
 
-BamGauge shall never infer one-based coordinates.
+AlignGauge shall never infer one-based coordinates.
 
 ## 10. Canonical output contract
 
@@ -466,8 +468,9 @@ Publication order:
 `_SUCCESS` is retained for ecosystem compatibility. It is never written after
 publication.
 
-If the platform cannot provide the required atomic rename semantics, BamGauge shall
-fail before processing unless a future explicitly named non-atomic mode is selected.
+If the platform cannot provide the required atomic rename semantics, AlignGauge
+shall fail before processing unless a future explicitly named non-atomic mode is
+selected.
 
 On failure:
 
@@ -558,7 +561,7 @@ No counter saturates silently.
 
 ### 12.1 Named default profile
 
-The v0.1 canonical coverage profile is `bamgauge-v0.1`.
+The v0.1 canonical coverage profile is `aligngauge-v0.1`.
 
 It includes records that are:
 
@@ -676,13 +679,13 @@ The initial workspace should remain small:
 
 ```text
 crates/
-├── bamgauge-cli/
-├── bamgauge-core/
-├── bamgauge-hts/
-├── bamgauge-metrics/
-├── bamgauge-coverage/
-├── bamgauge-formats/
-└── bamgauge-testkit/
+├── aligngauge-cli/
+├── aligngauge-core/
+├── aligngauge-hts/
+├── aligngauge-metrics/
+├── aligngauge-coverage/
+├── aligngauge-formats/
+└── aligngauge-testkit/
 ```
 
 Crates may be merged if the boundaries add more ceremony than value. The walking
@@ -901,7 +904,7 @@ No specific speedup factor is promised before measurements exist.
 
 ## 18. Security and privacy
 
-BamGauge processes potentially identifying genomic data.
+AlignGauge processes potentially identifying genomic data.
 
 Requirements:
 
@@ -928,7 +931,7 @@ v0.1 is complete only when:
 4. flag classification matches the pinned Samtools profile on all applicable
    fixtures;
 5. per-reference counts match the pinned profile;
-6. canonical coverage matches the defined `bamgauge-v0.1` semantics;
+6. canonical coverage matches the defined `aligngauge-v0.1` semantics;
 7. chunk boundaries do not alter results;
 8. multi-track memory planning is enforced;
 9. canonical JSON and provenance validate against committed schemas;
