@@ -2,6 +2,7 @@
 members = [
     "crates/aligngauge-cli",
     "crates/aligngauge-core",
+    "crates/aligngauge-hts",
     "crates/aligngauge-testkit",
 ]
 resolver = "3"
