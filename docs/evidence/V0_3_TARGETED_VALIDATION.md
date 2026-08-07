@@ -376,6 +376,6 @@ The final release candidate was `eccd45157d34ada00a3403a2b24d606956878b62`. All 
 | Targeted Validation | `31205397861` | `92955082757` | success |
 | HG002 Preparation Validation | `31205397734` | `92955018025` | success |
 
-GitHub release `v0.3.0` (release ID `367127246`) was published on 2026-08-07 with tag target exactly `eccd45157d34ada00a3403a2b24d606956878b62`. The release is neither a draft nor a prerelease. One-time publisher run `31205792390`, job `92956442182`, succeeded and verified the tag target and release metadata before its temporary publisher branch was removed by cleanup run `31205917061`, job `92956811061`.
+GitHub release `v0.3.0` (release ID `366930828`) was published on 2026-08-07 with tag target exactly `eccd45157d34ada00a3403a2b24d606956878b62`. The release is neither a draft nor a prerelease. One-time publisher run `31205792390`, job `92956442182`, succeeded and verified the tag target and release metadata before its temporary publisher branch was removed by cleanup run `31205917061`, job `92956811061`.
 
 The release tag remains policy-pinned to the validated release SHA. Post-release documentation may advance `master` without moving the `v0.3.0` tag.
