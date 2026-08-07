@@ -103,7 +103,10 @@ impl CoverageCollector {
     }
 
     fn add_pending_event(&mut self, position: u64, change: i128) -> Result<(), AlignGaugeError> {
-        let previous = self.pending_events.get(&position).copied().unwrap_or(0);
+        let previous = match self.pending_events.get(&position) {
+            Some(value) => *value,
+            None => 0,
+        };
         let combined = previous
             .checked_add(change)
             .ok_or_else(|| coverage_overflow("pending coverage event"))?;
@@ -128,10 +131,7 @@ impl CoverageCollector {
     }
 
     fn materialize_pending_events(&mut self) -> Result<(), AlignGaugeError> {
-        loop {
-            let Some((&position, &change)) = self.pending_events.first_key_value() else {
-                break;
-            };
+        while let Some((&position, &change)) = self.pending_events.first_key_value() {
             if position > self.chunk_end {
                 break;
             }
