@@ -2,7 +2,7 @@ name: Samtools Stats Validation
 
 on:
   push:
-    branches: [master, milestone-10-samtools-stats]
+    branches: [master]
     paths:
       - ".github/workflows/samtools-stats-validation.yml"
       - "crates/aligngauge-cli/**"
