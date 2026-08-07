@@ -10,6 +10,10 @@ on:
       - crates/aligngauge-formats/**
       - docs/adr/ADR-0005-BED_UNKNOWN_CONTIG_POLICY.md
 
+concurrency:
+  group: milestone-8-formats-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
@@ -29,7 +33,7 @@ jobs:
           rustc --version --verbose
           cargo --version
 
-      - name: Correct merge-event tests
+      - name: Harden BED field parsing
         shell: bash
         run: |
           set -euo pipefail
@@ -40,41 +44,90 @@ jobs:
           path = Path("crates/aligngauge-formats/src/bed.rs")
           text = path.read_text()
 
-          pattern = re.compile(
-              r"assert_eq!\(targets\.normalization\.overlap_merges, 1\);\s*"
-              r"assert_eq!\(targets\.normalization\.adjacency_merges, 1\);"
+          old = "    let mut stats = BedParseStats::default();\n    let mut intervals = Vec::new();"
+          new = (
+              "    let mut stats = BedParseStats::default();\n"
+              "    let mut intervals = Vec::new();\n"
+              "    let mut expected_field_count = None;"
           )
-          replacement = (
-              "assert_eq!(targets.normalization.overlap_merges, 2);\n"
-              "        assert_eq!(targets.normalization.adjacency_merges, 0);"
-          )
-          text, count = pattern.subn(replacement, text, count=1)
-          if count != 1:
-              raise SystemExit(f"expected one mixed-merge expectation block, found {count}")
+          if text.count(old) != 1:
+              raise SystemExit("expected one parser-state initialization block")
+          text = text.replace(old, new, 1)
 
-          marker = "    #[test]\n    fn configurable_flanks_clip_only_at_authoritative_boundaries() {"
-          adjacency_test = '''    #[test]
-          fn directly_adjacent_intervals_merge_as_adjacency() {
-              let parsed = parse_bed_bytes(
-                  b"chr1\\t10\\t20\\tA\\nchr1\\t20\\t30\\tB\\n",
-                  &dictionary(),
-              )
-              .expect("BED should parse");
-              let targets = normalize_targets(parsed, TargetNormalizationConfig::default())
-                  .expect("normalization should succeed");
-              assert_eq!(targets.merged_intervals.len(), 1);
-              assert_eq!(targets.merged_intervals[0].start, 10);
-              assert_eq!(targets.merged_intervals[0].end, 30);
-              assert_eq!(targets.merged_intervals[0].source_interval_indices, [0, 1]);
-              assert_eq!(targets.normalization.overlap_merges, 0);
-              assert_eq!(targets.normalization.adjacency_merges, 1);
+          old = (
+              "        let fields = split_fields(line, line_number)?;\n"
+              "        let interval = parse_interval(&fields, line_number, intervals.len(), dictionary)?;"
+          )
+          new = (
+              "        let fields = split_fields(line, line_number)?;\n"
+              "        validate_field_count_consistency(&fields, line_number, &mut expected_field_count)?;\n"
+              "        let interval = parse_interval(&fields, line_number, intervals.len(), dictionary)?;"
+          )
+          if text.count(old) != 1:
+              raise SystemExit("expected one parser interval block")
+          text = text.replace(old, new, 1)
+
+          pattern = re.compile(
+              r"fn split_fields\(line: &str, line_number: u64\) -> Result<Vec<&str>, AlignGaugeError> \{.*?\n\}\n\nfn parse_interval\(",
+              re.S,
+          )
+          replacement = '''fn split_fields(line: &str, line_number: u64) -> Result<Vec<&str>, AlignGaugeError> {
+              if line.contains('\\t')
+                  && line
+                      .split('\\t')
+                      .any(|segment| segment.trim_matches(' ').is_empty())
+              {
+                  return Err(target_format_error(
+                      line_number,
+                      "BED interval contains an empty tab-delimited field",
+                  ));
+              }
+              let fields: Vec<&str> = line.split_ascii_whitespace().collect();
+              if !(3..=12).contains(&fields.len()) {
+                  return Err(target_format_error(
+                      line_number,
+                      "BED interval must contain 3 through 12 fields",
+                  )
+                  .with_detail(
+                      "field_count",
+                      u64::try_from(fields.len()).unwrap_or(u64::MAX),
+                  ));
+              }
+              Ok(fields)
           }
 
-          #[test]
-          fn configurable_flanks_clip_only_at_authoritative_boundaries() {'''
-          if text.count(marker) != 1:
-              raise SystemExit("expected exactly one configurable-flank test marker")
-          path.write_text(text.replace(marker, adjacency_test, 1))
+          fn validate_field_count_consistency(
+              fields: &[&str],
+              line_number: u64,
+              expected_field_count: &mut Option<usize>,
+          ) -> Result<(), AlignGaugeError> {
+              if let Some(expected) = *expected_field_count {
+                  if fields.len() != expected {
+                      return Err(target_format_error(
+                          line_number,
+                          "BED field count is inconsistent within the target dataset",
+                      )
+                      .with_detail(
+                          "expected_field_count",
+                          u64::try_from(expected).unwrap_or(u64::MAX),
+                      )
+                      .with_detail(
+                          "actual_field_count",
+                          u64::try_from(fields.len()).unwrap_or(u64::MAX),
+                      ));
+                  }
+              } else {
+                  *expected_field_count = Some(fields.len());
+              }
+              Ok(())
+          }
+
+          fn parse_interval('''
+          text, count = pattern.subn(replacement, text, count=1)
+          if count != 1:
+              raise SystemExit(f"expected one split_fields function, found {count}")
+
+          path.write_text(text)
           PY
 
       - name: Refresh lockfile
@@ -119,5 +172,5 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add Cargo.lock crates/aligngauge-formats/src/bed.rs crates/aligngauge-formats/src/lib.rs
-          git commit -m 'build: validate Milestone 8 formats slice'
+          git commit -m 'feat: harden Milestone 8 BED field parsing'
           git push origin HEAD:milestone-8-bed-normalization
