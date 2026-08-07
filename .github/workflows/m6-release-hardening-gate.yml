@@ -1,0 +1,907 @@
+name: M6 Release Hardening Gate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - ".github/workflows/m6-release-hardening-gate.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  hardening:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Apply Milestone 6 hardening candidate
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new, label):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected one match, found {count}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          model_path = Path('crates/aligngauge-core/src/model.rs')
+          model = model_path.read_text(encoding='utf-8')
+          start = model.index('/// Exact canonical coverage results.\n')
+          end = model.index('/// Correctness-preserving warning.\n', start)
+          coverage_model = r'''/// Per-reference canonical coverage reduction.
+          #[derive(Debug, Clone, Eq, PartialEq)]
+          pub struct PerReferenceCoverageSummary {
+              /// Reference name in BAM header order.
+              pub name: String,
+              /// Declared reference length.
+              pub length: u64,
+              /// Accepted aligned M/=/X bases assigned to this reference.
+              pub accepted_aligned_bases: u64,
+              /// Reference positions with depth greater than zero.
+              pub covered_reference_bases: u64,
+              /// Reference positions with zero depth.
+              pub uncovered_reference_bases: u64,
+              /// Deterministically rounded six-decimal mean depth.
+              pub mean_depth: String,
+          }
+
+          impl ToJson for PerReferenceCoverageSummary {
+              fn to_json(&self) -> JsonValue {
+                  JsonValue::Object(BTreeMap::from([
+                      (
+                          String::from("accepted_aligned_bases"),
+                          self.accepted_aligned_bases.to_json(),
+                      ),
+                      (
+                          String::from("covered_reference_bases"),
+                          self.covered_reference_bases.to_json(),
+                      ),
+                      (String::from("length"), self.length.to_json()),
+                      (String::from("mean_depth"), self.mean_depth.to_json()),
+                      (String::from("name"), self.name.to_json()),
+                      (
+                          String::from("uncovered_reference_bases"),
+                          self.uncovered_reference_bases.to_json(),
+                      ),
+                  ]))
+              }
+          }
+
+          /// Exact canonical coverage results.
+          #[derive(Debug, Clone, Eq, PartialEq)]
+          pub struct CoverageSummary {
+              /// Coverage policy used.
+              pub policy: CoveragePolicy,
+              /// Accepted aligned reference bases.
+              pub total_accepted_aligned_bases: u64,
+              /// Whole-run depth histogram, keyed by depth.
+              pub depth_histogram: BTreeMap<String, u64>,
+              /// Reference bases meeting each configured threshold.
+              pub threshold_bases: BTreeMap<String, u64>,
+              /// Cumulative threshold percentages with deterministic decimal rendering.
+              pub threshold_percentages: BTreeMap<String, String>,
+              /// Covered reference bases.
+              pub covered_reference_bases: u64,
+              /// Uncovered reference bases.
+              pub uncovered_reference_bases: u64,
+              /// Per-reference reductions in BAM header order.
+              pub per_reference: Vec<PerReferenceCoverageSummary>,
+          }
+
+          impl ToJson for CoverageSummary {
+              fn to_json(&self) -> JsonValue {
+                  JsonValue::Object(BTreeMap::from([
+                      (
+                          String::from("covered_reference_bases"),
+                          self.covered_reference_bases.to_json(),
+                      ),
+                      (
+                          String::from("depth_histogram"),
+                          self.depth_histogram.to_json(),
+                      ),
+                      (String::from("per_reference"), self.per_reference.to_json()),
+                      (String::from("policy"), self.policy.to_json()),
+                      (
+                          String::from("threshold_bases"),
+                          self.threshold_bases.to_json(),
+                      ),
+                      (
+                          String::from("threshold_percentages"),
+                          self.threshold_percentages.to_json(),
+                      ),
+                      (
+                          String::from("total_accepted_aligned_bases"),
+                          self.total_accepted_aligned_bases.to_json(),
+                      ),
+                      (
+                          String::from("uncovered_reference_bases"),
+                          self.uncovered_reference_bases.to_json(),
+                      ),
+                  ]))
+              }
+          }
+
+          '''
+          model_path.write_text(model[:start] + coverage_model + model[end:], encoding='utf-8')
+
+          replace_once(
+              'crates/aligngauge-core/src/lib.rs',
+              '    MateOverlapPolicy, MetricDefinition, PerReferenceCounters, Provenance, RecordInclusion,\n    Summary, SystemInfo, Warning,\n',
+              '    MateOverlapPolicy, MetricDefinition, PerReferenceCounters, PerReferenceCoverageSummary,\n    Provenance, RecordInclusion, Summary, SystemInfo, Warning,\n',
+              'core coverage export',
+          )
+
+          report_path = Path('crates/aligngauge-coverage/src/report.rs')
+          report = report_path.read_text(encoding='utf-8')
+          report = report.replace(
+              '    AlignGaugeError, CoveragePolicy, CoverageSummary, JsonValue, MateOverlapPolicy, Provenance,\n    RecordInclusion, ToJson,\n',
+              '    AlignGaugeError, CoveragePolicy, CoverageSummary, JsonValue, MateOverlapPolicy,\n    PerReferenceCoverageSummary, Provenance, RecordInclusion, ToJson,\n',
+              1,
+          )
+          old = '''            threshold_bases: self
+                .threshold_bases
+                .iter()
+                .map(|(threshold, bases)| (threshold.to_string(), *bases))
+                .collect(),
+            covered_reference_bases: self.covered_reference_bases,
+            uncovered_reference_bases: self.uncovered_reference_bases,
+        }
+'''
+          new = '''            threshold_bases: self
+                .threshold_bases
+                .iter()
+                .map(|(threshold, bases)| (threshold.to_string(), *bases))
+                .collect(),
+            threshold_percentages: self
+                .threshold_percentages
+                .iter()
+                .map(|(threshold, percentage)| (threshold.to_string(), percentage.clone()))
+                .collect(),
+            covered_reference_bases: self.covered_reference_bases,
+            uncovered_reference_bases: self.uncovered_reference_bases,
+            per_reference: self
+                .per_reference
+                .iter()
+                .map(|reference| PerReferenceCoverageSummary {
+                    name: reference.name.clone(),
+                    length: reference.length,
+                    accepted_aligned_bases: reference.accepted_aligned_bases,
+                    covered_reference_bases: reference.covered_reference_bases,
+                    uncovered_reference_bases: reference.uncovered_reference_bases,
+                    mean_depth: reference.mean_depth.clone(),
+                })
+                .collect(),
+        }
+'''
+          if report.count(old) != 1:
+              raise SystemExit('coverage core projection marker mismatch')
+          report_path.write_text(report.replace(old, new, 1), encoding='utf-8')
+
+          contracts_path = Path('crates/aligngauge-core/tests/contracts.rs')
+          contracts = contracts_path.read_text(encoding='utf-8')
+          contracts = contracts.replace(
+              '    PerReferenceCounters, Provenance, RecordInclusion, Summary, SystemInfo, ToJson, Warning,\n',
+              '    PerReferenceCounters, PerReferenceCoverageSummary, Provenance, RecordInclusion, Summary,\n    SystemInfo, ToJson, Warning,\n',
+              1,
+          )
+          old = '''        threshold_bases: BTreeMap::from([(String::from("1"), 100)]),
+        covered_reference_bases: 100,
+        uncovered_reference_bases: 900,
+    };
+'''
+          new = '''        threshold_bases: BTreeMap::from([(String::from("1"), 100)]),
+        threshold_percentages: BTreeMap::from([(String::from("1"), String::from("10.000000"))]),
+        covered_reference_bases: 100,
+        uncovered_reference_bases: 900,
+        per_reference: vec![PerReferenceCoverageSummary {
+            name: String::from("chr1"),
+            length: 1_000,
+            accepted_aligned_bases: 100,
+            covered_reference_bases: 100,
+            uncovered_reference_bases: 900,
+            mean_depth: String::from("0.100000"),
+        }],
+    };
+'''
+          if contracts.count(old) != 1:
+              raise SystemExit('core sample coverage marker mismatch')
+          contracts_path.write_text(contracts.replace(old, new, 1), encoding='utf-8')
+
+          Path('crates/aligngauge-core/tests/golden/summary.json').write_text('''{
+            "alignment_counters": {
+              "status": "available",
+              "value": {
+                "duplicate": 0,
+                "mapped": 1,
+                "mate_mapped": 0,
+                "mate_unmapped": 0,
+                "paired": 0,
+                "primary": 2,
+                "proper_pair": 0,
+                "qc_fail": 0,
+                "qc_pass": 2,
+                "read1": 0,
+                "read2": 0,
+                "secondary": 0,
+                "singleton": 0,
+                "supplementary": 0,
+                "total": 2,
+                "unmapped": 1
+              }
+            },
+            "application": {
+              "git_commit": {
+                "status": "available",
+                "value": "0123456789abcdef"
+              },
+              "version": "0.1.0-test"
+            },
+            "coverage": {
+              "status": "available",
+              "value": {
+                "covered_reference_bases": 100,
+                "depth_histogram": {
+                  "0": 900,
+                  "1": 100
+                },
+                "per_reference": [
+                  {
+                    "accepted_aligned_bases": 100,
+                    "covered_reference_bases": 100,
+                    "length": 1000,
+                    "mean_depth": "0.100000",
+                    "name": "chr1",
+                    "uncovered_reference_bases": 900
+                  }
+                ],
+                "policy": {
+                  "include_duplicates": false,
+                  "include_qc_fail": false,
+                  "include_secondary": false,
+                  "include_supplementary": false,
+                  "mate_overlap_correction": false,
+                  "minimum_mapq": 0,
+                  "name": "aligngauge-v0.1"
+                },
+                "threshold_bases": {
+                  "1": 100
+                },
+                "threshold_percentages": {
+                  "1": "10.000000"
+                },
+                "total_accepted_aligned_bases": 100,
+                "uncovered_reference_bases": 900
+              }
+            },
+            "metric_definitions": {
+              "alignment.total": {
+                "description": "Decoded alignment records",
+                "unit": "records"
+              }
+            },
+            "per_reference_counters": {
+              "status": "available",
+              "value": [
+                {
+                  "length": 1000,
+                  "mapped": 1,
+                  "name": "chr1",
+                  "unmapped": {
+                    "reason": "not_defined_by_canonical_profile",
+                    "status": "unavailable"
+                  }
+                }
+              ]
+            },
+            "schema_version": "1.0.0",
+            "warnings": [
+              {
+                "code": "test_warning",
+                "message": "Synthetic fixture"
+              }
+            ]
+          }
+          ''', encoding='utf-8')
+
+          metrics_path = Path('crates/aligngauge-metrics/src/lib.rs')
+          metrics = metrics_path.read_text(encoding='utf-8')
+          start = metrics.index('    /// Render exact Samtools 1.24 idxstats-compatible text.\n')
+          end = metrics.index('/// Single-pass checked collector preserving header reference order.\n', start)
+          idxstats = r'''    /// Render exact Samtools 1.24 idxstats-compatible text.
+              ///
+              /// # Errors
+              /// Returns `compatibility_unavailable` instead of inventing zero when a required
+              /// per-reference unmapped value is unavailable.
+              pub fn render_samtools_idxstats(&self) -> Result<String, AlignGaugeError> {
+                  let mut output = String::new();
+                  for reference in &self.per_reference {
+                      let unmapped = compatibility_unmapped(reference)?;
+                      writeln!(
+                          output,
+                          "{}\t{}\t{}\t{}",
+                          reference.name, reference.length, reference.mapped, unmapped
+                      )
+                      .expect("writing to String cannot fail");
+                  }
+                  writeln!(
+                      output,
+                      "*\t0\t{}\t{}",
+                      self.no_coordinate_mapped, self.no_coordinate_unmapped
+                  )
+                  .expect("writing to String cannot fail");
+                  Ok(output)
+              }
+          }
+
+          fn compatibility_unmapped(reference: &PerReferenceCounters) -> Result<u64, AlignGaugeError> {
+              match &reference.unmapped {
+                  Availability::Available(value) => Ok(*value),
+                  Availability::Unavailable { reason } => Err(AlignGaugeError::new(
+                      ErrorCategory::CompatibilityUnavailable,
+                      "Samtools idxstats export requires a per-reference unmapped count",
+                  )
+                  .with_detail("reference", reference.name.clone())
+                  .with_detail("unavailable_reason", reason.clone())),
+              }
+          }
+
+          '''
+          metrics = metrics[:start] + idxstats + metrics[end:]
+          metrics += r'''
+
+          #[cfg(test)]
+          mod compatibility_export_tests {
+              use aligngauge_core::{Availability, ErrorCategory, PerReferenceCounters};
+
+              use super::compatibility_unmapped;
+
+              #[test]
+              fn unavailable_idxstats_source_metric_is_never_rendered_as_zero() {
+                  let reference = PerReferenceCounters {
+                      name: String::from("chr1"),
+                      length: 100,
+                      mapped: 1,
+                      unmapped: Availability::unavailable("collector_not_enabled"),
+                  };
+                  let error = compatibility_unmapped(&reference).expect_err("must fail closed");
+                  assert_eq!(error.category(), ErrorCategory::CompatibilityUnavailable);
+              }
+          }
+          '''
+          metrics_path.write_text(metrics, encoding='utf-8')
+
+          counters_test = Path('crates/aligngauge-metrics/tests/counters.rs')
+          text = counters_test.read_text(encoding='utf-8')
+          text = text.replace(
+              '        basic.render_samtools_idxstats(),\n',
+              '        basic.render_samtools_idxstats().expect("render idxstats"),\n',
+              1,
+          )
+          counters_test.write_text(text, encoding='utf-8')
+
+          cli_lib = Path('crates/aligngauge-cli/src/lib.rs')
+          lib = cli_lib.read_text(encoding='utf-8')
+          hook_marker = '/// Final in-memory v0.1 analysis result produced by one BAM traversal.\n'
+          hook_code = r'''/// Deterministic release-pipeline checkpoints exposed for fault-injection tests.
+          #[derive(Debug, Clone, Copy, Eq, PartialEq)]
+          pub enum ReleaseCheckpoint {
+              /// Immediately before the counter collector observes a validated record.
+              BeforeCounterCollector,
+              /// After counters observe a record but before coverage observes it.
+              BeforeCoverageCollector,
+              /// Immediately before canonical output serialization.
+              BeforeSerialization,
+          }
+
+          /// Hook used to inject deterministic release-pipeline failures.
+          pub trait ReleaseHook {
+              /// Observe one checkpoint.
+              ///
+              /// # Errors
+              /// Returning an error aborts the release operation immediately.
+              fn checkpoint(&mut self, checkpoint: ReleaseCheckpoint) -> Result<(), AlignGaugeError>;
+          }
+
+          #[derive(Default)]
+          struct NoopReleaseHook;
+
+          impl ReleaseHook for NoopReleaseHook {
+              fn checkpoint(&mut self, _checkpoint: ReleaseCheckpoint) -> Result<(), AlignGaugeError> {
+                  Ok(())
+              }
+          }
+
+          '''
+          if lib.count(hook_marker) != 1:
+              raise SystemExit('release hook marker mismatch')
+          lib = lib.replace(hook_marker, hook_code + hook_marker, 1)
+
+          old_bundle = '''    pub fn output_bundle(&self) -> OutputBundle {
+              OutputBundle::new(
+                  self.summary.to_json_pretty().into_bytes(),
+                  self.provenance.to_json_pretty().into_bytes(),
+              )
+          }
+          '''
+          new_bundle = '''    pub fn output_bundle(&self) -> OutputBundle {
+              OutputBundle::new(
+                  self.summary.to_json_pretty().into_bytes(),
+                  self.provenance.to_json_pretty().into_bytes(),
+              )
+          }
+
+              /// Build the canonical bundle after an injectable serialization checkpoint.
+              ///
+              /// # Errors
+              /// Returns the injected typed failure before any output bundle is exposed.
+              pub fn output_bundle_with_hook(
+                  &self,
+                  hook: &mut impl ReleaseHook,
+              ) -> Result<OutputBundle, AlignGaugeError> {
+                  hook.checkpoint(ReleaseCheckpoint::BeforeSerialization)?;
+                  Ok(self.output_bundle())
+              }
+
+              /// Build the canonical bundle plus pinned Samtools compatibility files.
+              ///
+              /// # Errors
+              /// Fails closed if a required compatibility source metric is unavailable.
+              pub fn output_bundle_with_samtools_compatibility(
+                  &self,
+              ) -> Result<OutputBundle, AlignGaugeError> {
+                  let mut bundle = self.output_bundle();
+                  bundle.insert(
+                      "samtools.flagstat.txt",
+                      self.counters.render_samtools_flagstat().into_bytes(),
+                  )?;
+                  bundle.insert(
+                      "samtools.idxstats.txt",
+                      self.counters.render_samtools_idxstats()?.into_bytes(),
+                  )?;
+                  Ok(bundle)
+              }
+          '''
+          if lib.count(old_bundle) != 1:
+              raise SystemExit('output bundle marker mismatch')
+          lib = lib.replace(old_bundle, new_bundle, 1)
+
+          old_signature = 'pub fn analyze_release(config: &ResolvedConfig) -> Result<ReleaseReport, AlignGaugeError> {\n'
+          new_signature = '''pub fn analyze_release(config: &ResolvedConfig) -> Result<ReleaseReport, AlignGaugeError> {
+              analyze_release_with_hook(config, &mut NoopReleaseHook)
+          }
+
+          /// Analyze one v0.1 run with deterministic fault-injection checkpoints.
+          ///
+          /// # Errors
+          /// Returns the first injected or production release failure.
+          pub fn analyze_release_with_hook(
+              config: &ResolvedConfig,
+              hook: &mut impl ReleaseHook,
+          ) -> Result<ReleaseReport, AlignGaugeError> {
+          '''
+          if lib.count(old_signature) != 1:
+              raise SystemExit('release analyze signature mismatch')
+          lib = lib.replace(old_signature, new_signature, 1)
+          old_loop = '''    while let Some(record) = reader.next_record()? {
+              counter_collector.observe(&record)?;
+              coverage_collector.observe(&record)?;
+          }
+          '''
+          new_loop = '''    while let Some(record) = reader.next_record()? {
+              hook.checkpoint(ReleaseCheckpoint::BeforeCounterCollector)?;
+              counter_collector.observe(&record)?;
+              hook.checkpoint(ReleaseCheckpoint::BeforeCoverageCollector)?;
+              coverage_collector.observe(&record)?;
+          }
+          '''
+          if lib.count(old_loop) != 1:
+              raise SystemExit('collector loop marker mismatch')
+          cli_lib.write_text(lib.replace(old_loop, new_loop, 1), encoding='utf-8')
+
+          cli_main = Path('crates/aligngauge-cli/src/main.rs')
+          main = cli_main.read_text(encoding='utf-8')
+          old_idx = '                CompatibilityFormat::SamtoolsIdxstats => report.render_samtools_idxstats(),\n'
+          new_idx = '''                CompatibilityFormat::SamtoolsIdxstats => {
+                      match report.render_samtools_idxstats() {
+                          Ok(output) => output,
+                          Err(error) => return exit_with_error(&error, LogFormat::Human),
+                      }
+                  }
+          '''
+          if main.count(old_idx) != 1:
+              raise SystemExit('CLI idxstats marker mismatch')
+          cli_main.write_text(main.replace(old_idx, new_idx, 1), encoding='utf-8')
+
+          Path('schemas/summary.schema.json').write_text(r'''{
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "$id": "https://aligngauge.dev/schemas/summary-1.0.0.json",
+            "title": "AlignGauge summary.json",
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["schema_version", "application", "metric_definitions", "alignment_counters", "per_reference_counters", "coverage", "warnings"],
+            "properties": {
+              "schema_version": {"const": "1.0.0"},
+              "application": {"type": "object"},
+              "metric_definitions": {"type": "object"},
+              "alignment_counters": {"$ref": "#/$defs/availability"},
+              "per_reference_counters": {"$ref": "#/$defs/availability"},
+              "coverage": {"oneOf": [
+                {"$ref": "#/$defs/unavailable"},
+                {"type": "object", "additionalProperties": false, "required": ["status", "value"], "properties": {
+                  "status": {"const": "available"},
+                  "value": {"$ref": "#/$defs/coverage"}
+                }}
+              ]},
+              "warnings": {"type": "array", "items": {"type": "object"}}
+            },
+            "$defs": {
+              "availability": {"oneOf": [
+                {"$ref": "#/$defs/unavailable"},
+                {"type": "object", "required": ["status", "value"], "properties": {"status": {"const": "available"}, "value": true}}
+              ]},
+              "unavailable": {"type": "object", "additionalProperties": false, "required": ["status", "reason"], "properties": {"status": {"const": "unavailable"}, "reason": {"type": "string", "minLength": 1}}},
+              "coverage": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["policy", "total_accepted_aligned_bases", "depth_histogram", "threshold_bases", "threshold_percentages", "covered_reference_bases", "uncovered_reference_bases", "per_reference"],
+                "properties": {
+                  "policy": {"type": "object"},
+                  "total_accepted_aligned_bases": {"type": "integer", "minimum": 0},
+                  "depth_histogram": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
+                  "threshold_bases": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
+                  "threshold_percentages": {"type": "object", "additionalProperties": {"type": "string", "pattern": "^[0-9]+\\.[0-9]{6}$"}},
+                  "covered_reference_bases": {"type": "integer", "minimum": 0},
+                  "uncovered_reference_bases": {"type": "integer", "minimum": 0},
+                  "per_reference": {"type": "array", "items": {"$ref": "#/$defs/per_reference_coverage"}}
+                }
+              },
+              "per_reference_coverage": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["name", "length", "accepted_aligned_bases", "covered_reference_bases", "uncovered_reference_bases", "mean_depth"],
+                "properties": {
+                  "name": {"type": "string"},
+                  "length": {"type": "integer", "minimum": 0},
+                  "accepted_aligned_bases": {"type": "integer", "minimum": 0},
+                  "covered_reference_bases": {"type": "integer", "minimum": 0},
+                  "uncovered_reference_bases": {"type": "integer", "minimum": 0},
+                  "mean_depth": {"type": "string", "pattern": "^[0-9]+\\.[0-9]{6}$"}
+                }
+              }
+            }
+          }
+          ''', encoding='utf-8')
+
+          Path('schemas/provenance.schema.json').write_text(r'''{
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "$id": "https://aligngauge.dev/schemas/provenance-1.0.0.json",
+            "title": "AlignGauge provenance.json",
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["schema_version", "application", "resolved_config", "input", "header_identity", "backend_versions", "analysis_plan", "resource_limits", "stage_timings_ns", "normalization_actions", "compatibility_profiles", "warnings", "errors", "system"],
+            "properties": {
+              "schema_version": {"const": "1.0.0"},
+              "application": {"type": "object"},
+              "resolved_config": {"type": "object", "required": ["schema_version", "input", "outdir", "threads", "io_threads", "memory_limit_bytes", "coverage_thresholds", "log_format", "quiet", "verbose", "preserve_failed_staging"]},
+              "input": {"type": "object", "required": ["path", "size_bytes", "checksum"]},
+              "header_identity": {"type": "object"},
+              "backend_versions": {"type": "object", "additionalProperties": {"type": "string"}},
+              "analysis_plan": {"type": "object", "required": ["bam_traversals", "field_plan", "coverage_profile", "coverage_strategy", "coverage_chunk_size_bases", "coverage_memory_plan", "counter_profile"]},
+              "resource_limits": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
+              "stage_timings_ns": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
+              "normalization_actions": {"type": "array", "items": {"type": "string"}},
+              "compatibility_profiles": {"type": "array", "items": {"type": "string"}},
+              "warnings": {"type": "array", "items": {"type": "object"}},
+              "errors": {"type": "array"},
+              "system": {"type": "object", "required": ["os", "architecture", "logical_cpus"]}
+            }
+          }
+          ''', encoding='utf-8')
+
+          Path('crates/aligngauge-cli/tests/release_v0_1.rs').write_text(r'''use std::fs;
+          use std::path::{Path, PathBuf};
+          use std::process::Command;
+          use std::sync::atomic::{AtomicU64, Ordering};
+          use std::time::{SystemTime, UNIX_EPOCH};
+
+          use aligngauge_cli::{
+              ReleaseCheckpoint, ReleaseHook, analyze_release, analyze_release_with_hook,
+          };
+          use aligngauge_core::{
+              AlignGaugeError, AtomicPublisher, ConfigOverrides, ErrorCategory, MapEnvironment,
+              PublicationHook, PublicationStep, resolve_config,
+          };
+
+          static NEXT_ID: AtomicU64 = AtomicU64::new(0);
+
+          fn repository_root() -> PathBuf {
+              Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+          }
+
+          fn fixture(name: &str) -> PathBuf {
+              repository_root().join("testdata/fixtures").join(name)
+          }
+
+          fn temp_path(label: &str) -> PathBuf {
+              let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
+              let nanos = SystemTime::now()
+                  .duration_since(UNIX_EPOCH)
+                  .expect("clock after epoch")
+                  .as_nanos();
+              std::env::temp_dir().join(format!(
+                  "aligngauge-m6-{label}-{}-{nanos}-{id}",
+                  std::process::id()
+              ))
+          }
+
+          fn config(input: &Path, outdir: &Path) -> aligngauge_core::ResolvedConfig {
+              resolve_config(
+                  None,
+                  &MapEnvironment::new(),
+                  ConfigOverrides {
+                      input: Some(input.to_path_buf()),
+                      outdir: Some(outdir.to_path_buf()),
+                      memory_limit_bytes: Some(64 * 1024 * 1024),
+                      coverage_thresholds: Some(vec![1, 10, 20, 30]),
+                      ..ConfigOverrides::default()
+                  },
+              )
+              .expect("resolve release config")
+          }
+
+          fn run_release(input: &Path, outdir: &Path, extra: &[&str]) -> std::process::Output {
+              let mut command = Command::new(env!("CARGO_BIN_EXE_aligngauge"));
+              command
+                  .arg("qc")
+                  .arg("--input")
+                  .arg(input)
+                  .arg("--outdir")
+                  .arg(outdir)
+                  .arg("--memory-limit")
+                  .arg("64MiB")
+                  .args(extra);
+              command.output().expect("run release CLI")
+          }
+
+          #[test]
+          fn valid_and_empty_release_runs_publish_complete_outputs() {
+              for name in ["basic.bam", "empty.bam"] {
+                  let outdir = temp_path("valid");
+                  let output = run_release(&fixture(name), &outdir, &["--quiet"]);
+                  assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+                  assert!(outdir.join("_SUCCESS").is_file());
+                  let summary = fs::read_to_string(outdir.join("summary.json")).expect("summary");
+                  let provenance =
+                      fs::read_to_string(outdir.join("provenance.json")).expect("provenance");
+                  assert!(summary.contains("\"threshold_percentages\""));
+                  assert!(summary.contains("\"per_reference\""));
+                  assert!(provenance.contains("\"bam_traversals\": 1"));
+                  fs::remove_dir_all(outdir).expect("cleanup output");
+              }
+          }
+
+          #[test]
+          fn corrupt_and_unsorted_inputs_never_publish_a_destination() {
+              for (name, category) in [
+                  ("truncated_bgzf.bam", "input_corrupt"),
+                  ("coordinate_regression.bam", "input_unsorted"),
+              ] {
+                  let outdir = temp_path("invalid");
+                  let output = run_release(&fixture(name), &outdir, &["--quiet"]);
+                  assert!(!output.status.success());
+                  assert!(String::from_utf8_lossy(&output.stderr).contains(category));
+                  assert!(!outdir.exists());
+              }
+          }
+
+          #[test]
+          fn existing_destination_is_rejected_before_analysis_and_preserved() {
+              let outdir = temp_path("exists");
+              fs::create_dir_all(&outdir).expect("create existing destination");
+              fs::write(outdir.join("sentinel"), b"keep").expect("write sentinel");
+              let output = run_release(&fixture("basic.bam"), &outdir, &["--quiet"]);
+              assert_eq!(output.status.code(), Some(14));
+              assert_eq!(fs::read(outdir.join("sentinel")).expect("sentinel"), b"keep");
+              assert!(!outdir.join("_SUCCESS").exists());
+              fs::remove_dir_all(outdir).expect("cleanup existing destination");
+          }
+
+          #[cfg(unix)]
+          #[test]
+          fn unwritable_parent_fails_without_completed_output() {
+              use std::os::unix::fs::PermissionsExt as _;
+
+              let parent = temp_path("permission-parent");
+              fs::create_dir_all(&parent).expect("create parent");
+              fs::set_permissions(&parent, fs::Permissions::from_mode(0o500)).expect("chmod parent");
+              let probe = parent.join("probe");
+              if fs::write(&probe, b"probe").is_ok() {
+                  let _ = fs::remove_file(&probe);
+                  fs::set_permissions(&parent, fs::Permissions::from_mode(0o700))
+                      .expect("restore permissions");
+                  fs::remove_dir_all(parent).expect("cleanup parent");
+                  return;
+              }
+              let outdir = parent.join("results");
+              let output = run_release(&fixture("basic.bam"), &outdir, &["--quiet"]);
+              assert_eq!(output.status.code(), Some(15));
+              assert!(!outdir.exists());
+              fs::set_permissions(&parent, fs::Permissions::from_mode(0o700))
+                  .expect("restore permissions");
+              fs::remove_dir_all(parent).expect("cleanup parent");
+          }
+
+          struct FailReleaseAt(ReleaseCheckpoint);
+
+          impl ReleaseHook for FailReleaseAt {
+              fn checkpoint(&mut self, checkpoint: ReleaseCheckpoint) -> Result<(), AlignGaugeError> {
+                  if checkpoint == self.0 {
+                      return Err(AlignGaugeError::new(
+                          ErrorCategory::InternalInvariant,
+                          "injected release pipeline failure",
+                      ));
+                  }
+                  Ok(())
+              }
+          }
+
+          #[test]
+          fn injected_collector_failure_aborts_before_output_exists() {
+              let outdir = temp_path("collector-failure");
+              let config = config(&fixture("basic.bam"), &outdir);
+              let error = analyze_release_with_hook(
+                  &config,
+                  &mut FailReleaseAt(ReleaseCheckpoint::BeforeCoverageCollector),
+              )
+              .expect_err("injected collector failure must abort");
+              assert_eq!(error.category(), ErrorCategory::InternalInvariant);
+              assert!(!outdir.exists());
+          }
+
+          #[test]
+          fn injected_serialization_failure_exposes_no_output_bundle_or_destination() {
+              let outdir = temp_path("serialization-failure");
+              let report = analyze_release(&config(&fixture("basic.bam"), &outdir))
+                  .expect("analyze release");
+              let error = report
+                  .output_bundle_with_hook(&mut FailReleaseAt(ReleaseCheckpoint::BeforeSerialization))
+                  .expect_err("serialization checkpoint must abort");
+              assert_eq!(error.category(), ErrorCategory::InternalInvariant);
+              assert!(!outdir.exists());
+          }
+
+          struct FailPublicationBeforeRename;
+
+          impl PublicationHook for FailPublicationBeforeRename {
+              fn checkpoint(
+                  &mut self,
+                  step: PublicationStep,
+                  _staging: &Path,
+                  _destination: &Path,
+              ) -> Result<(), AlignGaugeError> {
+                  if step == PublicationStep::BeforeRename {
+                      return Err(AlignGaugeError::new(
+                          ErrorCategory::OutputIo,
+                          "injected publication failure",
+                      ));
+                  }
+                  Ok(())
+              }
+          }
+
+          #[test]
+          fn injected_publication_failure_never_exposes_completed_destination() {
+              let outdir = temp_path("publication-failure");
+              let report = analyze_release(&config(&fixture("basic.bam"), &outdir))
+                  .expect("analyze release");
+              let bundle = report.output_bundle();
+              let publisher = AtomicPublisher::new(&outdir, false);
+              let error = publisher
+                  .publish_with_hook(&bundle, &mut FailPublicationBeforeRename)
+                  .expect_err("publication must fail");
+              assert_eq!(error.category(), ErrorCategory::OutputIo);
+              assert!(!outdir.exists());
+          }
+
+          #[test]
+          fn canonical_results_are_deterministic_after_timing_is_excluded() {
+              let outdir = temp_path("determinism");
+              let config = config(&fixture("chunk_boundary.bam"), &outdir);
+              let first = analyze_release(&config).expect("first release analysis");
+              let second = analyze_release(&config).expect("second release analysis");
+              assert_eq!(first.summary(), second.summary());
+              assert_eq!(first.input_traversals(), 1);
+              assert_eq!(second.input_traversals(), 1);
+              let mut first_provenance = first.provenance().clone();
+              let mut second_provenance = second.provenance().clone();
+              first_provenance.stage_timings_ns.clear();
+              second_provenance.stage_timings_ns.clear();
+              assert_eq!(first_provenance, second_provenance);
+          }
+
+          #[test]
+          fn optional_samtools_files_publish_from_complete_source_metrics() {
+              let outdir = temp_path("compatibility-files");
+              let report = analyze_release(&config(&fixture("basic.bam"), &outdir))
+                  .expect("analyze release");
+              let bundle = report
+                  .output_bundle_with_samtools_compatibility()
+                  .expect("build compatibility bundle");
+              AtomicPublisher::new(&outdir, false)
+                  .publish(&bundle)
+                  .expect("publish compatibility bundle");
+              assert!(outdir.join("samtools.flagstat.txt").is_file());
+              assert!(outdir.join("samtools.idxstats.txt").is_file());
+              assert!(outdir.join("_SUCCESS").is_file());
+              fs::remove_dir_all(outdir).expect("cleanup output");
+          }
+          ''', encoding='utf-8')
+          PY
+
+      - name: Format candidate
+        run: cargo fmt --all
+
+      - name: Run strict Clippy
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+      - name: Run complete test suite
+        run: cargo test --workspace --all-features --locked
+
+      - name: Exercise release E2E tests explicitly
+        run: cargo test -p aligngauge-cli --test release_v0_1 --locked -- --nocapture
+
+      - name: Validate actual release JSON against committed schemas
+        run: |
+          cargo build -p aligngauge-cli --locked
+          root="$(mktemp -d)"
+          trap 'rm -rf "$root"' EXIT
+          target/debug/aligngauge qc \
+            --input testdata/fixtures/basic.bam \
+            --outdir "$root/results" \
+            --memory-limit 64MiB \
+            --quiet
+          python - <<'PY' "$root/results"
+          import json
+          import sys
+          from pathlib import Path
+          import jsonschema
+          out = Path(sys.argv[1])
+          for name in ('summary', 'provenance'):
+              instance = json.loads((out / f'{name}.json').read_text())
+              schema = json.loads((Path('schemas') / f'{name}.schema.json').read_text())
+              jsonschema.Draft202012Validator(schema).validate(instance)
+          PY
+          test -f "$root/results/_SUCCESS"
+
+      - name: Build documentation
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --workspace --all-features --no-deps --locked
+
+      - name: Upload exact validated hardening files
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: m6-release-hardening-${{ github.sha }}
+          path: |
+            crates/aligngauge-core/src/model.rs
+            crates/aligngauge-core/src/lib.rs
+            crates/aligngauge-core/tests/contracts.rs
+            crates/aligngauge-core/tests/golden/summary.json
+            crates/aligngauge-coverage/src/report.rs
+            crates/aligngauge-metrics/src/lib.rs
+            crates/aligngauge-metrics/tests/counters.rs
+            crates/aligngauge-cli/src/lib.rs
+            crates/aligngauge-cli/src/main.rs
+            crates/aligngauge-cli/tests/release_v0_1.rs
+            schemas/summary.schema.json
+            schemas/provenance.schema.json
+          if-no-files-found: error
+          retention-days: 1
