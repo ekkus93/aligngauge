@@ -41,3 +41,7 @@ HG002 Preparation before Milestone 2 is considered complete.
 This file is also used as a harmless trigger for explicit HG002 validation after
 repository-wide history reconciliation. The trigger changes documentation only;
 all code, fixtures, reference scripts, and workflow semantics remain unchanged.
+
+The 2026-08-06 whole-repository runtime audit uses this documentation-only change
+to force Permanent CI, Full Runtime Validation, Reference Validation, and HG002
+Preparation to execute together on one exact final `master` SHA.
