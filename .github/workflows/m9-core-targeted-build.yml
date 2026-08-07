@@ -7,6 +7,7 @@ on:
     paths:
       - .github/workflows/m9-core-targeted-build.yml
       - .github/m9-core-targeted.py
+      - .github/m9-core-refactor.py
 
 concurrency:
   group: milestone-9-core-targeted-${{ github.ref }}
@@ -28,6 +29,9 @@ jobs:
 
       - name: Apply guarded integration edits
         run: python .github/m9-core-targeted.py
+
+      - name: Refactor generated finalizers
+        run: python .github/m9-core-refactor.py
 
       - name: Refresh lockfile
         run: cargo update --workspace
@@ -67,7 +71,7 @@ jobs:
             exit 0
           fi
           git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git config user.email '4189822+github-actions[bot]@users.noreply.github.com'
           git add Cargo.lock \
             crates/aligngauge-core/src/lib.rs \
             crates/aligngauge-core/src/model.rs \
