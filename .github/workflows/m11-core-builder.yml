@@ -1,4 +1,5 @@
 name: M11 Core Builder
+# rerun after exact two-struct wiring fix
 
 on:
   push:
