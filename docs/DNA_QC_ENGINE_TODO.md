@@ -3,7 +3,7 @@
 **Repository:** `ekkus93/aligngauge`
 
 **Companion specification:** `docs/DNA_QC_ENGINE_SPEC.md`  
-**Status:** Ralph Loop active — `v0.2.0` released; Milestone 7 complete; Milestone 8 next
+**Status:** Ralph Loop active — `v0.2.0` released; Milestone 8 implementation/evidence complete; exact-SHA acceptance gate pending
 **Last updated:** 2026-08-07  
 **Supersedes:** Initial `DNA_QC_ENGINE_TODO.md` dated 2026-08-05
 
@@ -602,27 +602,36 @@ Verify SPEC §19.2.
 
 ## Milestone 8 — BED and target normalization
 
+**Status:** Implementation and evidence complete — validated implementation source SHA `8bc7f6df8154f2f3162e8d498781873364b4c1ea`; branch validation run `31197147271`, job `92928071302`, success; evidence in `docs/evidence/M8_BED_NORMALIZATION.md`. Final completion remains pending Permanent CI on the exact evidence/TODO candidate.
+
 ### 8.1 Parser
 
 Implement SPEC §9.
 
-- [ ] Skip blank, comment, `track`, and `browser` lines.
-- [ ] Accept CRLF and trailing whitespace.
-- [ ] Strictly parse interval lines.
-- [ ] Reject invalid coordinates.
-- [ ] Apply explicit unknown-contig policy.
-- [ ] Preserve names and source line identity.
-- [ ] Fuzz parser.
-- [ ] Test real vendor-style target files.
+- [x] Skip blank, comment, `track`, and `browser` lines.
+- [x] Accept CRLF and trailing whitespace.
+- [x] Strictly parse interval lines.
+- [x] Reject invalid coordinates.
+- [x] Apply explicit unknown-contig policy.
+- [x] Preserve names and source line identity.
+- [x] Fuzz parser.
+- [x] Test real vendor-style target files.
 
 ### 8.2 Normalization
 
-- [ ] Deterministic sorting.
-- [ ] Overlap merging for aggregate territory.
-- [ ] Mapping from merged regions to source intervals.
-- [ ] Configurable flanks.
-- [ ] Provenance of normalization.
-- [ ] Target checksum and identity.
+- [x] Deterministic sorting.
+- [x] Overlap merging for aggregate territory.
+- [x] Mapping from merged regions to source intervals.
+- [x] Configurable flanks.
+- [x] Provenance of normalization.
+- [x] Target checksum and identity.
+
+### Milestone 8 acceptance gate
+
+- [x] Create `docs/evidence/M8_BED_NORMALIZATION.md`.
+- [x] ADR-0005 records the fail-closed unknown-contig, coordinate, and BED-width policy.
+- [x] Required parser, normalization, fuzz, and representative vendor-style fixture tests pass.
+- [ ] Permanent CI succeeds on the exact evidence/TODO candidate commit.
 
 ## Milestone 9 — Targeted metrics
 
