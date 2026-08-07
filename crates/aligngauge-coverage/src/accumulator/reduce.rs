@@ -121,7 +121,12 @@ impl CoverageCollector {
         Ok(())
     }
 
-    pub(crate) fn finish(mut self) -> Result<CoverageReport, AlignGaugeError> {
+    /// Finalize exact histogram, threshold, and per-reference reductions.
+    ///
+    /// # Errors
+    /// Returns a typed fatal error when any checked reduction overflows or a coverage invariant is
+    /// violated. No partial report is returned.
+    pub fn finish(mut self) -> Result<CoverageReport, AlignGaugeError> {
         self.finish_current_reference()?;
         while self.next_reference_index < self.references.len() {
             self.finalize_unvisited_reference(self.next_reference_index)?;
