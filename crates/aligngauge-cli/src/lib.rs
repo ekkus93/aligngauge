@@ -10,7 +10,14 @@ use aligngauge_core::{
     MetricDefinition, OutputBundle, Provenance, ResolvedConfig, Summary, SystemInfo, ToJson,
     Warning,
 };
-use aligngauge_coverage::{CoverageCollector, CoverageMemoryPlan, CoverageOptions, CoverageReport};
+use aligngauge_coverage::{
+    CoverageCollector, CoverageMemoryPlan, CoverageOptions, CoverageReport,
+    DEFAULT_NEAR_DISTANCE_BASES,
+};
+use aligngauge_formats::{
+    SequenceContig, SequenceDictionary, TargetNormalizationConfig, normalize_targets,
+    parse_bed_path,
+};
 use aligngauge_hts::{
     AlignmentFormat, BamReader, FieldPlan, HTS_SYS_VERSION, HTSLIB_COMPATIBILITY_VERSION,
     HTSLIB_NETWORK_TRANSPORT_ENABLED, RUST_HTSLIB_VERSION, ReaderOptions, detect_alignment_format,
@@ -190,7 +197,57 @@ impl ReleaseReport {
             )
             .expect("writing to String cannot fail");
         }
+        if let Some(targeted) = self.coverage.targeted() {
+            let targeted = targeted.summary();
+            output.push_str("targeted\n");
+            writeln!(
+                output,
+                "target_territory_bases\t{}",
+                targeted.target_territory_bases
+            )
+            .expect("writing to String cannot fail");
+            writeln!(output, "on_target_bases\t{}", targeted.on_target_bases)
+                .expect("writing to String cannot fail");
+            writeln!(output, "near_target_bases\t{}", targeted.near_target_bases)
+                .expect("writing to String cannot fail");
+            writeln!(output, "off_target_bases\t{}", targeted.off_target_bases)
+                .expect("writing to String cannot fail");
+            writeln!(
+                output,
+                "dropout_target_count\t{}",
+                targeted.dropout_target_count
+            )
+            .expect("writing to String cannot fail");
+            render_available_string(
+                &mut output,
+                "target_mean_depth",
+                &targeted.target_mean_depth,
+            );
+            render_available_string(
+                &mut output,
+                "target_enrichment",
+                &targeted.target_enrichment,
+            );
+            render_available_string(
+                &mut output,
+                "target_uniformity_penalty_80",
+                &targeted.target_uniformity_penalty_80,
+            );
+        }
         output
+    }
+}
+
+fn render_available_string(output: &mut String, name: &str, value: &Availability<String>) {
+    use std::fmt::Write as _;
+    match value {
+        Availability::Available(value) => {
+            writeln!(output, "{name}\t{value}").expect("writing to String cannot fail");
+        }
+        Availability::Unavailable { reason } => {
+            writeln!(output, "{name}\tunavailable:{reason}")
+                .expect("writing to String cannot fail");
+        }
     }
 }
 
@@ -225,7 +282,30 @@ pub fn analyze_release_with_reference(
     config: &ResolvedConfig,
     reference: Option<&Path>,
 ) -> Result<ReleaseReport, AlignGaugeError> {
-    analyze_release_with_reference_and_hook(config, reference, &mut NoopReleaseHook)
+    analyze_release_with_reference_and_targets(config, reference, None, None)
+}
+
+/// Analyze a BAM or CRAM release with an optional native v0.3 target BED.
+///
+/// `near_distance_bases` defaults to 250 when targets are supplied and is rejected when
+/// targets are absent. Target parsing occurs against the already validated alignment header
+/// before record traversal begins.
+///
+/// # Errors
+/// Returns the first configuration, target, reference, reader, collector, or provenance failure.
+pub fn analyze_release_with_reference_and_targets(
+    config: &ResolvedConfig,
+    reference: Option<&Path>,
+    targets: Option<&Path>,
+    near_distance_bases: Option<u64>,
+) -> Result<ReleaseReport, AlignGaugeError> {
+    analyze_release_with_reference_targets_and_hook(
+        config,
+        reference,
+        targets,
+        near_distance_bases,
+        &mut NoopReleaseHook,
+    )
 }
 
 fn release_coverage_setup(
@@ -241,6 +321,52 @@ fn release_coverage_setup(
         coverage_options.chunk_size_override,
     )?;
     Ok((coverage_options, memory_plan))
+}
+
+fn release_coverage_collector(
+    header: &aligngauge_hts::ValidatedHeader,
+    thresholds: Vec<u32>,
+    memory_plan: CoverageMemoryPlan,
+    targets: Option<&Path>,
+    near_distance_bases: Option<u64>,
+) -> Result<CoverageCollector, AlignGaugeError> {
+    let Some(target_path) = targets else {
+        if near_distance_bases.is_some() {
+            return Err(AlignGaugeError::new(
+                ErrorCategory::Configuration,
+                "near-target distance requires a target BED",
+            ));
+        }
+        return CoverageCollector::new(header, thresholds, memory_plan);
+    };
+    let near_distance_bases = near_distance_bases.unwrap_or(DEFAULT_NEAR_DISTANCE_BASES);
+    let dictionary = SequenceDictionary::new(
+        header
+            .references()
+            .iter()
+            .map(|reference| SequenceContig {
+                name: reference.name().to_owned(),
+                length: reference.length(),
+            })
+            .collect(),
+    )?;
+    let parsed = parse_bed_path(target_path, &dictionary)?;
+    let target_set =
+        normalize_targets(parsed.clone(), TargetNormalizationConfig { flank_bases: 0 })?;
+    let selected_set = normalize_targets(
+        parsed,
+        TargetNormalizationConfig {
+            flank_bases: near_distance_bases,
+        },
+    )?;
+    CoverageCollector::new_targeted(
+        header,
+        thresholds,
+        memory_plan,
+        target_set,
+        selected_set,
+        near_distance_bases,
+    )
 }
 
 fn open_release_reader(
@@ -357,6 +483,21 @@ pub fn analyze_release_with_reference_and_hook(
     reference: Option<&Path>,
     hook: &mut impl ReleaseHook,
 ) -> Result<ReleaseReport, AlignGaugeError> {
+    analyze_release_with_reference_targets_and_hook(config, reference, None, None, hook)
+}
+
+/// Analyze a release with explicit target settings and deterministic fault injection.
+///
+/// # Errors
+/// Returns the first configuration, target, reference, reader, injected, collector, or
+/// provenance failure.
+pub fn analyze_release_with_reference_targets_and_hook(
+    config: &ResolvedConfig,
+    reference: Option<&Path>,
+    targets: Option<&Path>,
+    near_distance_bases: Option<u64>,
+    hook: &mut impl ReleaseHook,
+) -> Result<ReleaseReport, AlignGaugeError> {
     let (coverage_options, memory_plan) = release_coverage_setup(config)?;
     let input_identity = input_identity(&config.input)?;
     let field_plan = FieldPlan::counters().union(&FieldPlan::coverage());
@@ -368,8 +509,13 @@ pub fn analyze_release_with_reference_and_hook(
     let reference_identity = reader.reference_identity().map(ToJson::to_json);
     let header_identity = reader.header().identity().sha256().to_owned();
     let mut counter_collector = CounterCollector::new(reader.header());
-    let mut coverage_collector =
-        CoverageCollector::new(reader.header(), coverage_options.thresholds, memory_plan)?;
+    let mut coverage_collector = release_coverage_collector(
+        reader.header(),
+        coverage_options.thresholds,
+        memory_plan,
+        targets,
+        near_distance_bases,
+    )?;
 
     while let Some(record) = reader.next_record()? {
         hook.checkpoint(ReleaseCheckpoint::BeforeCounterCollector)?;
@@ -389,6 +535,9 @@ pub fn analyze_release_with_reference_and_hook(
     let mut summary = counters.to_summary(application.clone());
     summary.coverage = Availability::Available(coverage.to_core_summary());
     add_coverage_metric_definitions(&mut summary.metric_definitions);
+    if coverage.targeted().is_some() {
+        add_targeted_metric_definitions(&mut summary.metric_definitions);
+    }
     summary.warnings.clone_from(&warnings);
 
     let normalization_actions = release_normalization_actions(config);
@@ -569,6 +718,49 @@ fn add_coverage_metric_definitions(definitions: &mut BTreeMap<String, MetricDefi
             "coverage_threshold_bases",
             "Reference bases meeting each configured cumulative depth threshold",
             "bases",
+        ),
+    ] {
+        definitions.insert(
+            name.to_owned(),
+            MetricDefinition {
+                description: description.to_owned(),
+                unit: unit.to_owned(),
+            },
+        );
+    }
+}
+
+fn add_targeted_metric_definitions(definitions: &mut BTreeMap<String, MetricDefinition>) {
+    for (name, description, unit) in [
+        (
+            "target_territory_bases",
+            "Unique zero-flank normalized target union territory",
+            "bases",
+        ),
+        (
+            "on_target_bases",
+            "Accepted aligned reference-base observations inside target territory",
+            "bases",
+        ),
+        (
+            "near_target_bases",
+            "Accepted aligned observations inside selected but outside target territory",
+            "bases",
+        ),
+        (
+            "off_target_bases",
+            "Accepted aligned observations outside selected territory",
+            "bases",
+        ),
+        (
+            "target_enrichment",
+            "Native observed target fraction divided by target genome-territory fraction",
+            "ratio",
+        ),
+        (
+            "target_uniformity_penalty_80",
+            "Native mean target depth divided by all-target-base D20",
+            "ratio",
         ),
     ] {
         definitions.insert(

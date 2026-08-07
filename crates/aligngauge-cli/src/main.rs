@@ -4,7 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use aligngauge_cli::{analyze_bam, analyze_release_with_reference};
+use aligngauge_cli::{analyze_bam, analyze_release_with_reference_and_targets};
 use aligngauge_core::config::{parse_coverage_thresholds, parse_memory_limit};
 use aligngauge_core::{
     AlignGaugeError, AtomicPublisher, ConfigOverrides, ErrorCategory, LogFormat,
@@ -31,6 +31,8 @@ enum CliAction {
     Release {
         config_path: Option<PathBuf>,
         reference: Option<PathBuf>,
+        targets: Option<PathBuf>,
+        near_distance_bases: Option<u64>,
         overrides: ConfigOverrides,
         diagnostic_hint: LogFormat,
     },
@@ -47,6 +49,8 @@ fn main() -> ExitCode {
         Ok(CliAction::Release {
             config_path,
             reference,
+            targets,
+            near_distance_bases,
             overrides,
             diagnostic_hint,
         }) => {
@@ -59,7 +63,12 @@ fn main() -> ExitCode {
             if let Err(error) = preflight_output_destination(&config.outdir) {
                 return exit_with_error(&error, config.log_format);
             }
-            let report = match analyze_release_with_reference(&config, reference.as_deref()) {
+            let report = match analyze_release_with_reference_and_targets(
+                &config,
+                reference.as_deref(),
+                targets.as_deref(),
+                near_distance_bases,
+            ) {
                 Ok(report) => report,
                 Err(error) => return exit_with_error(&error, config.log_format),
             };
@@ -157,6 +166,8 @@ struct ParseState {
     overrides: ConfigOverrides,
     config_path: Option<PathBuf>,
     reference: Option<PathBuf>,
+    targets: Option<PathBuf>,
+    near_distance_bases: Option<u64>,
     compatibility_format: Option<CompatibilityFormat>,
     diagnostic_hint: LogFormat,
     release_option_seen: bool,
@@ -171,6 +182,8 @@ impl ParseState {
             overrides: ConfigOverrides::default(),
             config_path: None,
             reference: None,
+            targets: None,
+            near_distance_bases: None,
             compatibility_format: None,
             diagnostic_hint: LogFormat::Human,
             release_option_seen: false,
@@ -204,9 +217,18 @@ impl ParseState {
             return Ok(CliAction::Legacy { input });
         }
 
+        if self.near_distance_bases.is_some() && self.targets.is_none() {
+            return Err(usage_error(
+                "--near-distance requires --targets <BED>",
+                program,
+            ));
+        }
+
         Ok(CliAction::Release {
             config_path: self.config_path,
             reference: self.reference,
+            targets: self.targets,
+            near_distance_bases: self.near_distance_bases,
             overrides: self.overrides,
             diagnostic_hint: self.diagnostic_hint,
         })
@@ -267,6 +289,7 @@ fn parse_qc_option(
             | "--io-threads"
             | "--memory-limit"
             | "--coverage-thresholds"
+            | "--near-distance"
             | "--config"
             | "--log-format"),
         ) => parse_release_value_option(state, option, arguments, program),
@@ -283,9 +306,18 @@ fn parse_qc_option(
                 program,
             )
         }
-        Some("--targets" | "--profile") => Err(unsupported_option(
+        Some("--targets") => {
+            state.release_option_seen = true;
+            set_path_option(
+                &mut state.targets,
+                next_value(arguments, "--targets", program)?,
+                "--targets",
+                program,
+            )
+        }
+        Some("--profile") => Err(unsupported_option(
             argument.to_string_lossy(),
-            "targeted analysis is a v0.3 feature",
+            "targeted profile selection is not released; v0.3 uses aligngauge-targeted-v0.3",
             program,
         )),
         Some("--backend" | "--cuda-device") => Err(unsupported_option(
@@ -337,6 +369,19 @@ fn parse_release_value_option(
         }
         "--memory-limit" => parse_memory_limit_option(state, arguments, program),
         "--coverage-thresholds" => parse_coverage_threshold_option(state, arguments, program),
+        "--near-distance" => {
+            let value = parse_u64(
+                next_value(arguments, "--near-distance", program)?,
+                "--near-distance",
+                program,
+            )?;
+            set_once(
+                &mut state.near_distance_bases,
+                value,
+                "--near-distance",
+                program,
+            )
+        }
         "--config" => parse_config_option(state, arguments, program),
         "--log-format" => parse_log_format_option(state, arguments, program),
         _ => Err(parser_invariant(option)),
@@ -557,6 +602,17 @@ fn parse_usize(
     })
 }
 
+fn parse_u64(
+    value: OsString,
+    option: &'static str,
+    program: &OsStr,
+) -> Result<u64, AlignGaugeError> {
+    let text = utf8_value(value, option, program)?;
+    text.parse::<u64>().map_err(|source| {
+        usage_error(format!("{option} must be a non-negative integer"), program).with_source(source)
+    })
+}
+
 fn set_path_option(
     slot: &mut Option<PathBuf>,
     value: OsString,
@@ -625,7 +681,7 @@ fn usage_error(message: impl Into<String>, program: &OsStr) -> AlignGaugeError {
 
 fn usage(program: &OsStr) -> String {
     format!(
-        "Usage:\n  {0} qc --input <BAM|CRAM> --outdir <DIR> [OPTIONS]\n\nRequired release values:\n  --input <PATH>                  Local BAM or CRAM input (may also come from --config)\n  --outdir <PATH>                 New output directory (may also come from --config)\n\nCRAM reference integrity:\n  --reference <FASTA>             Explicit local FASTA required for CRAM; remote lookup is disabled\n\nOptional values:\n  --threads <N>                   Collector/reduction thread limit (collector is deterministic serial)\n  --io-threads <N>                HTSlib I/O workers; 0 or 1 selects serial decoding\n  --memory-limit <SIZE>           B, KiB, MiB, GiB, or TiB (default 4GiB)\n  --coverage-thresholds <LIST>    Comma-separated positive depths (default 1,10,20,30)\n  --config <PATH>                 Strict schema_version=1 config file\n  --log-format <human|json>       Diagnostic error format\n  --quiet                         Suppress routine completion summary\n  --verbose                       Enable verbose mode in resolved provenance\n  --preserve-failed-staging       Preserve clearly incomplete staging on publication failure\n  -h, --help                      Show this help\n\nConfiguration precedence:\n  built-ins < config file < documented ALIGNGAUGE_* environment < CLI\n\nDeferred beyond v0.2:\n  --targets/--profile targeted (v0.3), --backend, --cuda-device\n\nLegacy BAM three-counter compatibility probe:\n  {0} qc --input <BAM>\n\nBAM compatibility projections retained for differential validation:\n  {0} qc --input <BAM> --format <human|json|samtools-flagstat|samtools-idxstats>",
+        "Usage:\n  {0} qc --input <BAM|CRAM> --outdir <DIR> [OPTIONS]\n\nRequired release values:\n  --input <PATH>                  Local BAM or CRAM input (may also come from --config)\n  --outdir <PATH>                 New output directory (may also come from --config)\n\nCRAM reference integrity:\n  --reference <FASTA>             Explicit local FASTA required for CRAM; remote lookup is disabled\n\nTargeted v0.3 analysis:\n  --targets <BED>                 Local BED3-BED12 target definition; exact contig names required\n  --near-distance <N>             Symmetric near-target distance in bases (default 250; requires --targets)\n                                  Uses native aligngauge-targeted-v0.3 semantics; no Picard compatibility claim\n\nOptional values:\n  --threads <N>                   Collector/reduction thread limit (collector is deterministic serial)\n  --io-threads <N>                HTSlib I/O workers; 0 or 1 selects serial decoding\n  --memory-limit <SIZE>           B, KiB, MiB, GiB, or TiB (default 4GiB)\n  --coverage-thresholds <LIST>    Comma-separated positive depths (default 1,10,20,30)\n  --config <PATH>                 Strict schema_version=1 config file\n  --log-format <human|json>       Diagnostic error format\n  --quiet                         Suppress routine completion summary\n  --verbose                       Enable verbose mode in resolved provenance\n  --preserve-failed-staging       Preserve clearly incomplete staging on publication failure\n  -h, --help                      Show this help\n\nConfiguration precedence:\n  built-ins < config file < documented ALIGNGAUGE_* environment < CLI\n\nDeferred beyond v0.3:\n  --profile selection, --backend, --cuda-device\n\nLegacy BAM three-counter compatibility probe:\n  {0} qc --input <BAM>\n\nBAM compatibility projections retained for differential validation:\n  {0} qc --input <BAM> --format <human|json|samtools-flagstat|samtools-idxstats>",
         program.to_string_lossy()
     )
 }

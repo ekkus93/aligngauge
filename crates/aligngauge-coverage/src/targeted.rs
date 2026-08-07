@@ -42,6 +42,7 @@ pub(crate) struct TargetedMemoryReservation {
 /// Canonical targeted report plus normalization details needed by provenance.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct TargetedCoverageReport {
+    identity: TargetFileIdentity,
     summary: TargetedCoverageSummary,
     target_normalization: TargetNormalizationProvenance,
     selected_normalization: TargetNormalizationProvenance,
@@ -83,18 +84,19 @@ impl TargetedCoverageReport {
             JsonValue::String(String::from("native-no-picard-compatibility-claim")),
         );
 
-        let identity = TargetFileIdentity {
-            path: None,
-            size_bytes: self.summary.target_size_bytes,
-            sha256: self.summary.target_sha256.clone(),
-            source_interval_count: self.summary.source_interval_count,
-        };
+        provenance.analysis_plan.insert(
+            String::from("target_path"),
+            self.identity
+                .path
+                .as_ref()
+                .map_or(JsonValue::Null, |path| JsonValue::String(path.clone())),
+        );
         provenance
             .normalization_actions
-            .extend(self.target_normalization.actions(&identity));
+            .extend(self.target_normalization.actions(&self.identity));
         provenance.normalization_actions.extend(
             self.selected_normalization
-                .actions(&identity)
+                .actions(&self.identity)
                 .into_iter()
                 .map(|action| format!("selected:{action}")),
         );
@@ -589,11 +591,12 @@ impl TargetedReducer {
         )?;
         let (per_target, dropout_target_count) = self.finish_per_targets()?;
 
+        let identity = self.identity.clone();
         let summary = TargetedCoverageSummary {
             profile: TARGETED_PROFILE.to_owned(),
             coverage_profile: crate::COVERAGE_PROFILE.to_owned(),
             duplicate_adjusted: true,
-            target_sha256: self.identity.sha256,
+            target_sha256: self.identity.sha256.clone(),
             target_size_bytes: self.identity.size_bytes,
             source_interval_count: self.identity.source_interval_count,
             near_distance_bases: self.near_distance_bases,
@@ -620,6 +623,7 @@ impl TargetedReducer {
             per_target,
         };
         Ok(TargetedCoverageReport {
+            identity,
             summary,
             target_normalization: self.target_normalization,
             selected_normalization: self.selected_normalization,
