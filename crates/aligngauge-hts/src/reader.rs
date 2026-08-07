@@ -1,4 +1,4 @@
-//! Production BAM streaming, coordinate checks, and record validation.
+//! Production BAM/CRAM streaming, coordinate checks, and record validation.
 
 use std::fs::File;
 use std::io::{Read as IoRead, Seek, SeekFrom};
@@ -11,6 +11,7 @@ use rust_htslib::bam::{Read, Reader, Record};
 
 use crate::header::{ReadGroupDeclarationState, ValidatedHeader};
 use crate::plan::{FieldPlan, RequiredField};
+use crate::reference::{LocalReferenceIdentity, validate_local_reference};
 
 const MAX_IO_THREADS: usize = 64;
 const MAX_RECORD_BYTES: usize = 256 * 1024 * 1024;
@@ -20,6 +21,26 @@ const MAX_CIGAR_OPERATIONS: usize = 1_000_000;
 const MAX_AUXILIARY_FIELDS: usize = 65_536;
 const STANDARD_FLAG_MASK: u16 = 0x0fff;
 const LONG_CIGAR_LIMIT: usize = 65_535;
+
+/// Physical alignment container detected before `HTSlib` traversal.
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum AlignmentFormat {
+    /// BGZF-compressed BAM.
+    Bam,
+    /// CRAM with an explicit local reference.
+    Cram,
+}
+
+impl AlignmentFormat {
+    /// Stable lower-case format name.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Bam => "bam",
+            Self::Cram => "cram",
+        }
+    }
+}
 
 /// Reader resource controls resolved before traversal.
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -165,9 +186,11 @@ impl ValidatedRecord<'_> {
     }
 }
 
-/// Single-pass v0.1 BAM reader with strict header, record, and order validation.
+/// Single-pass alignment reader with strict header, record, order, and CRAM reference validation.
 pub struct BamReader {
     input: PathBuf,
+    input_format: AlignmentFormat,
+    reference_identity: Option<LocalReferenceIdentity>,
     reader: Reader,
     record: Record,
     header: ValidatedHeader,
@@ -181,9 +204,8 @@ impl BamReader {
     /// Open and validate a local BAM input.
     ///
     /// # Errors
-    ///
-    /// Returns a typed error for missing/non-BAM input, invalid options, `HTSlib`
-    /// open/thread failures, or malformed header content.
+    /// Returns a typed error for missing/non-BAM input, invalid options, `HTSlib` failures, or
+    /// malformed header content.
     pub fn open(
         input: impl AsRef<Path>,
         field_plan: FieldPlan,
@@ -193,32 +215,61 @@ impl BamReader {
         validate_options(options)?;
         let input = input.as_ref().to_path_buf();
         verify_bam_signature(&input)?;
+        let reader = open_htslib_reader(&input, options, AlignmentFormat::Bam)?;
+        Self::finish_open(input, AlignmentFormat::Bam, None, reader, field_plan)
+    }
 
-        let mut reader = Reader::from_path(&input).map_err(|source| {
+    /// Open a local CRAM only after validating an explicit local FASTA.
+    ///
+    /// Network transports are absent from the pinned `HTSlib` build. The supplied FASTA is checked
+    /// against CRAM `@SQ` SN/LN/M5 before `set_reference` is called, so a mismatch cannot fall
+    /// through to inherited `REF_CACHE`, `REF_PATH`, or `UR` reference providers.
+    ///
+    /// # Errors
+    /// Returns a typed error for missing/corrupt CRAM, invalid options, missing/mismatched FASTA,
+    /// `HTSlib` reference configuration failures, or malformed header content.
+    pub fn open_cram(
+        input: impl AsRef<Path>,
+        reference: impl AsRef<Path>,
+        field_plan: FieldPlan,
+        options: ReaderOptions,
+    ) -> Result<Self, AlignGaugeError> {
+        validate_plan(&field_plan)?;
+        validate_options(options)?;
+        let input = input.as_ref().to_path_buf();
+        let reference = reference.as_ref();
+        verify_cram_signature(&input)?;
+        let mut reader = open_htslib_reader(&input, options, AlignmentFormat::Cram)?;
+        let reference_identity = validate_local_reference(reader.header(), reference)?;
+        reader.set_reference(reference).map_err(|source| {
             AlignGaugeError::new(
-                ErrorCategory::InputCorrupt,
-                format!("failed to open BAM '{}'", input.display()),
+                ErrorCategory::ReferenceMismatch,
+                "HTSlib rejected the validated local CRAM reference",
             )
-            .with_detail("input", input.to_string_lossy().into_owned())
+            .with_detail("reference", reference.to_string_lossy().into_owned())
             .with_source(source)
         })?;
-        if options.io_threads > 1 {
-            reader.set_threads(options.io_threads).map_err(|source| {
-                AlignGaugeError::new(
-                    ErrorCategory::ResourceLimit,
-                    "failed to configure HTSlib BAM decode threads",
-                )
-                .with_detail(
-                    "io_threads",
-                    u64_from_usize(options.io_threads).unwrap_or(u64::MAX),
-                )
-                .with_source(source)
-            })?;
-        }
-        let header = ValidatedHeader::from_view(reader.header())?;
+        Self::finish_open(
+            input,
+            AlignmentFormat::Cram,
+            Some(reference_identity),
+            reader,
+            field_plan,
+        )
+    }
 
+    fn finish_open(
+        input: PathBuf,
+        input_format: AlignmentFormat,
+        reference_identity: Option<LocalReferenceIdentity>,
+        reader: Reader,
+        field_plan: FieldPlan,
+    ) -> Result<Self, AlignGaugeError> {
+        let header = ValidatedHeader::from_view(reader.header())?;
         Ok(Self {
             input,
+            input_format,
+            reference_identity,
             reader,
             record: Record::new(),
             header,
@@ -227,6 +278,18 @@ impl BamReader {
             previous_coordinate: None,
             no_coordinate_tail_started: false,
         })
+    }
+
+    /// Detected physical alignment format.
+    #[must_use]
+    pub const fn input_format(&self) -> AlignmentFormat {
+        self.input_format
+    }
+
+    /// Validated local reference identity for CRAM, or `None` for BAM.
+    #[must_use]
+    pub const fn reference_identity(&self) -> Option<&LocalReferenceIdentity> {
+        self.reference_identity.as_ref()
     }
 
     /// Validated input header.
@@ -255,7 +318,7 @@ impl BamReader {
             AlignGaugeError::new(
                 ErrorCategory::InputCorrupt,
                 format!(
-                    "failed to decode BAM record from '{}'",
+                    "failed to decode alignment record from '{}'",
                     self.input.display()
                 ),
             )
@@ -267,7 +330,7 @@ impl BamReader {
         self.record_index = self.record_index.checked_add(1).ok_or_else(|| {
             AlignGaugeError::new(
                 ErrorCategory::InternalInvariant,
-                "BAM traversal record index overflowed",
+                "alignment traversal record index overflowed",
             )
         })?;
         let facts = validate_record(
@@ -315,7 +378,7 @@ impl BamReader {
             .is_some_and(|previous| current < previous)
         {
             return Err(order_error(
-                "BAM record coordinates regress",
+                "alignment record coordinates regress",
                 self.record_index,
                 self.previous_coordinate,
                 current,
@@ -1030,6 +1093,111 @@ fn validate_options(options: ReaderOptions) -> Result<(), AlignGaugeError> {
             "io_threads must be between 1 and 64",
         )
         .with_detail("io_threads", u64_from_usize(options.io_threads)?));
+    }
+    Ok(())
+}
+
+fn open_htslib_reader(
+    input: &Path,
+    options: ReaderOptions,
+    format: AlignmentFormat,
+) -> Result<Reader, AlignGaugeError> {
+    let mut reader = Reader::from_path(input).map_err(|source| {
+        AlignGaugeError::new(
+            ErrorCategory::InputCorrupt,
+            format!("failed to open {} '{}'", format.as_str(), input.display()),
+        )
+        .with_detail("input", input.to_string_lossy().into_owned())
+        .with_source(source)
+    })?;
+    if options.io_threads > 1 {
+        reader.set_threads(options.io_threads).map_err(|source| {
+            AlignGaugeError::new(
+                ErrorCategory::ResourceLimit,
+                "failed to configure HTSlib alignment decode threads",
+            )
+            .with_detail(
+                "io_threads",
+                u64_from_usize(options.io_threads).unwrap_or(u64::MAX),
+            )
+            .with_source(source)
+        })?;
+    }
+    Ok(reader)
+}
+
+/// Detect BAM versus CRAM from local file magic without asking `HTSlib` to resolve references.
+///
+/// # Errors
+/// Returns typed missing, corrupt, or unsupported-format errors.
+pub fn detect_alignment_format(path: impl AsRef<Path>) -> Result<AlignmentFormat, AlignGaugeError> {
+    let path = path.as_ref();
+    if !path.exists() {
+        return Err(AlignGaugeError::new(
+            ErrorCategory::InputNotFound,
+            format!("alignment input '{}' does not exist", path.display()),
+        )
+        .with_detail("input", path.to_string_lossy().into_owned()));
+    }
+    let mut file = File::open(path).map_err(|source| {
+        AlignGaugeError::new(
+            ErrorCategory::InputFormat,
+            format!("failed to open alignment input '{}'", path.display()),
+        )
+        .with_source(source)
+    })?;
+    let mut prefix = [0_u8; 4];
+    file.read_exact(&mut prefix).map_err(|source| {
+        AlignGaugeError::new(
+            ErrorCategory::InputCorrupt,
+            "alignment input is too short to contain BAM or CRAM magic",
+        )
+        .with_detail("input", path.to_string_lossy().into_owned())
+        .with_source(source)
+    })?;
+    if prefix == *b"CRAM" {
+        return Ok(AlignmentFormat::Cram);
+    }
+    if prefix[..2] == [0x1f, 0x8b] {
+        verify_bam_signature(path)?;
+        return Ok(AlignmentFormat::Bam);
+    }
+    Err(AlignGaugeError::new(
+        ErrorCategory::InputFormat,
+        "input is neither BGZF-compressed BAM nor CRAM",
+    )
+    .with_detail("input", path.to_string_lossy().into_owned()))
+}
+
+fn verify_cram_signature(path: &Path) -> Result<(), AlignGaugeError> {
+    if !path.exists() {
+        return Err(AlignGaugeError::new(
+            ErrorCategory::InputNotFound,
+            format!("input CRAM '{}' does not exist", path.display()),
+        )
+        .with_detail("input", path.to_string_lossy().into_owned()));
+    }
+    let mut file = File::open(path).map_err(|source| {
+        AlignGaugeError::new(
+            ErrorCategory::InputFormat,
+            format!("failed to open CRAM '{}'", path.display()),
+        )
+        .with_source(source)
+    })?;
+    let mut magic = [0_u8; 4];
+    file.read_exact(&mut magic).map_err(|source| {
+        AlignGaugeError::new(
+            ErrorCategory::InputCorrupt,
+            "input is too short to contain a CRAM stream",
+        )
+        .with_source(source)
+    })?;
+    if magic != *b"CRAM" {
+        return Err(AlignGaugeError::new(
+            ErrorCategory::InputFormat,
+            "input does not begin with CRAM magic",
+        )
+        .with_detail("input", path.to_string_lossy().into_owned()));
     }
     Ok(())
 }

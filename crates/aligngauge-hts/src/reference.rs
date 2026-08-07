@@ -148,7 +148,10 @@ pub fn validate_local_reference(
     if !fasta.is_file() {
         return Err(AlignGaugeError::new(
             ErrorCategory::ReferenceRequired,
-            format!("local reference FASTA '{}' is not a readable file", fasta.display()),
+            format!(
+                "local reference FASTA '{}' is not a readable file",
+                fasta.display()
+            ),
         )
         .with_detail("reference", fasta.to_string_lossy().into_owned()));
     }
@@ -178,16 +181,16 @@ pub fn validate_local_reference(
             .with_detail("expected_length", requirement.length())
             .with_detail("actual_length", actual.length));
         }
-        if let Some(expected_md5) = requirement.md5() {
-            if actual.md5 != expected_md5 {
-                return Err(AlignGaugeError::new(
-                    ErrorCategory::ReferenceMismatch,
-                    "supplied local FASTA reference MD5 does not match the CRAM header",
-                )
-                .with_detail("reference_name", requirement.name().to_owned())
-                .with_detail("expected_md5", expected_md5.to_owned())
-                .with_detail("actual_md5", actual.md5.clone()));
-            }
+        if let Some(expected_md5) = requirement.md5()
+            && actual.md5 != expected_md5
+        {
+            return Err(AlignGaugeError::new(
+                ErrorCategory::ReferenceMismatch,
+                "supplied local FASTA reference MD5 does not match the CRAM header",
+            )
+            .with_detail("reference_name", requirement.name().to_owned())
+            .with_detail("expected_md5", expected_md5.to_owned())
+            .with_detail("actual_md5", actual.md5.clone()));
         }
         validated.push(actual.clone());
     }
@@ -208,8 +211,11 @@ pub fn parse_reference_requirements(
     header: &HeaderView,
 ) -> Result<Vec<ReferenceRequirement>, AlignGaugeError> {
     let text = std::str::from_utf8(header.as_bytes()).map_err(|source| {
-        AlignGaugeError::new(ErrorCategory::InputFormat, "alignment header is not valid UTF-8")
-            .with_source(source)
+        AlignGaugeError::new(
+            ErrorCategory::InputFormat,
+            "alignment header is not valid UTF-8",
+        )
+        .with_source(source)
     })?;
     let mut requirements = Vec::new();
     let mut names = BTreeSet::new();
@@ -227,9 +233,10 @@ pub fn parse_reference_requirements(
             ));
         }
         let fields = parse_sq_fields(line, line_number)?;
-        let name = fields.get("SN").filter(|value| !value.is_empty()).ok_or_else(|| {
-            reference_header_error(line_number, "@SQ record is missing SN")
-        })?;
+        let name = fields
+            .get("SN")
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| reference_header_error(line_number, "@SQ record is missing SN"))?;
         if !names.insert(name.clone()) {
             return Err(reference_header_error(
                 line_number,
@@ -237,21 +244,24 @@ pub fn parse_reference_requirements(
             )
             .with_detail("reference_name", name.clone()));
         }
-        let length_text = fields.get("LN").filter(|value| !value.is_empty()).ok_or_else(|| {
-            reference_header_error(line_number, "@SQ record is missing LN")
-        })?;
+        let length_text = fields
+            .get("LN")
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| reference_header_error(line_number, "@SQ record is missing LN"))?;
         let length = length_text.parse::<u64>().map_err(|source| {
             reference_header_error(line_number, "@SQ LN is not a valid u64")
                 .with_detail("reference_name", name.clone())
                 .with_source(source)
         })?;
         let md5 = fields.get("M5").map(|value| value.to_ascii_lowercase());
-        if let Some(value) = &md5 {
-            if value.len() != 32 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-                return Err(reference_header_error(line_number, "@SQ M5 is not a 32-digit MD5")
+        if let Some(value) = &md5
+            && (value.len() != 32 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()))
+        {
+            return Err(
+                reference_header_error(line_number, "@SQ M5 is not a 32-digit MD5")
                     .with_detail("reference_name", name.clone())
-                    .with_detail("md5", value.clone()));
-            }
+                    .with_detail("md5", value.clone()),
+            );
         }
         requirements.push(ReferenceRequirement {
             name: name.clone(),
@@ -260,13 +270,15 @@ pub fn parse_reference_requirements(
         });
     }
 
-    if requirements.len() != usize::try_from(header.target_count()).map_err(|source| {
-        AlignGaugeError::new(
-            ErrorCategory::InternalInvariant,
-            "alignment target count does not fit usize",
-        )
-        .with_source(source)
-    })? {
+    if requirements.len()
+        != usize::try_from(header.target_count()).map_err(|source| {
+            AlignGaugeError::new(
+                ErrorCategory::InternalInvariant,
+                "alignment target count does not fit usize",
+            )
+            .with_source(source)
+        })?
+    {
         return Err(AlignGaugeError::new(
             ErrorCategory::InputFormat,
             "textual @SQ declarations do not match the alignment target table",
@@ -275,18 +287,26 @@ pub fn parse_reference_requirements(
     Ok(requirements)
 }
 
-fn parse_sq_fields(line: &str, line_number: usize) -> Result<BTreeMap<String, String>, AlignGaugeError> {
+fn parse_sq_fields(
+    line: &str,
+    line_number: usize,
+) -> Result<BTreeMap<String, String>, AlignGaugeError> {
     let mut fields = BTreeMap::new();
     for field in line.split('\t').skip(1) {
-        let (tag, value) = field.split_once(':').ok_or_else(|| {
-            reference_header_error(line_number, "@SQ field does not contain ':'")
-        })?;
+        let (tag, value) = field
+            .split_once(':')
+            .ok_or_else(|| reference_header_error(line_number, "@SQ field does not contain ':'"))?;
         if tag.len() != 2 || !tag.bytes().all(|byte| byte.is_ascii_alphanumeric()) {
-            return Err(reference_header_error(line_number, "@SQ field tag is invalid"));
+            return Err(reference_header_error(
+                line_number,
+                "@SQ field tag is invalid",
+            ));
         }
         if fields.insert(tag.to_owned(), value.to_owned()).is_some() {
-            return Err(reference_header_error(line_number, "@SQ repeats a field tag")
-                .with_detail("tag", tag.to_owned()));
+            return Err(
+                reference_header_error(line_number, "@SQ repeats a field tag")
+                    .with_detail("tag", tag.to_owned()),
+            );
         }
     }
     Ok(fields)
@@ -349,7 +369,7 @@ fn parse_fasta(path: &Path) -> Result<ParsedFasta, AlignGaugeError> {
                 ));
             }
             let token = rest
-                .split(|byte| byte.is_ascii_whitespace())
+                .split(u8::is_ascii_whitespace)
                 .next()
                 .filter(|value| !value.is_empty())
                 .ok_or_else(|| {
