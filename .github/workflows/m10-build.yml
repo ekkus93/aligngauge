@@ -31,12 +31,16 @@ jobs:
               '    /// Base qualities; reserved for later profiles.\\n    Qualities,\\n}',
               '    /// Base qualities. Reserved; not requested by v0.1 plans.\\n    Qualities,\\n}',
           )
+          text = text.replace('    const ALL: [Self;', '    pub const ALL: [Self;')
+          text = text.replace(
+              '/// Build the exact v0.1 coverage plan.',
+              '/// Fields required by Milestone 5 exact coverage.',
+          )
           text = text.replace(
               '        Self::from_fields(&[RequiredField::Flags, RequiredField::Coordinates, RequiredField::Cigar])\\n    }',
               '        Self::from_fields([\\n            RequiredField::Flags,\\n            RequiredField::Coordinates,\\n            RequiredField::Cigar,\\n        ])\\n    }',
           )
           text = text.replace('        Self::from_fields(&[\\n', '        Self::from_fields([\\n')
-          text = text.replace('        ])\\n    }\\n\\n    /// Add optional tags', '        ])\\n    }\\n\\n    /// Add optional tags')
           p.write_text(text)
           PY
           python .github/m10-build.py
