@@ -1,0 +1,109 @@
+name: M6 CLI Options Runner
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - ".github/workflows/m6-cli-options-run.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  options:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Apply explicit diagnostics and recover option matrix
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          main_path = Path('crates/aligngauge-cli/src/main.rs')
+          text = main_path.read_text(encoding='utf-8')
+
+          preflight = 'if let Err(error) = preflight_output_destination(&config.outdir) {'
+          if text.count(preflight) != 1:
+              raise SystemExit(f'preflight marker expected one match, found {text.count(preflight)}')
+          line_start = text.rfind('\n', 0, text.index(preflight)) + 1
+          indent = text[line_start:text.index(preflight)]
+          text = text[:line_start] + indent + 'emit_verbose_config(&config);\n' + text[line_start:]
+
+          publisher = 'let publisher = AtomicPublisher::new(&config.outdir, config.preserve_failed_staging);'
+          if text.count(publisher) != 1:
+              raise SystemExit(f'publisher marker expected one match, found {text.count(publisher)}')
+          line_start = text.rfind('\n', 0, text.index(publisher)) + 1
+          indent = text[line_start:text.index(publisher)]
+          text = text[:line_start] + indent + 'emit_warnings(&report.summary().warnings, config.log_format);\n' + text[line_start:]
+
+          marker = 'fn exit_with_error(error: &AlignGaugeError, format: LogFormat) -> ExitCode {\n'
+          if text.count(marker) != 1:
+              raise SystemExit('exit helper marker is not unique')
+          helpers = '''fn emit_verbose_config(config: &aligngauge_core::ResolvedConfig) {
+              if !config.verbose {
+                  return;
+              }
+              let rendered = config.to_json().to_compact_string();
+              match config.log_format {
+                  LogFormat::Human => eprintln!("verbose: resolved_config={rendered}"),
+                  LogFormat::Json => eprintln!("{rendered}"),
+              }
+          }
+
+          fn emit_warnings(warnings: &[aligngauge_core::Warning], format: LogFormat) {
+              for warning in warnings {
+                  match format {
+                      LogFormat::Human => {
+                          eprintln!("warning[{}]: {}", warning.code, warning.message);
+                      }
+                      LogFormat::Json => eprintln!("{}", warning.to_json().to_compact_string()),
+                  }
+              }
+          }
+
+          '''
+          main_path.write_text(text.replace(marker, helpers + marker, 1), encoding='utf-8')
+
+          source = Path('.github/workflows/m6-cli-options-gate.yml').read_text(encoding='utf-8')
+          begin = "          cat > crates/aligngauge-cli/tests/release_cli_options.rs <<'RS'\n"
+          end = "\n          RS\n"
+          if source.count(begin) != 1 or source.count(end) != 1:
+              raise SystemExit('option-matrix heredoc markers are not unique')
+          body = source.split(begin, 1)[1].split(end, 1)[0]
+          body = '\n'.join(line[10:] if line.startswith('          ') else line for line in body.splitlines()) + '\n'
+          old_assertion = 'assert!(stderr.contains("\\\"category\\\":\\\"configuration\\\""));'
+          new_assertion = 'assert!(stderr.contains("\\\"category\\\": \\\"configuration\\\""));'
+          if body.count(old_assertion) != 1:
+              raise SystemExit(f'JSON assertion expected one match, found {body.count(old_assertion)}')
+          body = body.replace(old_assertion, new_assertion, 1)
+          Path('crates/aligngauge-cli/tests/release_cli_options.rs').write_text(body, encoding='utf-8')
+          PY
+
+      - name: Format candidate
+        run: cargo fmt --all
+
+      - name: Run strict Clippy
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+      - name: Run full test suite
+        run: cargo test --workspace --all-features --locked
+
+      - name: Run option matrix explicitly
+        run: cargo test -p aligngauge-cli --test release_cli_options --locked -- --nocapture
+
+      - name: Commit validated option behavior and remove temporary workflows
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          rm .github/workflows/m6-cli-options-gate.yml .github/workflows/m6-cli-options-run.yml
+          git add crates/aligngauge-cli/src/main.rs crates/aligngauge-cli/tests/release_cli_options.rs .github/workflows/m6-cli-options-gate.yml .github/workflows/m6-cli-options-run.yml
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix: make v0.1 CLI option behavior explicit'
+          git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:master
