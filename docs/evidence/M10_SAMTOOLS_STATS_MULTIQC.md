@@ -6,7 +6,7 @@
 **Compatibility profile:** `samtools-stats-1.24-multiqc-1.35`  
 **Reference implementation:** Samtools 1.24  
 **Consumer/parser target:** MultiQC 1.35  
-**Disposition:** Implementation and differential validation are complete. Final Milestone 10 acceptance remains gated on Permanent CI for the exact evidence candidate and subsequent merged-master validation. Milestone 10 does not publish or imply a `v0.4.0` release.
+**Disposition:** Complete — the clean evidence candidate and exact merged `master` both passed the required validation gates. Milestone 10 is accepted and Milestone 11 is next. Milestone 10 does not publish or imply a `v0.4.0` release.
 
 ## Scope
 
@@ -348,14 +348,32 @@ The M10 validation artifact is:
 
 The artifact contains the synthetic and HG002 Samtools captures, AlignGauge compatibility outputs, exact differential reports, MultiQC parser reports, and HG002 preparation identity.
 
-## Remaining acceptance operation
+## Milestone 10 acceptance closure
 
-Milestone 10 implementation and differential evidence are complete. The remaining acceptance sequence is procedural and fail closed:
+The clean evidence candidate was `72f575e41e2c4ce761e1f4b489caebac64fbb33b`. All five required gates succeeded on that exact SHA:
 
-1. commit this evidence and the corresponding TODO/documentation state;
-2. require Permanent CI and the standing Runtime/Reference/Targeted/Samtools-Stats gates on that exact evidence candidate;
-3. merge only the exact green PR head;
-4. validate the exact merged `master` SHA;
-5. only then mark Milestone 10 complete and advance the Ralph loop to Milestone 11.
+| Gate | Run | Job | Result |
+| --- | --- | --- | --- |
+| Permanent CI | `31213622137` | `92981976739` | success |
+| Full Runtime Validation | `31213620844` | `92981960331` | success |
+| Reference Validation | `31213625685` | `92981974264` | success |
+| Targeted Validation | `31213620834` | `92981959503` | success |
+| Samtools Stats Validation | `31213622589` | `92981960953` | success |
 
-This milestone does not publish `v0.4.0`. The v0.4 release boundary remains open until its later compatibility milestones are complete.
+PR #4 was merged only after that exact-head validation. The merge commit is:
+
+`a6709fa9ea5f4d60c24f783fd7ada3ee06769bba`
+
+The exact merged `master` commit then independently passed the same five gates:
+
+| Gate | Run | Job | Result |
+| --- | --- | --- | --- |
+| Permanent CI | `31213885912` | `92982807457` | success |
+| Full Runtime Validation | `31213887108` | `92982813642` | success |
+| Reference Validation | `31213886779` | `92982810351` | success |
+| Targeted Validation | `31213887122` | `92982811620` | success |
+| Samtools Stats Validation | `31213893035` | `92982830944` | success |
+
+This closes Milestone 10. The Ralph loop advances to Milestone 11 — Picard alignment and insert-size profiles.
+
+Milestone 10 does **not** publish `v0.4.0`. The v0.4 release boundary remains open until the later compatibility milestones and release gate are complete.
