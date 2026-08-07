@@ -1,0 +1,167 @@
+name: One-time v0.2.0 release publisher
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/one-time-v0.2.0-release.yml
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish:
+    name: release/v0.2.0
+    if: github.repository == 'ekkus93/aligngauge'
+    runs-on: ubuntu-24.04
+    env:
+      TARGET_SHA: ce3aa273da40c679c292e588584781ab1df241de
+      TAG_NAME: v0.2.0
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Prove publisher is immediately after validated target
+        shell: bash
+        run: |
+          set -euo pipefail
+          api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
+          commit="$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${api}/commits/${GITHUB_SHA}")"
+          parent="$(jq -r '.parents[0].sha // empty' <<<"${commit}")"
+          if [[ "${parent}" != "${TARGET_SHA}" ]]; then
+            echo "Refusing to publish: publisher parent is ${parent:-<missing>}, expected ${TARGET_SHA}." >&2
+            exit 1
+          fi
+
+      - name: Revalidate exact release SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
+          runs="$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${api}/actions/runs?head_sha=${TARGET_SHA}&per_page=100")"
+
+          required=(
+            "Permanent CI"
+            "Full Runtime Validation"
+            "Reference Validation"
+            "M2 HG002 Preparation Validation"
+          )
+
+          for workflow in "${required[@]}"; do
+            count="$(jq --arg workflow "${workflow}" --arg sha "${TARGET_SHA}" \
+              '[.workflow_runs[] | select(.name == $workflow and .head_sha == $sha and .status == "completed" and .conclusion == "success")] | length' \
+              <<<"${runs}")"
+            if [[ "${count}" -lt 1 ]]; then
+              echo "Required exact-SHA workflow is not successful: ${workflow}" >&2
+              exit 1
+            fi
+          done
+
+      - name: Refuse an existing tag or release
+        shell: bash
+        run: |
+          set -euo pipefail
+          api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
+
+          tag_status="$(curl --silent --show-error --output /tmp/tag.json --write-out '%{http_code}' \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${api}/git/ref/tags/${TAG_NAME}")"
+          if [[ "${tag_status}" != "404" ]]; then
+            echo "Refusing to publish: tag ${TAG_NAME} already exists (HTTP ${tag_status})." >&2
+            cat /tmp/tag.json >&2
+            exit 1
+          fi
+
+          release_status="$(curl --silent --show-error --output /tmp/release.json --write-out '%{http_code}' \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${api}/releases/tags/${TAG_NAME}")"
+          if [[ "${release_status}" != "404" ]]; then
+            echo "Refusing to publish: release ${TAG_NAME} already exists (HTTP ${release_status})." >&2
+            cat /tmp/release.json >&2
+            exit 1
+          fi
+
+      - name: Create v0.2.0 release at validated SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
+          body="$(cat <<'EOF'
+          AlignGauge v0.2.0 adds fail-closed CRAM/reference integrity to the validated BAM/CPU foundation.
+
+          Release/evidence SHA: `ce3aa273da40c679c292e588584781ab1df241de`
+          Milestone 7 validated implementation SHA: `cf288efe8ffdc3542abedc95404bc6602515da4a`
+          Final PR/spec-reconciled SHA: `2e1aa87906868da2c0d198ac634997b5ce4d029e`
+          Milestone 7 merge SHA: `72dc4ca1fb64c5f49be984ed9c2fac99e0cb64b0`
+
+          Exact release-SHA validation:
+          - Permanent CI: run `31193332229`, job `92915384822`
+          - Full Runtime Validation: run `31193331338`, job `92915383627`
+          - Reference Validation: run `31193332153`, job `92915384352`
+          - M2 HG002 Preparation Validation: run `31193331148`, job `92915380902`
+
+          v0.2 includes CRAM analysis through `qc --reference <FASTA>`, explicit local FASTA selection, fail-closed SN/LN/M5 validation before reference-dependent traversal, actual local-reference provenance, BAM/CRAM canonical equivalence, CRAM truncation and distinct corruption coverage, and a production HTSlib build with remote reference transports excluded. Hostile inherited `REF_PATH`, `REF_CACHE`, and `HTS_PATH` values cannot replace the explicit validated FASTA; Permanent CI proves the CRAM reference path under a network-disabled namespace with syscall tracing.
+
+          Deferred beyond v0.2: standalone `inspect` and `validate-reference` commands until separately specified, BED/targeted metrics, expanded compatibility profiles, GPU/backend selection, and indexed multi-reader parallelism.
+
+          Evidence is committed at `docs/evidence/V0_2_CRAM_VALIDATION.md` in the tagged tree.
+          EOF
+          )"
+
+          payload="$(jq -n \
+            --arg tag "${TAG_NAME}" \
+            --arg target "${TARGET_SHA}" \
+            --arg name "AlignGauge v0.2.0" \
+            --arg body "${body}" \
+            '{tag_name:$tag,target_commitish:$target,name:$name,body:$body,draft:false,prerelease:false,generate_release_notes:false}')"
+
+          curl --fail --silent --show-error \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${api}/releases" \
+            -d "${payload}" \
+            > /tmp/created-release.json
+
+          jq '{id,tag_name,target_commitish,name,draft,prerelease,html_url}' /tmp/created-release.json
+
+      - name: Verify release target
+        shell: bash
+        run: |
+          set -euo pipefail
+          api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
+          ref="$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${api}/git/ref/tags/${TAG_NAME}")"
+          actual="$(jq -r '.object.sha' <<<"${ref}")"
+          if [[ "${actual}" != "${TARGET_SHA}" ]]; then
+            echo "Release tag points to ${actual}, expected ${TARGET_SHA}." >&2
+            exit 1
+          fi
+
+          release="$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${api}/releases/tags/${TAG_NAME}")"
+          release_target="$(jq -r '.target_commitish' <<<"${release}")"
+          if [[ "${release_target}" != "${TARGET_SHA}" ]]; then
+            echo "Release target_commitish is ${release_target}, expected ${TARGET_SHA}." >&2
+            exit 1
+          fi
+          echo "${TAG_NAME} -> ${actual}"
