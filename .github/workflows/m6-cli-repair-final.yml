@@ -1,0 +1,472 @@
+name: M6 CLI Repair Final
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - ".github/workflows/m6-cli-repair-final.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Apply fail-closed source repair
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected exactly one match, found {count}")
+              return text.replace(old, new, 1)
+
+          lib_path = Path("crates/aligngauge-cli/src/lib.rs")
+          lib = lib_path.read_text(encoding="utf-8")
+          lib = replace_once(
+              lib,
+              "    summary.warnings = warnings.clone();\n",
+              "    summary.warnings.clone_from(&warnings);\n",
+              "summary warning clone",
+          )
+          lib = replace_once(
+              lib,
+              '''    let mut normalization_actions = Vec::new();
+              if config.io_threads == 0 {
+                  normalization_actions.push(String::from(
+                      "io_threads=0 normalized to the serial HTSlib reader setting io_threads=1",
+                  ));
+              }
+          ''',
+              "    let normalization_actions = release_normalization_actions(config);\n",
+              "normalization extraction",
+          )
+          marker = "/// Validate a BAM and return the original three-counter projection.\n"
+          if lib.count(marker) != 1:
+              raise SystemExit("count_bam marker is not unique")
+          helper = r'''fn release_normalization_actions(config: &ResolvedConfig) -> Vec<String> {
+              if config.io_threads == 0 {
+                  vec![String::from(
+                      "io_threads=0 normalized to the serial HTSlib reader setting io_threads=1",
+                  )]
+              } else {
+                  Vec::new()
+              }
+          }
+
+          '''
+          lib = lib.replace(marker, helper + marker, 1)
+          lib_path.write_text(lib, encoding="utf-8")
+
+          main_path = Path("crates/aligngauge-cli/src/main.rs")
+          main = main_path.read_text(encoding="utf-8")
+          main = replace_once(
+              main,
+              "enum CliAction {\n    Help(String),\n    Compatibility {\n",
+              "enum CliAction {\n    Help(String),\n    Legacy {\n        input: PathBuf,\n    },\n    Compatibility {\n",
+              "legacy action enum",
+          )
+          main = replace_once(
+              main,
+              "        Ok(CliAction::Compatibility { input, format }) => run_compatibility(&input, format),\n",
+              "        Ok(CliAction::Legacy { input }) => run_legacy(&input),\n        Ok(CliAction::Compatibility { input, format }) => run_compatibility(&input, format),\n",
+              "legacy main dispatch",
+          )
+          run_marker = "fn run_compatibility(input: &Path, format: CompatibilityFormat) -> ExitCode {\n"
+          legacy_fn = '''fn run_legacy(input: &Path) -> ExitCode {
+              match analyze_bam(input) {
+                  Ok(report) => {
+                      let counters = report.alignment_counters();
+                      print!(
+                          "total\\t{}\\nmapped\\t{}\\nunmapped\\t{}\\n",
+                          counters.total, counters.mapped, counters.unmapped
+                      );
+                      ExitCode::SUCCESS
+                  }
+                  Err(error) => exit_with_error(&error, LogFormat::Human),
+              }
+          }
+
+          '''
+          main = replace_once(main, run_marker, legacy_fn + run_marker, "legacy runner")
+
+          parse_start = "fn parse_args() -> Result<CliAction, AlignGaugeError> {\n"
+          preflight_start = "fn preflight_output_destination(outdir: &Path) -> Result<(), AlignGaugeError> {\n"
+          if main.count(parse_start) != 1 or main.count(preflight_start) != 1:
+              raise SystemExit("parser replacement boundaries are not unique")
+          start = main.index(parse_start)
+          end = main.index(preflight_start, start)
+          parser = r'''#[derive(Clone, Copy, Eq, PartialEq)]
+          enum FlagPresence {
+              Absent,
+              Present,
+          }
+
+          struct ParseState {
+              overrides: ConfigOverrides,
+              config_path: Option<PathBuf>,
+              compatibility_format: Option<CompatibilityFormat>,
+              diagnostic_hint: LogFormat,
+              release_option_seen: bool,
+              quiet_seen: FlagPresence,
+              verbose_seen: FlagPresence,
+              preserve_seen: FlagPresence,
+          }
+
+          impl ParseState {
+              fn initial() -> Self {
+                  Self {
+                      overrides: ConfigOverrides::default(),
+                      config_path: None,
+                      compatibility_format: None,
+                      diagnostic_hint: LogFormat::Human,
+                      release_option_seen: false,
+                      quiet_seen: FlagPresence::Absent,
+                      verbose_seen: FlagPresence::Absent,
+                      preserve_seen: FlagPresence::Absent,
+                  }
+              }
+
+              fn finish(mut self, program: &OsStr) -> Result<CliAction, AlignGaugeError> {
+                  if let Some(format) = self.compatibility_format {
+                      if self.release_option_seen {
+                          return Err(usage_error(
+                              "--format is a compatibility probe and cannot be combined with v0.1 release options",
+                              program,
+                          ));
+                      }
+                      let input = self.overrides.input.take().ok_or_else(|| {
+                          usage_error("compatibility mode requires --input <BAM>", program)
+                      })?;
+                      return Ok(CliAction::Compatibility { input, format });
+                  }
+
+                  if !self.release_option_seen {
+                      let input = self
+                          .overrides
+                          .input
+                          .take()
+                          .ok_or_else(|| usage_error("qc requires --input <BAM>", program))?;
+                      return Ok(CliAction::Legacy { input });
+                  }
+
+                  Ok(CliAction::Release {
+                      config_path: self.config_path,
+                      overrides: self.overrides,
+                      diagnostic_hint: self.diagnostic_hint,
+                  })
+              }
+          }
+
+          fn parse_args() -> Result<CliAction, AlignGaugeError> {
+              let mut arguments = env::args_os();
+              let program = arguments
+                  .next()
+                  .unwrap_or_else(|| OsString::from("aligngauge"));
+              let Some(command) = arguments.next() else {
+                  return Err(usage_error("missing subcommand", &program));
+              };
+
+              if is_help(&command) {
+                  return Ok(CliAction::Help(usage(&program)));
+              }
+              if command.as_os_str() != OsStr::new("qc") {
+                  return Err(usage_error(
+                      format!("unsupported subcommand '{}'", command.to_string_lossy()),
+                      &program,
+                  ));
+              }
+              parse_qc_args(arguments, &program)
+          }
+
+          fn parse_qc_args(
+              mut arguments: impl Iterator<Item = OsString>,
+              program: &OsStr,
+          ) -> Result<CliAction, AlignGaugeError> {
+              let mut state = ParseState::initial();
+              while let Some(argument) = arguments.next() {
+                  if is_help(&argument) {
+                      return Ok(CliAction::Help(usage(program)));
+                  }
+                  parse_qc_option(&mut state, argument.as_os_str(), &mut arguments, program)?;
+              }
+              state.finish(program)
+          }
+
+          fn parse_qc_option(
+              state: &mut ParseState,
+              argument: &OsStr,
+              arguments: &mut impl Iterator<Item = OsString>,
+              program: &OsStr,
+          ) -> Result<(), AlignGaugeError> {
+              match argument.to_str() {
+                  Some("--input") => set_path_option(
+                      &mut state.overrides.input,
+                      next_value(arguments, "--input", program)?,
+                      "--input",
+                      program,
+                  ),
+                  Some(option @ ("--outdir" | "--threads" | "--io-threads" | "--memory-limit" | "--coverage-thresholds" | "--config" | "--log-format")) => {
+                      parse_release_value_option(state, option, arguments, program)
+                  }
+                  Some(option @ ("--quiet" | "--verbose" | "--preserve-failed-staging")) => {
+                      parse_release_flag_option(state, option, program)
+                  }
+                  Some("--format") => parse_format_option(state, arguments, program),
+                  Some("--reference") => Err(unsupported_option(
+                      "--reference",
+                      "CRAM reference resolution is a v0.2 feature",
+                      program,
+                  )),
+                  Some("--targets" | "--profile") => Err(unsupported_option(
+                      argument.to_string_lossy(),
+                      "targeted analysis is a v0.3 feature",
+                      program,
+                  )),
+                  Some("--backend" | "--cuda-device") => Err(unsupported_option(
+                      argument.to_string_lossy(),
+                      "hardware/backend selection is not a released v0.1 feature",
+                      program,
+                  )),
+                  _ => Err(usage_error(
+                      format!("unsupported argument '{}'", argument.to_string_lossy()),
+                      program,
+                  )),
+              }
+          }
+
+          fn parse_release_value_option(
+              state: &mut ParseState,
+              option: &str,
+              arguments: &mut impl Iterator<Item = OsString>,
+              program: &OsStr,
+          ) -> Result<(), AlignGaugeError> {
+              state.release_option_seen = true;
+              match option {
+                  "--outdir" => set_path_option(
+                      &mut state.overrides.outdir,
+                      next_value(arguments, "--outdir", program)?,
+                      "--outdir",
+                      program,
+                  ),
+                  "--threads" => {
+                      let value = parse_positive_usize(
+                          next_value(arguments, "--threads", program)?,
+                          "--threads",
+                          program,
+                      )?;
+                      set_once(&mut state.overrides.threads, value, "--threads", program)
+                  }
+                  "--io-threads" => {
+                      let value = parse_usize(
+                          next_value(arguments, "--io-threads", program)?,
+                          "--io-threads",
+                          program,
+                      )?;
+                      set_once(
+                          &mut state.overrides.io_threads,
+                          value,
+                          "--io-threads",
+                          program,
+                      )
+                  }
+                  "--memory-limit" => parse_memory_limit_option(state, arguments, program),
+                  "--coverage-thresholds" => {
+                      parse_coverage_threshold_option(state, arguments, program)
+                  }
+                  "--config" => parse_config_option(state, arguments, program),
+                  "--log-format" => parse_log_format_option(state, arguments, program),
+                  _ => Err(parser_invariant(option)),
+              }
+          }
+
+          fn parse_memory_limit_option(
+              state: &mut ParseState,
+              arguments: &mut impl Iterator<Item = OsString>,
+              program: &OsStr,
+          ) -> Result<(), AlignGaugeError> {
+              let value = utf8_value(
+                  next_value(arguments, "--memory-limit", program)?,
+                  "--memory-limit",
+                  program,
+              )?;
+              set_once(
+                  &mut state.overrides.memory_limit_bytes,
+                  parse_memory_limit(&value)?,
+                  "--memory-limit",
+                  program,
+              )
+          }
+
+          fn parse_coverage_threshold_option(
+              state: &mut ParseState,
+              arguments: &mut impl Iterator<Item = OsString>,
+              program: &OsStr,
+          ) -> Result<(), AlignGaugeError> {
+              let value = utf8_value(
+                  next_value(arguments, "--coverage-thresholds", program)?,
+                  "--coverage-thresholds",
+                  program,
+              )?;
+              set_once(
+                  &mut state.overrides.coverage_thresholds,
+                  parse_coverage_thresholds(&value)?,
+                  "--coverage-thresholds",
+                  program,
+              )
+          }
+
+          fn parse_config_option(
+              state: &mut ParseState,
+              arguments: &mut impl Iterator<Item = OsString>,
+              program: &OsStr,
+          ) -> Result<(), AlignGaugeError> {
+              if state.config_path.is_some() {
+                  return Err(usage_error("--config may be supplied only once", program));
+              }
+              state.config_path = Some(PathBuf::from(next_value(arguments, "--config", program)?));
+              Ok(())
+          }
+
+          fn parse_log_format_option(
+              state: &mut ParseState,
+              arguments: &mut impl Iterator<Item = OsString>,
+              program: &OsStr,
+          ) -> Result<(), AlignGaugeError> {
+              if state.overrides.log_format.is_some() {
+                  return Err(usage_error("--log-format may be supplied only once", program));
+              }
+              let value = utf8_value(
+                  next_value(arguments, "--log-format", program)?,
+                  "--log-format",
+                  program,
+              )?;
+              let format = match value.as_str() {
+                  "human" => LogFormat::Human,
+                  "json" => LogFormat::Json,
+                  _ => return Err(usage_error("--log-format must be human or json", program)),
+              };
+              state.diagnostic_hint = format;
+              state.overrides.log_format = Some(format);
+              Ok(())
+          }
+
+          fn parse_release_flag_option(
+              state: &mut ParseState,
+              option: &str,
+              program: &OsStr,
+          ) -> Result<(), AlignGaugeError> {
+              state.release_option_seen = true;
+              match option {
+                  "--quiet" => {
+                      set_flag(&mut state.quiet_seen, "--quiet", program)?;
+                      state.overrides.quiet = Some(true);
+                  }
+                  "--verbose" => {
+                      set_flag(&mut state.verbose_seen, "--verbose", program)?;
+                      state.overrides.verbose = Some(true);
+                  }
+                  "--preserve-failed-staging" => {
+                      set_flag(
+                          &mut state.preserve_seen,
+                          "--preserve-failed-staging",
+                          program,
+                      )?;
+                      state.overrides.preserve_failed_staging = Some(true);
+                  }
+                  _ => return Err(parser_invariant(option)),
+              }
+              Ok(())
+          }
+
+          fn parse_format_option(
+              state: &mut ParseState,
+              arguments: &mut impl Iterator<Item = OsString>,
+              program: &OsStr,
+          ) -> Result<(), AlignGaugeError> {
+              if state.compatibility_format.is_some() {
+                  return Err(usage_error("--format may be supplied only once", program));
+              }
+              state.compatibility_format = Some(parse_compatibility_format(
+                  &next_value(arguments, "--format", program)?,
+                  program,
+              )?);
+              Ok(())
+          }
+
+          fn parser_invariant(option: &str) -> AlignGaugeError {
+              AlignGaugeError::new(
+                  ErrorCategory::InternalInvariant,
+                  "CLI parser dispatched an unrecognized option",
+              )
+              .with_detail("option", option.to_owned())
+          }
+
+          '''
+          main = main[:start] + parser + main[end:]
+          main = replace_once(
+              main,
+              '''fn set_flag(seen: &mut bool, option: &'static str, program: &OsStr) -> Result<(), AlignGaugeError> {
+              if *seen {
+                  return Err(usage_error(
+                      format!("{option} may be supplied only once"),
+                      program,
+                  ));
+              }
+              *seen = true;
+              Ok(())
+          }
+          ''',
+              '''fn set_flag(
+              seen: &mut FlagPresence,
+              option: &'static str,
+              program: &OsStr,
+          ) -> Result<(), AlignGaugeError> {
+              if matches!(*seen, FlagPresence::Present) {
+                  return Err(usage_error(
+                      format!("{option} may be supplied only once"),
+                      program,
+                  ));
+              }
+              *seen = FlagPresence::Present;
+              Ok(())
+          }
+          ''',
+              "flag presence helper",
+          )
+          old_usage = '''Compatibility probe retained for differential validation:\\n  {0} qc --input <BAM> --format <human|json|samtools-flagstat|samtools-idxstats>'''
+          new_usage = '''Legacy three-counter compatibility probe:\\n  {0} qc --input <BAM>\\n\\nCompatibility projections retained for differential validation:\\n  {0} qc --input <BAM> --format <human|json|samtools-flagstat|samtools-idxstats>'''
+          main = replace_once(main, old_usage, new_usage, "usage compatibility section")
+          main_path.write_text(main, encoding="utf-8")
+          PY
+
+      - name: Format repaired sources
+        run: cargo fmt --all
+
+      - name: Run strict Clippy
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+      - name: Run full workspace tests
+        run: cargo test --workspace --all-features --locked
+
+      - name: Verify walking-skeleton CLI contract explicitly
+        run: cargo test -p aligngauge-cli --test walking_skeleton --locked
+
+      - name: Upload validated repaired sources
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: m6-cli-repair-${{ github.sha }}
+          path: |
+            crates/aligngauge-cli/src/lib.rs
+            crates/aligngauge-cli/src/main.rs
+          if-no-files-found: error
+          retention-days: 1
