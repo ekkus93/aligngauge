@@ -1,4 +1,4 @@
-name: M7 reader source builder v2
+name: M7 CRAM release-path builder
 
 on:
   push:
@@ -12,66 +12,346 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      - name: Reuse reader patch and apply strict-lint repairs
+      - name: Wire CRAM into release orchestration and CLI
         shell: bash
         run: |
           python - <<'PY'
           from pathlib import Path
-          import textwrap
 
-          source = Path('.github/workflows/m7-reader-build.yml').read_text()
-          marker = "          from pathlib import Path\n"
-          start = source.index(marker)
-          end = source.index("\n          PY", start)
-          patch = textwrap.dedent(source[start:end])
-          exec(compile(patch, 'm7-reader-patch', 'exec'), {})
-
-          reference = Path('crates/aligngauge-hts/src/reference.rs')
-          text = reference.read_text()
+          cargo = Path('crates/aligngauge-cli/Cargo.toml')
+          text = cargo.read_text()
           text = text.replace(
-              '''        if let Some(expected_md5) = requirement.md5() {\n            if actual.md5 != expected_md5 {\n                return Err(AlignGaugeError::new(\n                    ErrorCategory::ReferenceMismatch,\n                    "supplied local FASTA reference MD5 does not match the CRAM header",\n                )\n                .with_detail("reference_name", requirement.name().to_owned())\n                .with_detail("expected_md5", expected_md5.to_owned())\n                .with_detail("actual_md5", actual.md5.clone()));\n            }\n        }''',
-              '''        if let Some(expected_md5) = requirement.md5()\n            && actual.md5 != expected_md5\n        {\n            return Err(AlignGaugeError::new(\n                ErrorCategory::ReferenceMismatch,\n                "supplied local FASTA reference MD5 does not match the CRAM header",\n            )\n            .with_detail("reference_name", requirement.name().to_owned())\n            .with_detail("expected_md5", expected_md5.to_owned())\n            .with_detail("actual_md5", actual.md5.clone()));\n        }''',
+              '[dev-dependencies]\nrust-htslib = { version = "1.0.1", default-features = false }',
+              '[dev-dependencies]\naligngauge-testkit = { path = "../aligngauge-testkit" }\nrust-htslib = { version = "=1.0.1", default-features = false, features = ["bzip2", "lzma"] }',
           )
-          text = text.replace(
-              '''        if let Some(value) = &md5 {\n            if value.len() != 32 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {\n                return Err(reference_header_error(line_number, "@SQ M5 is not a 32-digit MD5")\n                    .with_detail("reference_name", name.clone())\n                    .with_detail("md5", value.clone()));\n            }\n        }''',
-              '''        if let Some(value) = &md5\n            && (value.len() != 32 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()))\n        {\n            return Err(reference_header_error(line_number, "@SQ M5 is not a 32-digit MD5")\n                .with_detail("reference_name", name.clone())\n                .with_detail("md5", value.clone()));\n        }''',
-          )
-          text = text.replace('.split(|byte| byte.is_ascii_whitespace())', '.split(u8::is_ascii_whitespace)')
-          reference.write_text(text)
+          cargo.write_text(text)
 
-          lib = Path('crates/aligngauge-hts/src/lib.rs')
+          lib = Path('crates/aligngauge-cli/src/lib.rs')
           text = lib.read_text()
-          text = text.replace('/// Vendored HTSlib line', '/// Vendored `HTSlib` line')
-          text = text.replace('production HTSlib build.', 'production `HTSlib` build.')
+          text = text.replace(
+              '//! Command-line orchestration over the production BAM reader and v0.1 collectors.',
+              '//! Command-line orchestration over the production BAM/CRAM reader and release collectors.',
+          )
+          text = text.replace(
+              'use aligngauge_hts::{BamReader, FieldPlan, ReaderOptions};',
+              'use aligngauge_hts::{\n    AlignmentFormat, BamReader, FieldPlan, HTSLIB_COMPATIBILITY_VERSION,\n    HTSLIB_NETWORK_TRANSPORT_ENABLED, HTS_SYS_VERSION, RUST_HTSLIB_VERSION, ReaderOptions,\n    detect_alignment_format,\n};',
+          )
+          old = '''pub fn analyze_release(config: &ResolvedConfig) -> Result<ReleaseReport, AlignGaugeError> {\n    analyze_release_with_hook(config, &mut NoopReleaseHook)\n}'''
+          new = '''pub fn analyze_release(config: &ResolvedConfig) -> Result<ReleaseReport, AlignGaugeError> {\n    analyze_release_with_reference(config, None)\n}\n\n/// Analyze a BAM or CRAM release run, requiring an explicit local FASTA for CRAM.\n///\n/// # Errors\n/// Returns the first configuration, reference-integrity, reader, collector, or provenance failure.\npub fn analyze_release_with_reference(\n    config: &ResolvedConfig,\n    reference: Option<&Path>,\n) -> Result<ReleaseReport, AlignGaugeError> {\n    analyze_release_with_reference_and_hook(config, reference, &mut NoopReleaseHook)\n}'''
+          if old not in text:
+              raise SystemExit('analyze_release wrapper not found')
+          text = text.replace(old, new, 1)
+
+          old = '''pub fn analyze_release_with_hook(\n    config: &ResolvedConfig,\n    hook: &mut impl ReleaseHook,\n) -> Result<ReleaseReport, AlignGaugeError> {\n    let (coverage_options, memory_plan) = release_coverage_setup(config)?;'''
+          new = '''pub fn analyze_release_with_hook(\n    config: &ResolvedConfig,\n    hook: &mut impl ReleaseHook,\n) -> Result<ReleaseReport, AlignGaugeError> {\n    analyze_release_with_reference_and_hook(config, None, hook)\n}\n\n/// Analyze a BAM or CRAM release run with deterministic fault-injection checkpoints.\n///\n/// # Errors\n/// Returns the first injected or production release failure.\npub fn analyze_release_with_reference_and_hook(\n    config: &ResolvedConfig,\n    reference: Option<&Path>,\n    hook: &mut impl ReleaseHook,\n) -> Result<ReleaseReport, AlignGaugeError> {\n    let (coverage_options, memory_plan) = release_coverage_setup(config)?;'''
+          if old not in text:
+              raise SystemExit('hook function signature not found')
+          text = text.replace(old, new, 1)
+
+          old = '''    let traversal_started = Instant::now();\n    let mut reader = BamReader::open(\n        &config.input,\n        field_plan.clone(),\n        ReaderOptions {\n            io_threads: effective_io_threads,\n        },\n    )?;\n    let header_identity = reader.header().identity().sha256().to_owned();'''
+          new = '''    let input_format = detect_alignment_format(&config.input)?;\n    let traversal_started = Instant::now();\n    let reader_options = ReaderOptions {\n        io_threads: effective_io_threads,\n    };\n    let mut reader = match input_format {\n        AlignmentFormat::Bam => {\n            if let Some(reference) = reference {\n                return Err(AlignGaugeError::new(\n                    ErrorCategory::Configuration,\n                    "--reference is valid only for CRAM input",\n                )\n                .with_detail("reference", reference.to_string_lossy().into_owned()));\n            }\n            BamReader::open(&config.input, field_plan.clone(), reader_options)?\n        }\n        AlignmentFormat::Cram => {\n            let reference = reference.ok_or_else(|| {\n                AlignGaugeError::new(\n                    ErrorCategory::ReferenceRequired,\n                    "CRAM input requires an explicit local FASTA supplied with --reference",\n                )\n                .with_detail("input", config.input.to_string_lossy().into_owned())\n            })?;\n            BamReader::open_cram(\n                &config.input,\n                reference,\n                field_plan.clone(),\n                reader_options,\n            )?\n        }\n    };\n    let reference_identity = reader.reference_identity().map(ToJson::to_json);\n    let header_identity = reader.header().identity().sha256().to_owned();'''
+          if old not in text:
+              raise SystemExit('reader open block not found')
+          text = text.replace(old, new, 1)
+          text = text.replace(
+              'let traversal_ns = elapsed_ns(traversal_started, "BAM traversal")?;',
+              'let traversal_ns = elapsed_ns(traversal_started, "alignment traversal")?;',
+          )
+
+          text = text.replace(
+              'BTreeMap::from([(String::from("rust-htslib"), String::from("1.0.1"))]),',
+              '''BTreeMap::from([\n            (String::from("hts-sys"), String::from(HTS_SYS_VERSION)),\n            (\n                String::from("htslib"),\n                String::from(HTSLIB_COMPATIBILITY_VERSION),\n            ),\n            (\n                String::from("rust-htslib"),\n                String::from(RUST_HTSLIB_VERSION),\n            ),\n        ]),''',
+          )
+          old = '''        BTreeMap::from([\n            (String::from("field_plan"), field_plan.to_json()),\n            (String::from("bam_traversals"), JsonValue::Unsigned(1)),'''
+          new = '''        BTreeMap::from([\n            (String::from("field_plan"), field_plan.to_json()),\n            (\n                String::from("input_format"),\n                input_format.as_str().to_json(),\n            ),\n            (String::from("alignment_traversals"), JsonValue::Unsigned(1)),\n            (\n                String::from("bam_traversals"),\n                JsonValue::Unsigned(if matches!(input_format, AlignmentFormat::Bam) { 1 } else { 0 }),\n            ),\n            (\n                String::from("cram_traversals"),\n                JsonValue::Unsigned(if matches!(input_format, AlignmentFormat::Cram) { 1 } else { 0 }),\n            ),\n            (\n                String::from("htslib_network_transport_enabled"),\n                HTSLIB_NETWORK_TRANSPORT_ENABLED.to_json(),\n            ),\n            (\n                String::from("local_reference"),\n                reference_identity.unwrap_or(JsonValue::Null),\n            ),'''
+          if old not in text:
+              raise SystemExit('analysis plan block not found')
+          text = text.replace(old, new, 1)
+          text = text.replace(
+              '(String::from("bam_traversal"), traversal_ns),',
+              '(String::from("alignment_traversal"), traversal_ns),',
+          )
+          text = text.replace(
+              '"v0.1 does not compute a whole-file checksum during the single streaming pass",',
+              '"the streaming release path does not compute a whole-file checksum during analysis",',
+          )
           lib.write_text(text)
 
-          reader = Path('crates/aligngauge-hts/src/reader.rs')
-          text = reader.read_text()
-          text = text.replace('before HTSlib traversal.', 'before `HTSlib` traversal.')
-          text = text.replace('invalid options, HTSlib failures', 'invalid options, `HTSlib` failures')
-          text = text.replace('pinned HTSlib build.', 'pinned `HTSlib` build.')
-          text = text.replace('/// HTSlib reference configuration failures', '/// `HTSlib` reference configuration failures')
-          text = text.replace('without asking HTSlib to resolve references.', 'without asking `HTSlib` to resolve references.')
-          reader.write_text(text)
+          main = Path('crates/aligngauge-cli/src/main.rs')
+          text = main.read_text()
+          text = text.replace(
+              'use aligngauge_cli::{analyze_bam, analyze_release};',
+              'use aligngauge_cli::{analyze_bam, analyze_release_with_reference};',
+          )
+          text = text.replace(
+              '''    Release {\n        config_path: Option<PathBuf>,\n        overrides: ConfigOverrides,\n        diagnostic_hint: LogFormat,\n    },''',
+              '''    Release {\n        config_path: Option<PathBuf>,\n        reference: Option<PathBuf>,\n        overrides: ConfigOverrides,\n        diagnostic_hint: LogFormat,\n    },''',
+          )
+          text = text.replace(
+              '''        Ok(CliAction::Release {\n            config_path,\n            overrides,\n            diagnostic_hint,\n        }) => {''',
+              '''        Ok(CliAction::Release {\n            config_path,\n            reference,\n            overrides,\n            diagnostic_hint,\n        }) => {''',
+          )
+          text = text.replace(
+              'let report = match analyze_release(&config) {',
+              'let report = match analyze_release_with_reference(&config, reference.as_deref()) {',
+          )
+          text = text.replace(
+              '''    config_path: Option<PathBuf>,\n    compatibility_format: Option<CompatibilityFormat>,''',
+              '''    config_path: Option<PathBuf>,\n    reference: Option<PathBuf>,\n    compatibility_format: Option<CompatibilityFormat>,''',
+          )
+          text = text.replace(
+              '''            config_path: None,\n            compatibility_format: None,''',
+              '''            config_path: None,\n            reference: None,\n            compatibility_format: None,''',
+          )
+          text = text.replace(
+              '''        Ok(CliAction::Release {\n            config_path: self.config_path,\n            overrides: self.overrides,\n            diagnostic_hint: self.diagnostic_hint,\n        })''',
+              '''        Ok(CliAction::Release {\n            config_path: self.config_path,\n            reference: self.reference,\n            overrides: self.overrides,\n            diagnostic_hint: self.diagnostic_hint,\n        })''',
+          )
+          old = '''        Some("--reference") => Err(unsupported_option(\n            "--reference",\n            "CRAM reference resolution is a v0.2 feature",\n            program,\n        )),'''
+          new = '''        Some("--reference") => {\n            state.release_option_seen = true;\n            set_path_option(\n                &mut state.reference,\n                next_value(arguments, "--reference", program)?,\n                "--reference",\n                program,\n            )\n        },'''
+          if old not in text:
+              raise SystemExit('--reference parser arm not found')
+          text = text.replace(old, new, 1)
+          old_usage = '''        "Usage:\\n  {0} qc --input <BAM> --outdir <DIR> [OPTIONS]\\n\\nRequired v0.1 values:\\n  --input <PATH>                  Local BAM input (may also come from --config)\\n  --outdir <PATH>                 New output directory (may also come from --config)\\n\\nOptional v0.1 values:\\n  --threads <N>                   Collector/reduction thread limit (v0.1 collector is deterministic serial)\\n  --io-threads <N>                HTSlib I/O workers; 0 or 1 selects serial decoding\\n  --memory-limit <SIZE>           B, KiB, MiB, GiB, or TiB (default 4GiB)\\n  --coverage-thresholds <LIST>    Comma-separated positive depths (default 1,10,20,30)\\n  --config <PATH>                 Strict schema_version=1 config file\\n  --log-format <human|json>       Diagnostic error format\\n  --quiet                         Suppress routine completion summary\\n  --verbose                       Enable verbose mode in resolved provenance\\n  --preserve-failed-staging       Preserve clearly incomplete staging on publication failure\\n  -h, --help                      Show this help\\n\\nConfiguration precedence:\\n  built-ins < config file < documented ALIGNGAUGE_* environment < CLI\\n\\nNot released in v0.1:\\n  --reference (v0.2 CRAM), --targets/--profile targeted (v0.3), --backend, --cuda-device\\n\\nLegacy three-counter compatibility probe:\\n  {0} qc --input <BAM>\\n\\nCompatibility projections retained for differential validation:\\n  {0} qc --input <BAM> --format <human|json|samtools-flagstat|samtools-idxstats>",'''
+          new_usage = '''        "Usage:\\n  {0} qc --input <BAM|CRAM> --outdir <DIR> [OPTIONS]\\n\\nRequired release values:\\n  --input <PATH>                  Local BAM or CRAM input (may also come from --config)\\n  --outdir <PATH>                 New output directory (may also come from --config)\\n\\nCRAM reference integrity:\\n  --reference <FASTA>             Explicit local FASTA required for CRAM; remote lookup is disabled\\n\\nOptional values:\\n  --threads <N>                   Collector/reduction thread limit (collector is deterministic serial)\\n  --io-threads <N>                HTSlib I/O workers; 0 or 1 selects serial decoding\\n  --memory-limit <SIZE>           B, KiB, MiB, GiB, or TiB (default 4GiB)\\n  --coverage-thresholds <LIST>    Comma-separated positive depths (default 1,10,20,30)\\n  --config <PATH>                 Strict schema_version=1 config file\\n  --log-format <human|json>       Diagnostic error format\\n  --quiet                         Suppress routine completion summary\\n  --verbose                       Enable verbose mode in resolved provenance\\n  --preserve-failed-staging       Preserve clearly incomplete staging on publication failure\\n  -h, --help                      Show this help\\n\\nConfiguration precedence:\\n  built-ins < config file < documented ALIGNGAUGE_* environment < CLI\\n\\nNot released in v0.2:\\n  --targets/--profile targeted (v0.3), --backend, --cuda-device\\n\\nLegacy BAM three-counter compatibility probe:\\n  {0} qc --input <BAM>\\n\\nBAM compatibility projections retained for differential validation:\\n  {0} qc --input <BAM> --format <human|json|samtools-flagstat|samtools-idxstats>",'''
+          if old_usage not in text:
+              raise SystemExit('usage text not found')
+          text = text.replace(old_usage, new_usage, 1)
+          main.write_text(text)
           PY
 
-      - name: Refresh lockfile and validate
+      - name: Add BAM/CRAM equivalence and fail-closed tests
+        shell: bash
         run: |
-          cargo check --workspace --all-features
+          cat > crates/aligngauge-cli/tests/cram_v0_2.rs <<'RS'
+          use std::fs;
+          use std::path::{Path, PathBuf};
+          use std::process::Command;
+          use std::sync::atomic::{AtomicU64, Ordering};
+          use std::time::{SystemTime, UNIX_EPOCH};
+
+          use aligngauge_cli::{analyze_release, analyze_release_with_reference};
+          use aligngauge_core::{ConfigOverrides, ErrorCategory, MapEnvironment, ToJson, resolve_config};
+          use aligngauge_hts::{AlignmentFormat, detect_alignment_format};
+          use aligngauge_testkit::bam::{CigarOp, RecordSpec, ReferenceSpec, serialize_bam};
+          use rust_htslib::bam::{self, Format, Read};
+
+          static NEXT_ID: AtomicU64 = AtomicU64::new(0);
+          const REFERENCE_MD5: &str = "dee764dc7924160b161de01b8c77167c";
+
+          struct FixturePair {
+              root: PathBuf,
+              bam: PathBuf,
+              cram: PathBuf,
+              reference: PathBuf,
+              wrong_reference: PathBuf,
+          }
+
+          impl Drop for FixturePair {
+              fn drop(&mut self) {
+                  let _ = fs::remove_dir_all(&self.root);
+              }
+          }
+
+          fn temp_path(label: &str) -> PathBuf {
+              let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
+              let nanos = SystemTime::now()
+                  .duration_since(UNIX_EPOCH)
+                  .expect("clock after epoch")
+                  .as_nanos();
+              std::env::temp_dir().join(format!(
+                  "aligngauge-m7-{label}-{}-{nanos}-{id}",
+                  std::process::id()
+              ))
+          }
+
+          fn make_pair() -> FixturePair {
+              let root = temp_path("pair");
+              fs::create_dir_all(&root).expect("create fixture root");
+              let reference = root.join("reference.fa");
+              let wrong_reference = root.join("wrong.fa");
+              let bam_path = root.join("equivalent.bam");
+              let cram_path = root.join("equivalent.cram");
+              let sequence = "ACGT".repeat(250);
+              fs::write(&reference, format!(">chr1\n{sequence}\n")).expect("write reference");
+              fs::write(&wrong_reference, format!(">chr1\n{}\n", "A".repeat(1000)))
+                  .expect("write wrong reference");
+              rust_htslib::faidx::build(reference.clone()).expect("index reference");
+              rust_htslib::faidx::build(wrong_reference.clone()).expect("index wrong reference");
+
+              let header = format!(
+                  "@HD\tVN:1.6\tSO:coordinate\n@SQ\tSN:chr1\tLN:1000\tM5:{REFERENCE_MD5}\n"
+              );
+              let references = [ReferenceSpec {
+                  name: String::from("chr1"),
+                  length: 1000,
+              }];
+              let records = [
+                  RecordSpec::mapped(
+                      "mapped-a",
+                      0,
+                      100,
+                      vec![CigarOp::new(10, 'M')],
+                      "ACGTACGTAC",
+                  ),
+                  RecordSpec::mapped(
+                      "mapped-b",
+                      0,
+                      120,
+                      vec![CigarOp::new(4, 'M'), CigarOp::new(2, 'D'), CigarOp::new(4, 'M')],
+                      "ACGTACGT",
+                  ),
+                  RecordSpec::unmapped("unmapped", "NNNN"),
+              ];
+              fs::write(
+                  &bam_path,
+                  serialize_bam(&header, &references, &records).expect("serialize BAM"),
+              )
+              .expect("write BAM");
+
+              let mut reader = bam::Reader::from_path(&bam_path).expect("open generated BAM");
+              let output_header = bam::Header::from_template(reader.header());
+              let mut writer =
+                  bam::Writer::from_path(&cram_path, &output_header, Format::Cram).expect("open CRAM writer");
+              writer.set_reference(&reference).expect("set CRAM writer reference");
+              for record in reader.records() {
+                  writer.write(&record.expect("read BAM record")).expect("write CRAM record");
+              }
+              drop(writer);
+
+              FixturePair {
+                  root,
+                  bam: bam_path,
+                  cram: cram_path,
+                  reference,
+                  wrong_reference,
+              }
+          }
+
+          fn config(input: &Path) -> aligngauge_core::ResolvedConfig {
+              resolve_config(
+                  None,
+                  &MapEnvironment::new(),
+                  ConfigOverrides {
+                      input: Some(input.to_path_buf()),
+                      outdir: Some(temp_path("unused-output")),
+                      memory_limit_bytes: Some(64 * 1024 * 1024),
+                      coverage_thresholds: Some(vec![1, 2, 10]),
+                      ..ConfigOverrides::default()
+                  },
+              )
+              .expect("resolve config")
+          }
+
+          #[test]
+          fn equivalent_bam_and_cram_have_identical_canonical_results() {
+              let fixtures = make_pair();
+              assert_eq!(detect_alignment_format(&fixtures.bam).expect("detect BAM"), AlignmentFormat::Bam);
+              assert_eq!(detect_alignment_format(&fixtures.cram).expect("detect CRAM"), AlignmentFormat::Cram);
+
+              let bam = analyze_release(&config(&fixtures.bam)).expect("analyze BAM");
+              let cram = analyze_release_with_reference(
+                  &config(&fixtures.cram),
+                  Some(&fixtures.reference),
+              )
+              .expect("analyze CRAM");
+
+              assert_eq!(bam.counters(), cram.counters());
+              assert_eq!(bam.coverage(), cram.coverage());
+              assert_eq!(bam.summary(), cram.summary());
+              assert_eq!(bam.provenance().header_identity, cram.provenance().header_identity);
+              assert_eq!(bam.provenance().backend_versions, cram.provenance().backend_versions);
+              assert_eq!(bam.provenance().resource_limits, cram.provenance().resource_limits);
+              assert_eq!(bam.provenance().normalization_actions, cram.provenance().normalization_actions);
+              assert_eq!(bam.provenance().warnings, cram.provenance().warnings);
+              assert_eq!(bam.provenance().system, cram.provenance().system);
+
+              let mut bam_plan = bam.provenance().analysis_plan.clone();
+              let mut cram_plan = cram.provenance().analysis_plan.clone();
+              for key in ["input_format", "bam_traversals", "cram_traversals", "local_reference"] {
+                  bam_plan.remove(key);
+                  cram_plan.remove(key);
+              }
+              assert_eq!(bam_plan, cram_plan);
+
+              let cram_provenance = cram.provenance().to_json_pretty();
+              assert!(cram_provenance.contains("\"input_format\": \"cram\""));
+              assert!(cram_provenance.contains("\"htslib_network_transport_enabled\": false"));
+              assert!(cram_provenance.contains("\"sha256\""));
+              assert!(cram_provenance.contains(REFERENCE_MD5));
+          }
+
+          #[test]
+          fn cram_requires_an_explicit_reference_and_rejects_mismatch() {
+              let fixtures = make_pair();
+              let missing = analyze_release_with_reference(&config(&fixtures.cram), None)
+                  .expect_err("missing reference must fail");
+              assert_eq!(missing.category(), ErrorCategory::ReferenceRequired);
+
+              let mismatch = analyze_release_with_reference(
+                  &config(&fixtures.cram),
+                  Some(&fixtures.wrong_reference),
+              )
+              .expect_err("wrong reference must fail");
+              assert_eq!(mismatch.category(), ErrorCategory::ReferenceMismatch);
+          }
+
+          #[test]
+          fn truncated_cram_is_typed_corrupt() {
+              let fixtures = make_pair();
+              let bytes = fs::read(&fixtures.cram).expect("read CRAM");
+              let truncated = fixtures.root.join("truncated.cram");
+              fs::write(&truncated, &bytes[..bytes.len() / 2]).expect("write truncated CRAM");
+              let error = analyze_release_with_reference(&config(&truncated), Some(&fixtures.reference))
+                  .expect_err("truncated CRAM must fail");
+              assert_eq!(error.category(), ErrorCategory::InputCorrupt);
+          }
+
+          #[test]
+          fn hostile_reference_environment_cannot_replace_explicit_local_policy() {
+              let fixtures = make_pair();
+              let outdir = fixtures.root.join("cli-output");
+              let output = Command::new(env!("CARGO_BIN_EXE_aligngauge"))
+                  .arg("qc")
+                  .arg("--input")
+                  .arg(&fixtures.cram)
+                  .arg("--reference")
+                  .arg(&fixtures.reference)
+                  .arg("--outdir")
+                  .arg(&outdir)
+                  .arg("--memory-limit")
+                  .arg("64MiB")
+                  .arg("--quiet")
+                  .env("REF_PATH", "http://127.0.0.1:9/%s")
+                  .env("REF_CACHE", fixtures.root.join("hostile-cache"))
+                  .env("HTS_PATH", fixtures.root.join("hostile-plugins"))
+                  .output()
+                  .expect("run CRAM CLI");
+              assert!(
+                  output.status.success(),
+                  "{}",
+                  String::from_utf8_lossy(&output.stderr)
+              );
+              assert!(outdir.join("_SUCCESS").is_file());
+          }
+          RS
+
+      - name: Validate complete workspace and Milestone 7 tests
+        run: |
           cargo fmt --all
-          cargo check --workspace --all-features --locked
-          cargo clippy -p aligngauge-hts --all-targets --all-features --locked -- -D warnings
-          cargo test -p aligngauge-hts --all-features --locked
+          cargo check --workspace --all-features
+          cargo clippy --workspace --all-targets --all-features -- -D warnings
+          cargo test --workspace --all-features
           git diff --check
 
-      - name: Commit product source only
+      - name: Commit validated product source only
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add crates/aligngauge-hts/src/reader.rs crates/aligngauge-hts/src/reference.rs crates/aligngauge-hts/src/lib.rs Cargo.lock
-          git commit -m 'feat: add local-only CRAM reader boundary'
+          git add crates/aligngauge-cli/Cargo.toml crates/aligngauge-cli/src/lib.rs crates/aligngauge-cli/src/main.rs crates/aligngauge-cli/tests/cram_v0_2.rs Cargo.lock
+          git commit -m 'feat: add CRAM release path and equivalence tests'
           git push origin HEAD:milestone-7-cram
