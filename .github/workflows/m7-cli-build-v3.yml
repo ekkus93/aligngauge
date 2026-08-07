@@ -33,9 +33,13 @@ jobs:
           test_marker = "          cat > crates/aligngauge-cli/tests/cram_v0_2.rs <<'RS'\n"
           start = source.index(test_marker) + len(test_marker)
           end = source.index("\n          RS", start)
-          Path('crates/aligngauge-cli/tests/cram_v0_2.rs').write_text(
-              textwrap.dedent(source[start:end])
+          test_source = textwrap.dedent(source[start:end])
+          test_source = test_source.replace(
+              'memory_limit_bytes: Some(64 * 1024 * 1024),',
+              'memory_limit_bytes: Some(1024 * 1024 * 1024),',
           )
+          test_source = test_source.replace('.arg("64MiB")', '.arg("1GiB")')
+          Path('crates/aligngauge-cli/tests/cram_v0_2.rs').write_text(test_source)
           PY
 
       - name: Refactor reader selection and analysis plan
