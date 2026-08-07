@@ -3,8 +3,11 @@
 **Milestone:** 8 — BED and target normalization  
 **Evidence date:** 2026-08-07  
 **Validated implementation source SHA:** `8bc7f6df8154f2f3162e8d498781873364b4c1ea`  
-**Pre-evidence PR head:** `5441775343f6a84b25490c997be32270e351745d`  
-**Disposition:** Implementation and required Milestone 8 tests are complete. The milestone acceptance gate remains open until Permanent CI succeeds on the exact evidence/TODO candidate commit.
+**Pre-evidence PR head:** `5441775343f6a84b25490c997be32270e351745d`
+
+**Exact evidence/TODO acceptance SHA:** `b4ccbe30e37b1ece1bb34fca89b594a8aa195ed6`
+
+**Disposition:** Complete — Milestone 8 implementation, evidence, and exact-SHA acceptance gates have passed.
 
 ## 1. Scope
 
@@ -170,7 +173,15 @@ The hardened implementation working tree was validated before product commit in 
 
 The temporary builder and hardening helper were removed afterward and are absent from the permanent branch diff.
 
-PR #2 then began the repository's standing Permanent CI, Full Runtime Validation, and Reference Validation workflows on pre-evidence head `5441775343f6a84b25490c997be32270e351745d`.
+PR #2 then ran the repository's standing gates on the permanent evidence/TODO acceptance candidate `b4ccbe30e37b1ece1bb34fca89b594a8aa195ed6`:
+
+| Gate | Run | Job | Result |
+| --- | --- | --- | --- |
+| Permanent CI | `31197752424` | `92930131540` | success |
+| Full Runtime Validation | `31197752286` | `92930136219` | success |
+| Reference Validation | `31197752293` | `92930129164` | success |
+
+Permanent CI on the exact acceptance SHA passed formatting, dependency and schema validation, strict Clippy, the complete workspace test suite, the CRAM network-isolation proof, documentation, and clean-tree verification.
 
 ## 11. Known discrepancies and scope boundary
 
@@ -188,4 +199,4 @@ Those are Milestone 9 responsibilities and will consume the normalized `TargetSe
 
 ## 12. Acceptance state
 
-Implementation tasks 8.1 and 8.2 are complete and have direct tests/evidence. Milestone 8 is not yet declared complete by this document because the repository's milestone rule still requires Permanent CI success on the exact evidence/TODO candidate commit.
+Implementation tasks 8.1 and 8.2 are complete and have direct tests/evidence. Permanent CI succeeded on exact evidence/TODO acceptance SHA `b4ccbe30e37b1ece1bb34fca89b594a8aa195ed6`, with Full Runtime and Reference Validation also successful on that same SHA. Milestone 8 is therefore complete; Milestone 9 may consume this normalized target model without redefining its parser or territory semantics.

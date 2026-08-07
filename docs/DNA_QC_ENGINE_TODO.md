@@ -3,7 +3,7 @@
 **Repository:** `ekkus93/aligngauge`
 
 **Companion specification:** `docs/DNA_QC_ENGINE_SPEC.md`  
-**Status:** Ralph Loop active — `v0.2.0` released; Milestone 8 implementation/evidence complete; exact-SHA acceptance gate pending
+**Status:** Ralph Loop active — `v0.2.0` released; Milestone 8 complete; Milestone 9 next
 **Last updated:** 2026-08-07  
 **Supersedes:** Initial `DNA_QC_ENGINE_TODO.md` dated 2026-08-05
 
@@ -602,7 +602,7 @@ Verify SPEC §19.2.
 
 ## Milestone 8 — BED and target normalization
 
-**Status:** Implementation and evidence complete — validated implementation source SHA `8bc7f6df8154f2f3162e8d498781873364b4c1ea`; branch validation run `31197147271`, job `92928071302`, success; evidence in `docs/evidence/M8_BED_NORMALIZATION.md`. Final completion remains pending Permanent CI on the exact evidence/TODO candidate.
+**Status:** Complete — validated implementation source SHA `8bc7f6df8154f2f3162e8d498781873364b4c1ea`; exact evidence/TODO acceptance SHA `b4ccbe30e37b1ece1bb34fca89b594a8aa195ed6`; branch validation run `31197147271`, job `92928071302`; Permanent CI run `31197752424`, job `92930131540`; Full Runtime Validation run `31197752286`, job `92930136219`; Reference Validation run `31197752293`, job `92930129164`; all successful. Evidence: `docs/evidence/M8_BED_NORMALIZATION.md`.
 
 ### 8.1 Parser
 
@@ -631,7 +631,7 @@ Implement SPEC §9.
 - [x] Create `docs/evidence/M8_BED_NORMALIZATION.md`.
 - [x] ADR-0005 records the fail-closed unknown-contig, coordinate, and BED-width policy.
 - [x] Required parser, normalization, fuzz, and representative vendor-style fixture tests pass.
-- [ ] Permanent CI succeeds on the exact evidence/TODO candidate commit.
+- [x] Permanent CI succeeds on the exact evidence/TODO candidate commit.
 
 ## Milestone 9 — Targeted metrics
 
