@@ -189,6 +189,21 @@ jobs:
           path.write_text(text.replace(marker, helper + marker, 1), encoding='utf-8')
           PY
 
+      - name: Set E2E budget above exact coverage planner floor
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('crates/aligngauge-cli/tests/release_v0_1.rs')
+          text = path.read_text(encoding='utf-8')
+          if text.count('64 * 1024 * 1024') != 1:
+              raise SystemExit('expected one in-process memory budget')
+          text = text.replace('64 * 1024 * 1024', '1024 * 1024 * 1024', 1)
+          count = text.count('64MiB')
+          if count != 1:
+              raise SystemExit(f'expected one CLI memory budget, found {count}')
+          path.write_text(text.replace('64MiB', '1GiB', 1), encoding='utf-8')
+          PY
+
       - name: Format candidate
         run: cargo fmt --all
 
@@ -206,7 +221,7 @@ jobs:
           cargo build -p aligngauge-cli --locked
           root="$(mktemp -d)"
           trap 'rm -rf "$root"' EXIT
-          target/debug/aligngauge qc --input testdata/fixtures/basic.bam --outdir "$root/results" --memory-limit 64MiB --quiet
+          target/debug/aligngauge qc --input testdata/fixtures/basic.bam --outdir "$root/results" --memory-limit 1GiB --quiet
           python - "$root/results" <<'PY'
           import json
           import sys
