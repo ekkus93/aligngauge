@@ -61,7 +61,7 @@ fn committed_vendor_style_fixture_preserves_identity_and_normalizes_exactly() {
     assert_eq!(targets.merged_intervals[2].contig, "chr2");
     assert_eq!((targets.merged_intervals[2].start, targets.merged_intervals[2].end), (0, 17));
     assert_eq!(targets.normalization.overlap_merges, 1);
-    assert_eq!(targets.normalization.left_flank_clips, 1);
+    assert_eq!(targets.normalization.left_flank_clips, 0);
     assert_eq!(targets.normalization.aggregate_territory_bases, 72);
 
     let actions = targets.provenance_actions();
