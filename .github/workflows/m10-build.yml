@@ -23,13 +23,32 @@ jobs:
       - name: Generate core implementation
         run: |
           set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('.github/m10-build.py')
+          text = p.read_text()
+          text = text.replace(
+              '    /// Base qualities; reserved for later profiles.\\n    Qualities,\\n}',
+              '    /// Base qualities. Reserved; not requested by v0.1 plans.\\n    Qualities,\\n}',
+          )
+          text = text.replace(
+              '        Self::from_fields(&[RequiredField::Flags, RequiredField::Coordinates, RequiredField::Cigar])\\n    }',
+              '        Self::from_fields([\\n            RequiredField::Flags,\\n            RequiredField::Coordinates,\\n            RequiredField::Cigar,\\n        ])\\n    }',
+          )
+          text = text.replace('        Self::from_fields(&[\\n', '        Self::from_fields([\\n')
+          text = text.replace('        ])\\n    }\\n\\n    /// Add optional tags', '        ])\\n    }\\n\\n    /// Add optional tags')
+          p.write_text(text)
+          PY
           python .github/m10-build.py
           python - <<'PY'
           from pathlib import Path
           p = Path('crates/aligngauge-metrics/src/samtools_stats.rs')
           text = p.read_text()
           text = text.replace('\\pub struct SamtoolsStatsReport', 'pub struct SamtoolsStatsReport')
-          text = text.replace('proper_numerator as f32 as f64 / sequences as f32 as f64', '(proper_numerator as f32 / sequences as f32) as f64')
+          text = text.replace(
+              'proper_numerator as f32 as f64 / sequences as f32 as f64',
+              '(proper_numerator as f32 / sequences as f32) as f64',
+          )
           p.write_text(text)
           PY
           cargo fmt --all
