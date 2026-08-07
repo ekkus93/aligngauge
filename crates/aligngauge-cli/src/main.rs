@@ -4,7 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use aligngauge_cli::{analyze_bam, analyze_release};
+use aligngauge_cli::{analyze_bam, analyze_release_with_reference};
 use aligngauge_core::config::{parse_coverage_thresholds, parse_memory_limit};
 use aligngauge_core::{
     AlignGaugeError, AtomicPublisher, ConfigOverrides, ErrorCategory, LogFormat,
@@ -30,6 +30,7 @@ enum CliAction {
     },
     Release {
         config_path: Option<PathBuf>,
+        reference: Option<PathBuf>,
         overrides: ConfigOverrides,
         diagnostic_hint: LogFormat,
     },
@@ -45,6 +46,7 @@ fn main() -> ExitCode {
         Ok(CliAction::Compatibility { input, format }) => run_compatibility(&input, format),
         Ok(CliAction::Release {
             config_path,
+            reference,
             overrides,
             diagnostic_hint,
         }) => {
@@ -57,7 +59,7 @@ fn main() -> ExitCode {
             if let Err(error) = preflight_output_destination(&config.outdir) {
                 return exit_with_error(&error, config.log_format);
             }
-            let report = match analyze_release(&config) {
+            let report = match analyze_release_with_reference(&config, reference.as_deref()) {
                 Ok(report) => report,
                 Err(error) => return exit_with_error(&error, config.log_format),
             };
@@ -154,6 +156,7 @@ enum FlagPresence {
 struct ParseState {
     overrides: ConfigOverrides,
     config_path: Option<PathBuf>,
+    reference: Option<PathBuf>,
     compatibility_format: Option<CompatibilityFormat>,
     diagnostic_hint: LogFormat,
     release_option_seen: bool,
@@ -167,6 +170,7 @@ impl ParseState {
         Self {
             overrides: ConfigOverrides::default(),
             config_path: None,
+            reference: None,
             compatibility_format: None,
             diagnostic_hint: LogFormat::Human,
             release_option_seen: false,
@@ -180,7 +184,7 @@ impl ParseState {
         if let Some(format) = self.compatibility_format {
             if self.release_option_seen {
                 return Err(usage_error(
-                    "--format is a compatibility probe and cannot be combined with v0.1 release options",
+                    "--format is a compatibility probe and cannot be combined with release output options",
                     program,
                 ));
             }
@@ -202,6 +206,7 @@ impl ParseState {
 
         Ok(CliAction::Release {
             config_path: self.config_path,
+            reference: self.reference,
             overrides: self.overrides,
             diagnostic_hint: self.diagnostic_hint,
         })
@@ -269,11 +274,15 @@ fn parse_qc_option(
             parse_release_flag_option(state, option, program)
         }
         Some("--format") => parse_format_option(state, arguments, program),
-        Some("--reference") => Err(unsupported_option(
-            "--reference",
-            "CRAM reference resolution is a v0.2 feature",
-            program,
-        )),
+        Some("--reference") => {
+            state.release_option_seen = true;
+            set_path_option(
+                &mut state.reference,
+                next_value(arguments, "--reference", program)?,
+                "--reference",
+                program,
+            )
+        }
         Some("--targets" | "--profile") => Err(unsupported_option(
             argument.to_string_lossy(),
             "targeted analysis is a v0.3 feature",
@@ -281,7 +290,7 @@ fn parse_qc_option(
         )),
         Some("--backend" | "--cuda-device") => Err(unsupported_option(
             argument.to_string_lossy(),
-            "hardware/backend selection is not a released v0.1 feature",
+            "hardware/backend selection is not released",
             program,
         )),
         _ => Err(usage_error(
@@ -605,7 +614,7 @@ fn unsupported_option(
     program: &OsStr,
 ) -> AlignGaugeError {
     usage_error(
-        format!("{option} is not supported in v0.1: {reason}"),
+        format!("{option} is not supported by this release: {reason}"),
         program,
     )
 }
@@ -616,7 +625,7 @@ fn usage_error(message: impl Into<String>, program: &OsStr) -> AlignGaugeError {
 
 fn usage(program: &OsStr) -> String {
     format!(
-        "Usage:\n  {0} qc --input <BAM> --outdir <DIR> [OPTIONS]\n\nRequired v0.1 values:\n  --input <PATH>                  Local BAM input (may also come from --config)\n  --outdir <PATH>                 New output directory (may also come from --config)\n\nOptional v0.1 values:\n  --threads <N>                   Collector/reduction thread limit (v0.1 collector is deterministic serial)\n  --io-threads <N>                HTSlib I/O workers; 0 or 1 selects serial decoding\n  --memory-limit <SIZE>           B, KiB, MiB, GiB, or TiB (default 4GiB)\n  --coverage-thresholds <LIST>    Comma-separated positive depths (default 1,10,20,30)\n  --config <PATH>                 Strict schema_version=1 config file\n  --log-format <human|json>       Diagnostic error format\n  --quiet                         Suppress routine completion summary\n  --verbose                       Enable verbose mode in resolved provenance\n  --preserve-failed-staging       Preserve clearly incomplete staging on publication failure\n  -h, --help                      Show this help\n\nConfiguration precedence:\n  built-ins < config file < documented ALIGNGAUGE_* environment < CLI\n\nNot released in v0.1:\n  --reference (v0.2 CRAM), --targets/--profile targeted (v0.3), --backend, --cuda-device\n\nLegacy three-counter compatibility probe:\n  {0} qc --input <BAM>\n\nCompatibility projections retained for differential validation:\n  {0} qc --input <BAM> --format <human|json|samtools-flagstat|samtools-idxstats>",
+        "Usage:\n  {0} qc --input <BAM|CRAM> --outdir <DIR> [OPTIONS]\n\nRequired release values:\n  --input <PATH>                  Local BAM or CRAM input (may also come from --config)\n  --outdir <PATH>                 New output directory (may also come from --config)\n\nCRAM reference integrity:\n  --reference <FASTA>             Explicit local FASTA required for CRAM; remote lookup is disabled\n\nOptional values:\n  --threads <N>                   Collector/reduction thread limit (collector is deterministic serial)\n  --io-threads <N>                HTSlib I/O workers; 0 or 1 selects serial decoding\n  --memory-limit <SIZE>           B, KiB, MiB, GiB, or TiB (default 4GiB)\n  --coverage-thresholds <LIST>    Comma-separated positive depths (default 1,10,20,30)\n  --config <PATH>                 Strict schema_version=1 config file\n  --log-format <human|json>       Diagnostic error format\n  --quiet                         Suppress routine completion summary\n  --verbose                       Enable verbose mode in resolved provenance\n  --preserve-failed-staging       Preserve clearly incomplete staging on publication failure\n  -h, --help                      Show this help\n\nConfiguration precedence:\n  built-ins < config file < documented ALIGNGAUGE_* environment < CLI\n\nDeferred beyond v0.2:\n  --targets/--profile targeted (v0.3), --backend, --cuda-device\n\nLegacy BAM three-counter compatibility probe:\n  {0} qc --input <BAM>\n\nBAM compatibility projections retained for differential validation:\n  {0} qc --input <BAM> --format <human|json|samtools-flagstat|samtools-idxstats>",
         program.to_string_lossy()
     )
 }

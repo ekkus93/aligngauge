@@ -163,14 +163,13 @@ fn json_log_format_applies_to_configuration_failures() {
 }
 
 #[test]
-fn future_release_options_are_rejected_explicitly() {
+fn deferred_release_options_are_rejected_explicitly() {
     let input = fixture("basic.bam");
     for (option, marker) in [
-        ("--reference", "v0.2"),
         ("--targets", "v0.3"),
         ("--profile", "v0.3"),
-        ("--backend", "not a released v0.1 feature"),
-        ("--cuda-device", "not a released v0.1 feature"),
+        ("--backend", "not released"),
+        ("--cuda-device", "not released"),
     ] {
         let output = Command::new(binary())
             .args(["qc", "--input"])

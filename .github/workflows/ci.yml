@@ -33,6 +33,23 @@ jobs:
       - name: Verify dependency lockfile
         run: cargo update --workspace --locked --dry-run
 
+      - name: Verify CRAM network transports are excluded
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -q '^name = "curl-sys"$' Cargo.lock; then
+            echo 'curl-sys must not be present in the production dependency graph' >&2
+            exit 1
+          fi
+
+          cargo tree -p aligngauge-hts -e features --locked > /tmp/aligngauge-hts-features.txt
+          cat /tmp/aligngauge-hts-features.txt
+          if grep -E 'rust-htslib feature "(curl|s3|gcs)"|hts-sys feature "(curl|s3|gcs)"' \
+            /tmp/aligngauge-hts-features.txt; then
+            echo 'HTSlib network transport feature is enabled' >&2
+            exit 1
+          fi
+
       - name: Check formatting
         run: cargo fmt --all --check
 
@@ -83,6 +100,94 @@ jobs:
 
       - name: Run tests
         run: cargo test --workspace --all-features --locked
+
+      - name: Install syscall tracer
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends strace
+          /usr/bin/strace --version
+
+      - name: Prove CRAM reference isolation with no network access
+        shell: bash
+        run: |
+          set -uo pipefail
+
+          fail() {
+            echo "::error title=CRAM network isolation::$1"
+            exit 1
+          }
+
+          command -v strace >/dev/null || fail 'strace is unavailable after installation'
+          command -v unshare >/dev/null || fail 'unshare is unavailable on the runner'
+
+          build_json="$RUNNER_TEMP/aligngauge-cram-build.json"
+          build_stderr="$RUNNER_TEMP/aligngauge-cram-build.stderr"
+          selection_stderr="$RUNNER_TEMP/aligngauge-cram-selection.stderr"
+          trace="$RUNNER_TEMP/aligngauge-cram-network.trace"
+          test_stdout="$RUNNER_TEMP/aligngauge-cram-test.stdout"
+          test_stderr="$RUNNER_TEMP/aligngauge-cram-test.stderr"
+          rm -f "$build_json" "$build_stderr" "$selection_stderr" "$trace" \
+            "$test_stdout" "$test_stderr"
+
+          if ! cargo test -p aligngauge-cli --test cram_v0_2 --no-run --locked \
+            --message-format=json > "$build_json" 2> "$build_stderr"; then
+            cat "$build_stderr" >&2
+            fail 'failed to build the CRAM integration-test executable'
+          fi
+
+          if ! test_bin="$(python - "$build_json" 2> "$selection_stderr" <<'PY'
+          import json
+          import os
+          import sys
+
+          executables = []
+          with open(sys.argv[1], encoding='utf-8') as handle:
+              for line in handle:
+                  message = json.loads(line)
+                  if message.get('reason') != 'compiler-artifact':
+                      continue
+                  target = message.get('target', {})
+                  executable = message.get('executable')
+                  if target.get('name') == 'cram_v0_2' and executable:
+                      executables.append(os.path.realpath(executable))
+
+          unique = sorted(set(executables))
+          if len(unique) != 1:
+              print(
+                  f'expected exactly one cram_v0_2 executable from Cargo metadata, got {unique}',
+                  file=sys.stderr,
+              )
+              raise SystemExit(3)
+          print(unique[0])
+          PY
+          )"; then
+            cat "$selection_stderr" >&2
+            fail 'Cargo metadata did not identify exactly one CRAM integration-test executable'
+          fi
+
+          if [[ ! -x "$test_bin" ]]; then
+            printf 'selected executable: %s\n' "$test_bin" >&2
+            fail 'selected CRAM integration-test path is not executable'
+          fi
+          printf 'CRAM isolation executable: %s\n' "$test_bin"
+
+          if ! sudo unshare --net /usr/bin/strace -f -qq -e trace=network -o "$trace" \
+            "$test_bin" --exact hostile_reference_environment_cannot_replace_explicit_local_policy \
+            > "$test_stdout" 2> "$test_stderr"; then
+            cat "$test_stdout" >&2 || true
+            cat "$test_stderr" >&2 || true
+            cat "$trace" >&2 || true
+            fail 'CRAM hostile-reference test failed inside the network-disabled namespace'
+          fi
+
+          cat "$test_stdout"
+          if grep -E 'AF_INET|AF_INET6' "$trace" > "$RUNNER_TEMP/aligngauge-cram-network.matches"; then
+            cat "$RUNNER_TEMP/aligngauge-cram-network.matches" >&2
+            fail 'CRAM reference-isolation test attempted an IPv4/IPv6 network syscall'
+          fi
+          echo 'CRAM network isolation proof passed: isolated test succeeded with zero IPv4/IPv6 syscalls.'
 
       - name: Build documentation
         env:

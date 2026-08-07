@@ -166,12 +166,18 @@ I/O, full-genome validation, or indexed partition parallelism.
 v0.2 adds:
 
 - CRAM input through a pinned HTSlib/rust-htslib version;
-- mandatory local-reference resolution;
+- mandatory explicit local-reference resolution for CRAM analysis;
 - remote reference retrieval disabled unconditionally;
 - reference identity and MD5 validation;
 - BAM/CRAM equivalence testing;
-- `inspect` and `validate-reference` workflows;
 - CRAM corruption and missing-reference fixtures.
+
+Standalone `inspect` and `validate-reference` commands are **not** v0.2
+release requirements. The v0.2 integrity contract is enforced through the
+released `qc --reference <FASTA>` path and the shared reference-validation
+API. Dedicated inspection/validation workflows are deferred until their CLI,
+output-schema, and error contracts are specified and tested as independent
+product surfaces.
 
 ### 4.3 v0.3 — WES and targeted panels
 
@@ -391,23 +397,40 @@ The implementation shall:
 
 This section is normative for v0.2 and shall influence the v0.1 I/O boundary.
 
-Before opening any CRAM handle, AlignGauge shall configure HTSlib for local-only
-reference resolution.
+Before reference-dependent CRAM record decoding, AlignGauge shall establish a
+fail-closed local-only reference policy. The implementation shall not rely on
+process-global environment mutation when inherited provider state can instead be
+made non-authoritative by construction.
+
+Opening a local CRAM container far enough to read its header and obtain `@SQ`
+reference requirements is permitted before FASTA validation, provided the pinned
+production HTSlib build has no remote reference transport and record traversal has
+not begun.
 
 Requirements:
 
 - pin the exact HTSlib/rust-htslib version;
-- verify that `REF_PATH`, `REF_CACHE`, and any version-specific reference provider
-  cannot trigger remote retrieval;
-- override inherited environment state with local-only values;
-- prohibit HTTP/HTTPS reference resolution;
-- run CRAM differential tests in a network-disabled sandbox;
+- verify version-specific `REF_PATH`, `REF_CACHE`, `HTS_PATH`, metadata/provider,
+  and MD5-lookup behavior that could otherwise influence reference selection;
+- compile the production HTSlib stack without HTTP/HTTPS or other remote reference
+  transport features;
+- require an explicit local FASTA for CRAM analysis;
+- validate required contig names, lengths, and `M5` identities against that FASTA
+  before reference-dependent record traversal;
+- ensure inherited provider state cannot select an alternate reference after the
+  explicit FASTA is supplied;
+- prohibit fallback from a supplied but mismatched FASTA to any other local or
+  remote reference;
+- run the hostile-provider CRAM case in a network-disabled sandbox and observe
+  network syscalls where the platform supports it;
 - fail if a required sequence cannot be resolved locally;
 - name the missing contig and expected MD5 in the diagnostic where available;
 - record the actual FASTA identity and per-contig validation in provenance.
 
-A supplied but mismatched FASTA shall not cause fallback to another local or remote
-reference.
+Process-global mutation of `REF_PATH`, `REF_CACHE`, or `HTS_PATH` is not required
+and should be avoided when it would introduce race-prone global state. The release
+evidence shall instead prove that hostile inherited values are non-authoritative
+and that the CRAM reference-resolution path cannot access the network.
 
 ## 9. BED contract for v0.3
 

@@ -3,7 +3,7 @@
 **Repository:** `ekkus93/aligngauge`
 
 **Companion specification:** `docs/DNA_QC_ENGINE_SPEC.md`  
-**Status:** Ralph Loop active — `v0.1.0` released; Milestone 6 complete; Milestone 7 next
+**Status:** Ralph Loop active — `v0.1.0` released; Milestone 7 implementation/evidence complete; v0.2 release gate remains open
 **Last updated:** 2026-08-07  
 **Supersedes:** Initial `DNA_QC_ENGINE_TODO.md` dated 2026-08-05
 
@@ -550,46 +550,50 @@ Verify every criterion in SPEC §19.1.
 
 ## Milestone 7 — CRAM local-reference design
 
+**Status:** Implementation complete — validated implementation SHA `cf288efe8ffdc3542abedc95404bc6602515da4a`; Permanent CI run `31184689945`, job `92886187241`; Full Runtime Validation run `31184688346`, job `92886217801`; Reference Validation run `31184688367`, job `92886248460`; all successful. v0.2 release remains open pending the release-scope reconciliation below.
+
 ### 7.1 Pin and inspect backend behavior
 
-- [ ] Pin rust-htslib and HTSlib.
-- [ ] Verify version-specific `REF_PATH` and `REF_CACHE` behavior.
-- [ ] Identify every implicit reference-provider path.
-- [ ] Confirm how to disable HTTP/HTTPS reference retrieval.
-- [ ] Record findings in `ADR-0004-CRAM_REFERENCE_RESOLUTION.md`.
+- [x] Pin rust-htslib and HTSlib.
+- [x] Verify version-specific `REF_PATH` and `REF_CACHE` behavior.
+- [x] Identify every implicit reference-provider path.
+- [x] Confirm how to disable HTTP/HTTPS reference retrieval.
+- [x] Record findings in `ADR-0004-CRAM_REFERENCE_RESOLUTION.md`.
 
 ### 7.2 Enforce local-only resolution
 
-- [ ] Override inherited reference environment before opening CRAM.
-- [ ] Require explicit local FASTA where needed.
-- [ ] Validate contig names, lengths, and MD5.
-- [ ] Fail on missing local sequence.
-- [ ] Fail on supplied-reference mismatch.
-- [ ] Never fall back to an alternate reference.
-- [ ] Record actual local FASTA identity in provenance.
+- [x] Neutralize inherited reference-provider state without process-global mutation, per ADR-0004.
+- [x] Require explicit local FASTA where needed.
+- [x] Validate contig names, lengths, and MD5.
+- [x] Fail on missing local sequence.
+- [x] Fail on supplied-reference mismatch.
+- [x] Never fall back to an alternate reference.
+- [x] Record actual local FASTA identity in provenance.
 
 ### 7.3 Network-isolation tests
 
-- [ ] Run CRAM tests with no network access.
-- [ ] Use a CRAM that would otherwise invite MD5 lookup.
-- [ ] Assert no DNS/HTTP attempt where observable.
-- [ ] Assert missing reference fails.
-- [ ] Assert mismatched reference fails.
-- [ ] Assert correct local reference succeeds.
+- [x] Run CRAM tests with no network access.
+- [x] Use a CRAM that would otherwise invite MD5 lookup.
+- [x] Assert no DNS/HTTP attempt where observable.
+- [x] Assert missing reference fails.
+- [x] Assert mismatched reference fails.
+- [x] Assert correct local reference succeeds.
 
 ### 7.4 BAM/CRAM equivalence
 
-- [ ] Produce equivalent BAM and CRAM fixtures.
-- [ ] Compare canonical counters.
-- [ ] Compare canonical coverage.
-- [ ] Compare provenance differences only where format-specific.
-- [ ] Test CRAM truncation and corruption.
+- [x] Produce equivalent BAM and CRAM fixtures.
+- [x] Compare canonical counters.
+- [x] Compare canonical coverage.
+- [x] Compare provenance differences only where format-specific.
+- [x] Test CRAM truncation and corruption.
 
 ### v0.2 release gate
 
 Verify SPEC §19.2.
 
-- [ ] Create `docs/evidence/V0_2_CRAM_VALIDATION.md`.
+- [x] Create `docs/evidence/V0_2_CRAM_VALIDATION.md`.
+- [x] Reconcile SPEC §4.2: standalone `inspect` / `validate-reference` workflows are deferred beyond v0.2 until separately specified.
+- [x] Reconcile SPEC §8 with ADR-0004: use scoped provider neutralization rather than process-global environment mutation.
 - [ ] Permanent CI succeeds on the exact release commit.
 
 ---
