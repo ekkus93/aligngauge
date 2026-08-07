@@ -111,8 +111,12 @@ def validate_json(text: str, label: str) -> None:
         fail(f"{label}: JSON output must be an object")
     if "schema_version" not in value:
         fail(f"{label}: JSON output is missing schema_version")
-    if "alignment" not in value:
-        fail(f"{label}: JSON output is missing alignment")
+    if "alignment_counters" not in value:
+        fail(f"{label}: JSON output is missing alignment_counters")
+    if "per_reference_counters" not in value:
+        fail(f"{label}: JSON output is missing per_reference_counters")
+    if "coverage" not in value:
+        fail(f"{label}: JSON output is missing explicit coverage availability")
 
 
 def validate_idxstats(text: str, label: str) -> None:
