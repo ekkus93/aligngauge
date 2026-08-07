@@ -22,6 +22,7 @@ name = "aligngauge-cli"
 version = "0.0.0"
 dependencies = [
  "aligngauge-core",
+ "aligngauge-coverage",
  "aligngauge-hts",
  "aligngauge-metrics",
  "rust-htslib",

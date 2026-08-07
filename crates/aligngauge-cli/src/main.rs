@@ -7,8 +7,8 @@ use std::process::ExitCode;
 use aligngauge_cli::{analyze_bam, analyze_release};
 use aligngauge_core::config::{parse_coverage_thresholds, parse_memory_limit};
 use aligngauge_core::{
-    AlignGaugeError, AtomicPublisher, ConfigOverrides, ErrorCategory, LogFormat, ProcessEnvironment,
-    resolve_config,
+    AlignGaugeError, AtomicPublisher, ConfigOverrides, ErrorCategory, LogFormat,
+    ProcessEnvironment, resolve_config,
 };
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -44,14 +44,11 @@ fn main() -> ExitCode {
             overrides,
             diagnostic_hint,
         }) => {
-            let config = match resolve_config(
-                config_path.as_deref(),
-                &ProcessEnvironment,
-                overrides,
-            ) {
-                Ok(config) => config,
-                Err(error) => return exit_with_error(&error, diagnostic_hint),
-            };
+            let config =
+                match resolve_config(config_path.as_deref(), &ProcessEnvironment, overrides) {
+                    Ok(config) => config,
+                    Err(error) => return exit_with_error(&error, diagnostic_hint),
+                };
             if let Err(error) = preflight_output_destination(&config.outdir) {
                 return exit_with_error(&error, config.log_format);
             }
@@ -235,10 +232,7 @@ fn parse_args() -> Result<CliAction, AlignGaugeError> {
                     "human" => LogFormat::Human,
                     "json" => LogFormat::Json,
                     _ => {
-                        return Err(usage_error(
-                            "--log-format must be human or json",
-                            &program,
-                        ));
+                        return Err(usage_error("--log-format must be human or json", &program));
                     }
                 };
                 diagnostic_hint = format;
@@ -256,11 +250,7 @@ fn parse_args() -> Result<CliAction, AlignGaugeError> {
             }
             Some("--preserve-failed-staging") => {
                 release_option_seen = true;
-                set_flag(
-                    &mut preserve_seen,
-                    "--preserve-failed-staging",
-                    &program,
-                )?;
+                set_flag(&mut preserve_seen, "--preserve-failed-staging", &program)?;
                 overrides.preserve_failed_staging = Some(true);
             }
             Some("--format") => {

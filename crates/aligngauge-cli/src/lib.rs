@@ -9,9 +9,7 @@ use aligngauge_core::{
     AlignGaugeError, Availability, BuildInfo, ErrorCategory, InputIdentity, JsonValue,
     MetricDefinition, OutputBundle, Provenance, ResolvedConfig, Summary, SystemInfo, Warning,
 };
-use aligngauge_coverage::{
-    CoverageCollector, CoverageMemoryPlan, CoverageOptions, CoverageReport,
-};
+use aligngauge_coverage::{CoverageCollector, CoverageMemoryPlan, CoverageOptions, CoverageReport};
 use aligngauge_hts::{BamReader, FieldPlan, ReaderOptions};
 use aligngauge_metrics::{CounterCollector, analyze_bam as analyze_metrics_bam};
 
@@ -108,8 +106,11 @@ impl ReleaseReport {
         writeln!(output, "uncovered_reference_bases\t{uncovered}")
             .expect("writing to String cannot fail");
         for (threshold, percentage) in self.coverage.threshold_percentages() {
-            writeln!(output, "coverage_at_least_{threshold}x_percent\t{percentage}")
-                .expect("writing to String cannot fail");
+            writeln!(
+                output,
+                "coverage_at_least_{threshold}x_percent\t{percentage}"
+            )
+            .expect("writing to String cannot fail");
         }
         output.push_str("per_reference_coverage\n");
         for reference in self.coverage.per_reference() {
@@ -172,11 +173,8 @@ pub fn analyze_release(config: &ResolvedConfig) -> Result<ReleaseReport, AlignGa
     )?;
     let header_identity = reader.header().identity().sha256().to_owned();
     let mut counter_collector = CounterCollector::new(reader.header());
-    let mut coverage_collector = CoverageCollector::new(
-        reader.header(),
-        coverage_options.thresholds,
-        memory_plan,
-    )?;
+    let mut coverage_collector =
+        CoverageCollector::new(reader.header(), coverage_options.thresholds, memory_plan)?;
 
     while let Some(record) = reader.next_record()? {
         counter_collector.observe(&record)?;
@@ -215,21 +213,24 @@ pub fn analyze_release(config: &ResolvedConfig) -> Result<ReleaseReport, AlignGa
                 String::from("configured_collector_threads"),
                 JsonValue::Unsigned(usize_to_u64(config.threads, "configured threads")?),
             ),
-            (String::from("collector_threads_used"), JsonValue::Unsigned(1)),
+            (
+                String::from("collector_threads_used"),
+                JsonValue::Unsigned(1),
+            ),
             (
                 String::from("configured_io_threads"),
                 JsonValue::Unsigned(usize_to_u64(config.io_threads, "configured I/O threads")?),
             ),
             (
                 String::from("effective_reader_io_threads"),
-                JsonValue::Unsigned(usize_to_u64(
-                    effective_io_threads,
-                    "effective I/O threads",
-                )?),
+                JsonValue::Unsigned(usize_to_u64(effective_io_threads, "effective I/O threads")?),
             ),
         ]),
         BTreeMap::from([
-            (String::from("memory_limit_bytes"), config.memory_limit_bytes),
+            (
+                String::from("memory_limit_bytes"),
+                config.memory_limit_bytes,
+            ),
             (
                 String::from("configured_threads"),
                 usize_to_u64(config.threads, "configured threads")?,
