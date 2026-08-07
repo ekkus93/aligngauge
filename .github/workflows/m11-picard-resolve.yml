@@ -20,5 +20,14 @@ jobs:
           image='broadinstitute/picard:3.4.0'
           docker pull "$image"
           docker image inspect "$image" --format '{{json .RepoDigests}}'
-          docker run --rm "$image" --version
-          docker run --rm --entrypoint /bin/sh "$image" -c 'command -v java; java -version; command -v R || true; command -v Rscript || true; ls -l /usr/picard /usr/local/bin 2>/dev/null | head -80'
+          docker run --rm --entrypoint /bin/sh "$image" -c '
+            set -eu
+            command -v java
+            java -version
+            command -v R || true
+            command -v Rscript || true
+            find / -maxdepth 4 -type f -name "picard*.jar" -print 2>/dev/null | head -20
+            jar=$(find / -maxdepth 4 -type f -name "picard*.jar" -print 2>/dev/null | head -1)
+            test -n "$jar"
+            java -jar "$jar" --version
+          '
