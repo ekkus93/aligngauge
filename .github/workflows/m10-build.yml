@@ -7,6 +7,7 @@ on:
     paths:
       - .github/m10-build.py
       - .github/m10-postgen.py
+      - .github/m10-oracle-tests.py
       - .github/workflows/m10-build.yml
 
 permissions:
@@ -68,6 +69,7 @@ jobs:
           p.write_text(text)
           PY
           python .github/m10-postgen.py
+          python .github/m10-oracle-tests.py
           cargo fmt --all
           git diff --check
       - name: Check workspace
@@ -86,14 +88,22 @@ jobs:
       - name: Verify and commit restricted source diff
         run: |
           set -euo pipefail
-          git rm .github/m10-build.py .github/m10-postgen.py .github/workflows/m10-build.yml .github/workflows/m10-stats-probe.yml
+          git rm -f \
+            .github/m10-build.py \
+            .github/m10-postgen.py \
+            .github/m10-oracle-tests.py \
+            .github/workflows/m10-build.yml \
+            .github/workflows/m10-stats-probe.yml \
+            .github/workflows/m10-multiqc-resolve.yml
           git diff --check
           changed="$(git status --short | awk '{print $2}' | sort)"
           expected="$(printf '%s\n' \
             .github/m10-build.py \
             .github/m10-postgen.py \
+            .github/m10-oracle-tests.py \
             .github/workflows/m10-build.yml \
             .github/workflows/m10-stats-probe.yml \
+            .github/workflows/m10-multiqc-resolve.yml \
             crates/aligngauge-cli/src/main.rs \
             crates/aligngauge-hts/src/plan.rs \
             crates/aligngauge-hts/src/reader.rs \
