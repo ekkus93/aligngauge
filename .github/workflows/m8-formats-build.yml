@@ -123,7 +123,7 @@ jobs:
           }
 
           fn parse_interval('''
-          text, count = pattern.subn(replacement, text, count=1)
+          text, count = pattern.subn(lambda _match: replacement, text, count=1)
           if count != 1:
               raise SystemExit(f"expected one split_fields function, found {count}")
 
@@ -154,8 +154,8 @@ jobs:
           set -euo pipefail
           git diff --check
           changed="$(git status --short | awk '{print $2}' | sort)"
-          allowed="$(printf '%s\n' Cargo.lock crates/aligngauge-formats/src/bed.rs crates/aligngauge-formats/src/lib.rs | sort)"
-          if [[ -n "${changed}" && "${changed}" != "${allowed}" && "${changed}" != "Cargo.lock" && "${changed}" != "crates/aligngauge-formats/src/bed.rs" && "${changed}" != "crates/aligngauge-formats/src/lib.rs" ]]; then
+          allowed="$(printf '%s\n' Cargo.lock crates/aligngauge-formats/src/bed.rs crates/aligngauge-formats/src/lib.rs crates/aligngauge-formats/tests/bed_contract.rs | sort)"
+          if [[ -n "${changed}" && "${changed}" != "${allowed}" && "${changed}" != "Cargo.lock" && "${changed}" != "crates/aligngauge-formats/src/bed.rs" && "${changed}" != "crates/aligngauge-formats/src/lib.rs" && "${changed}" != "crates/aligngauge-formats/tests/bed_contract.rs" ]]; then
             echo 'unexpected generated changes:' >&2
             git status --short >&2
             exit 1
@@ -171,6 +171,6 @@ jobs:
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add Cargo.lock crates/aligngauge-formats/src/bed.rs crates/aligngauge-formats/src/lib.rs
+          git add Cargo.lock crates/aligngauge-formats/src/bed.rs crates/aligngauge-formats/src/lib.rs crates/aligngauge-formats/tests/bed_contract.rs
           git commit -m 'feat: harden Milestone 8 BED field parsing'
           git push origin HEAD:milestone-8-bed-normalization
