@@ -8,4 +8,6 @@ The v0.1 command-line surface deliberately keeps three explicit paths:
 
 The compatibility paths must not silently inherit release-mode requirements, and release-only options must not be combined with `--format`.
 
+Correctness warnings are always emitted to stderr, including under `--quiet`; quiet mode suppresses only routine completion output. `--verbose` emits the resolved configuration using the selected diagnostic format so accepted-but-serial settings such as `--threads >1` are visible rather than silently ignored.
+
 Permanent runtime and release E2E validation exercise these paths independently so compatibility behavior cannot silently acquire release-mode requirements.
