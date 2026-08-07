@@ -1,0 +1,81 @@
+{
+  "alignment_counters": {
+    "status": "available",
+    "value": {
+      "duplicate": 0,
+      "mapped": 1,
+      "mate_mapped": 0,
+      "mate_unmapped": 0,
+      "paired": 0,
+      "primary": 2,
+      "proper_pair": 0,
+      "qc_fail": 0,
+      "qc_pass": 2,
+      "read1": 0,
+      "read2": 0,
+      "secondary": 0,
+      "singleton": 0,
+      "supplementary": 0,
+      "total": 2,
+      "unmapped": 1
+    }
+  },
+  "application": {
+    "git_commit": {
+      "status": "available",
+      "value": "0123456789abcdef"
+    },
+    "version": "0.1.0-test"
+  },
+  "coverage": {
+    "status": "available",
+    "value": {
+      "covered_reference_bases": 100,
+      "depth_histogram": {
+        "0": 900,
+        "1": 100
+      },
+      "policy": {
+        "include_duplicates": false,
+        "include_qc_fail": false,
+        "include_secondary": false,
+        "include_supplementary": false,
+        "mate_overlap_correction": false,
+        "minimum_mapq": 0,
+        "name": "aligngauge-v0.1"
+      },
+      "threshold_bases": {
+        "1": 100
+      },
+      "total_accepted_aligned_bases": 100,
+      "uncovered_reference_bases": 900
+    }
+  },
+  "metric_definitions": {
+    "alignment.total": {
+      "description": "Decoded alignment records",
+      "unit": "records"
+    }
+  },
+  "per_reference_counters": {
+    "status": "available",
+    "value": [
+      {
+        "length": 1000,
+        "mapped": 1,
+        "name": "chr1",
+        "unmapped": {
+          "reason": "not_defined_by_canonical_profile",
+          "status": "unavailable"
+        }
+      }
+    ]
+  },
+  "schema_version": "1.0.0",
+  "warnings": [
+    {
+      "code": "test_warning",
+      "message": "Synthetic fixture"
+    }
+  ]
+}

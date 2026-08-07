@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aligngauge.dev/schemas/summary-1.0.0.json",
+  "title": "AlignGauge summary.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "application",
+    "metric_definitions",
+    "alignment_counters",
+    "per_reference_counters",
+    "coverage",
+    "warnings"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "application": { "$ref": "#/$defs/build_info" },
+    "metric_definitions": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/metric_definition" }
+    },
+    "alignment_counters": { "$ref": "#/$defs/availability" },
+    "per_reference_counters": { "$ref": "#/$defs/availability" },
+    "coverage": { "$ref": "#/$defs/availability" },
+    "warnings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/warning" }
+    }
+  },
+  "$defs": {
+    "availability": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "value"],
+          "properties": {
+            "status": { "const": "available" },
+            "value": true
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "reason"],
+          "properties": {
+            "status": { "const": "unavailable" },
+            "reason": { "type": "string", "minLength": 1 }
+          }
+        }
+      ]
+    },
+    "build_info": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "git_commit"],
+      "properties": {
+        "version": { "type": "string", "minLength": 1 },
+        "git_commit": { "$ref": "#/$defs/availability" }
+      }
+    },
+    "metric_definition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["description", "unit"],
+      "properties": {
+        "description": { "type": "string", "minLength": 1 },
+        "unit": { "type": "string", "minLength": 1 }
+      }
+    },
+    "warning": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": { "type": "string", "minLength": 1 },
+        "message": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

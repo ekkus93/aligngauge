@@ -1,0 +1,23 @@
+[package]
+name = "aligngauge-testkit"
+version = "0.0.0"
+description = "Deterministic test-corpus and differential tooling for AlignGauge"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+aligngauge-core = { path = "../aligngauge-core" }
+crc32fast = "1.5"
+flate2 = "1.1"
+rust-htslib = { version = "1.0.1", default-features = false }
+sha2 = "0.10"
+
+[[bin]]
+name = "aligngauge-testkit"
+path = "src/main.rs"
+
+[lints]
+workspace = true

@@ -1,0 +1,4 @@
+metric	type	expected	rounding_decimals	compatibility_note
+total_records	integer	1	-	-
+query_bases	integer	9	-	-
+reference_span	integer	11	-	-
