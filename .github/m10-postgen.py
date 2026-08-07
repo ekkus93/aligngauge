@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import re
 from pathlib import Path
 
 p = Path("crates/aligngauge-metrics/src/samtools_stats.rs")
@@ -130,16 +129,10 @@ replacements = {
 for old, new in replacements.items():
     text = text.replace(old, new)
 
-text = re.sub(
-    r"(self\.maximum_first_fragment_length\.max\(unclipped\))\s*(?=\n)",
-    r"\1;",
-    text,
-)
-text = re.sub(
-    r"(self\.maximum_last_fragment_length\.max\(unclipped\))\s*(?=\n)",
-    r"\1;",
-    text,
-)
+needle = "max(unclipped)\n"
+if text.count(needle) != 2:
+    raise SystemExit(f"expected two fragment max expressions without semicolons, found {text.count(needle)}")
+text = text.replace(needle, "max(unclipped);\n")
 
 marker = "fn format_zero_decimals(numerator: u64, denominator: u64) -> String {"
 helpers = r'''fn u64_to_f32(value: u64) -> f32 {
