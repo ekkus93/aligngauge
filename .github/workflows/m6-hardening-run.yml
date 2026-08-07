@@ -81,6 +81,58 @@ jobs:
           '''
           report_path.write_text(report[:method_start] + method + report[method_end:], encoding='utf-8')"""
           body = body[:start] + robust + body[end:]
+
+          bundle_start = "old_bundle = '''    pub fn output_bundle(&self) -> OutputBundle {\n"
+          bundle_next = "\n\nold_signature = 'pub fn analyze_release(config: &ResolvedConfig) -> Result<ReleaseReport, AlignGaugeError> {\\n'"
+          if body.count(bundle_start) != 1 or body.count(bundle_next) != 1:
+              raise SystemExit('output bundle transform repair markers are not unique')
+          start = body.index(bundle_start)
+          end = body.index(bundle_next, start)
+          robust_bundle = r"""bundle_start = lib.index("    /// Build the required atomic output bundle.\n")
+          bundle_end = lib.index("    /// Stable human-readable v0.1 completion summary.\n", bundle_start)
+          bundle_methods = r'''    /// Build the required atomic output bundle.
+              #[must_use]
+              pub fn output_bundle(&self) -> OutputBundle {
+                  OutputBundle::new(
+                      self.summary.to_json_pretty().into_bytes(),
+                      self.provenance.to_json_pretty().into_bytes(),
+                  )
+              }
+
+              /// Build the canonical bundle after an injectable serialization checkpoint.
+              ///
+              /// # Errors
+              /// Returns the injected typed failure before any output bundle is exposed.
+              pub fn output_bundle_with_hook(
+                  &self,
+                  hook: &mut impl ReleaseHook,
+              ) -> Result<OutputBundle, AlignGaugeError> {
+                  hook.checkpoint(ReleaseCheckpoint::BeforeSerialization)?;
+                  Ok(self.output_bundle())
+              }
+
+              /// Build the canonical bundle plus pinned Samtools compatibility files.
+              ///
+              /// # Errors
+              /// Fails closed if a required compatibility source metric is unavailable.
+              pub fn output_bundle_with_samtools_compatibility(
+                  &self,
+              ) -> Result<OutputBundle, AlignGaugeError> {
+                  let mut bundle = self.output_bundle();
+                  bundle.insert(
+                      "samtools.flagstat.txt",
+                      self.counters.render_samtools_flagstat().into_bytes(),
+                  )?;
+                  bundle.insert(
+                      "samtools.idxstats.txt",
+                      self.counters.render_samtools_idxstats()?.into_bytes(),
+                  )?;
+                  Ok(bundle)
+              }
+
+          '''
+          lib = lib[:bundle_start] + bundle_methods + lib[bundle_end:]"""
+          body = body[:start] + robust_bundle + body[end:]
           Path('/tmp/m6_candidate.py').write_text(body, encoding='utf-8')
           PY
           python /tmp/m6_candidate.py
