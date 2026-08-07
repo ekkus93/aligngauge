@@ -1,0 +1,33 @@
+name: M10 Samtools stats probe
+
+on:
+  push:
+    branches:
+      - milestone-10-samtools-stats
+    paths:
+      - .github/workflows/m10-stats-probe.yml
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Capture pinned stats
+        run: |
+          set -euo pipefail
+          image='quay.io/biocontainers/samtools@sha256:58c844089e2bd5114921b679be5956a0cd503140dcaed545caab37cd9947d64b'
+          docker pull "$image" >/dev/null
+          for fixture in basic flags_and_pairs chunk_boundary coverage_mixed; do
+            path="testdata/fixtures/${fixture}.bam"
+            [[ -f "$path" ]] || continue
+            echo "===== $fixture VERSION ====="
+            docker run --rm --network none -v "$PWD:/work:ro" -w /work "$image" samtools --version | head -2
+            echo "===== $fixture SN+IS ====="
+            docker run --rm --network none -v "$PWD:/work:ro" -w /work "$image" samtools stats "$path" | grep -E '^(SN|IS)' || true
+          done
