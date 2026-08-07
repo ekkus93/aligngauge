@@ -1,0 +1,70 @@
+name: One-time Milestone 9 spec bootstrap
+
+on:
+  push:
+    branches:
+      - milestone-9-targeted-metrics
+    paths:
+      - .github/workflows/m9-spec-bootstrap.yml
+
+permissions:
+  contents: write
+
+jobs:
+  bootstrap:
+    name: docs/m9-spec
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: true
+
+      - name: Insert normative targeted metric semantics
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('docs/DNA_QC_ENGINE_SPEC.md')
+          text = path.read_text()
+          old_heading = '## 12. v0.1 coverage semantics\n'
+          if text.count(old_heading) != 1:
+              raise SystemExit(f'expected one coverage heading, found {text.count(old_heading)}')
+          text = text.replace(
+              old_heading,
+              '## 12. Coverage semantics\n\nSections 12.1–12.6 are normative for the v0.1 canonical coverage track. Section 12.7 is normative for v0.3 targeted reductions over that same exact track.\n',
+              1,
+          )
+
+          marker = '## 13. Architecture\n'
+          if text.count(marker) != 1:
+              raise SystemExit(f'expected one architecture marker, found {text.count(marker)}')
+
+          section = '''### 12.7 v0.3 targeted metrics\n\nThe v0.3 native targeted profile is `aligngauge-targeted-v0.3`. It is a reduction over the exact `aligngauge-v0.1` coverage track; targeted analysis shall not create a second read-filtering or coverage algorithm. Consequently mapped primary QC-pass non-duplicate records are included, the minimum MAPQ is 0, base quality is not filtered, mate overlaps are counted independently, and only `M`, `=`, and `X` contribute covered reference bases.\n\nOne validated BED supplies the v0.3 target set. The zero-flank normalized union defines **target territory**. A second normalization using `near_distance_bases`, default 250, defines **selected territory**. Near-target territory is selected territory minus target territory. Expansion is clipped only at validated contig boundaries and every clipping action is provenance.\n\nEvery accepted aligned reference-base observation belongs to exactly one aggregate class by genomic position: on-target inside target territory; near-target inside selected but outside target territory; off-target otherwise. The implementation shall check:\n\n```text\non_target_bases + near_target_bases + off_target_bases\n    == total_accepted_aligned_bases\n```\n\nAggregate target coverage uses unique target union territory. It records target territory, target depth histogram, covered and uncovered target bases, mean target depth, and cumulative base counts/percentages at the configured coverage thresholds. The weighted target histogram depth shall equal `on_target_bases`.\n\nPer-target coverage uses original source BED intervals, preserving source index, source line, coordinates, and optional name. Overlapping source targets may each receive the shared bases in their own per-target results; aggregate union metrics must not double-count them. Each non-empty source target records exact depth sum, mean depth, covered/uncovered bases, threshold counts/percentages, maximal zero-depth runs, and the longest such run. A valid zero-length source target is retained but denominator-based values are explicitly unavailable.\n\nA **dropout target** is a non-empty source interval containing at least one zero-depth target base. A zero-coverage run is a maximal half-open zero-depth subinterval within that source interval.\n\nThe v0.3 project-native enrichment metric is:\n\n```text\ntarget_enrichment\n  = (on_target_bases / total_accepted_aligned_bases)\n    / (target_territory_bases / genome_territory_bases)\n```\n\nwhere genome territory is the checked sum of validated reference lengths. Reduction should use exact integer products before deterministic decimal rendering. The metric is unavailable when a required denominator is zero. It is not labeled Picard `FOLD_ENRICHMENT`.\n\nThe ADR-approved fold-80 alternative is `target_uniformity_penalty_80`. Let `D20` be the deterministic nearest-rank 20th-percentile depth across **all bases in unique target territory**, including zeros, and let `M` be mean target depth:\n\n```text\ntarget_uniformity_penalty_80 = M / D20\n```\n\nFor `N > 0` target bases, the ascending one-based percentile rank is `ceil(0.20 * N)`. The metric is unavailable when target territory is empty or `D20 == 0`; AlignGauge shall not serialize infinity or silently remove zero-depth bases. This metric is native and shall not be labeled Picard `FOLD_80_BASE_PENALTY`.\n\nThe same coverage thresholds configured for canonical coverage are used for aggregate and per-source-target threshold results. Percentages and ratios use deterministic final CPU reduction.\n\nTarget identity, near distance, normalization actions, metric profile, and exact target checksum are recorded in provenance. Targeted BAM and CRAM runs over equivalent records and the same target/reference definitions must produce identical targeted canonical results except for already defined format-specific provenance.\n\nExternal differential tools may validate comparable primitives, such as per-region mean depth and threshold counts, but no named compatibility claim is permitted unless the full filtering and metric definition are matched and pinned. ADR-0006 records this compatibility boundary.\n\n'''
+          text = text.replace(marker, section + marker, 1)
+          path.write_text(text)
+
+          todo = Path('docs/DNA_QC_ENGINE_TODO.md')
+          todo_text = todo.read_text()
+          old_status = '**Status:** Ralph Loop active — `v0.2.0` released; Milestone 8 complete; Milestone 9 next'
+          new_status = '**Status:** Ralph Loop active — `v0.2.0` released; Milestone 8 complete; Milestone 9 active'
+          if todo_text.count(old_status) != 1:
+              raise SystemExit(f'expected one TODO status marker, found {todo_text.count(old_status)}')
+          todo.write_text(todo_text.replace(old_status, new_status, 1))
+          PY
+          git diff --check
+          changed="$(git status --short | awk '{print $2}' | sort)"
+          expected="$(printf '%s\n' docs/DNA_QC_ENGINE_SPEC.md docs/DNA_QC_ENGINE_TODO.md | sort)"
+          [[ "${changed}" == "${expected}" ]] || { git status --short; exit 1; }
+
+      - name: Commit normative spec update
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/DNA_QC_ENGINE_SPEC.md docs/DNA_QC_ENGINE_TODO.md
+          git commit -m 'docs: specify Milestone 9 targeted metrics'
+          git push origin HEAD:milestone-9-targeted-metrics
