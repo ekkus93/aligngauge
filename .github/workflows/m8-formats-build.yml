@@ -61,13 +61,18 @@ jobs:
         run: |
           set -euo pipefail
           git diff --check
-          changed="$(git status --short | awk '{print $2}' | sort)"
-          allowed="$(printf '%s\n' Cargo.lock crates/aligngauge-formats/src/bed.rs crates/aligngauge-formats/src/lib.rs crates/aligngauge-formats/tests/bed_contract.rs | sort)"
-          if [[ -n "${changed}" && "${changed}" != "${allowed}" && "${changed}" != "Cargo.lock" && "${changed}" != "crates/aligngauge-formats/src/bed.rs" && "${changed}" != "crates/aligngauge-formats/src/lib.rs" && "${changed}" != "crates/aligngauge-formats/tests/bed_contract.rs" ]]; then
-            echo 'unexpected generated changes:' >&2
-            git status --short >&2
-            exit 1
-          fi
+          while IFS= read -r path; do
+            [[ -z "${path}" ]] && continue
+            case "${path}" in
+              Cargo.lock|crates/aligngauge-formats/src/bed.rs|crates/aligngauge-formats/src/lib.rs|crates/aligngauge-formats/tests/bed_contract.rs)
+                ;;
+              *)
+                echo "unexpected generated change: ${path}" >&2
+                git status --short >&2
+                exit 1
+                ;;
+            esac
+          done < <(git status --short | awk '{print $2}' | sort)
 
       - name: Commit validated generated changes
         shell: bash
