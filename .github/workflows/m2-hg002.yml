@@ -12,6 +12,8 @@ on:
       - "crates/aligngauge-metrics/**"
       - "testdata/hg002/**"
       - "tools/reference/samtools/**"
+      - "docs/DNA_QC_ENGINE_TODO.md"
+      - "docs/evidence/M5_COVERAGE.md"
   workflow_dispatch:
 
 permissions:

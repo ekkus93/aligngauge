@@ -11,6 +11,8 @@ on:
       - "crates/**"
       - "testdata/**"
       - "tools/ci/**"
+      - "docs/DNA_QC_ENGINE_TODO.md"
+      - "docs/evidence/M5_COVERAGE.md"
   pull_request:
     paths:
       - ".github/workflows/runtime-validation.yml"
@@ -20,6 +22,8 @@ on:
       - "crates/**"
       - "testdata/**"
       - "tools/ci/**"
+      - "docs/DNA_QC_ENGINE_TODO.md"
+      - "docs/evidence/M5_COVERAGE.md"
   workflow_dispatch:
 
 permissions:

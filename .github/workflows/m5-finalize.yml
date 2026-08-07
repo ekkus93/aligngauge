@@ -1,0 +1,60 @@
+name: M5 Evidence Finalizer
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - ".github/workflows/m5-finalize.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    name: m5/evidence-finalizer
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: true
+          fetch-depth: 1
+      - name: Close Milestone 5 TODO
+        run: |
+          python tools/m5_finalize.py
+          git rm .github/workflows/m5-finalize.yml tools/m5_finalize.py
+          git diff --check
+      - name: Reject unexpected finalizer changes
+        run: |
+          python - <<'PY'
+          import subprocess
+
+          allowed = {
+              "docs/DNA_QC_ENGINE_TODO.md",
+              ".github/workflows/m5-finalize.yml",
+              "tools/m5_finalize.py",
+          }
+          output = subprocess.check_output(
+              ["git", "status", "--porcelain=v1"], text=True
+          )
+          paths = set()
+          for line in output.splitlines():
+              path = line[3:]
+              if " -> " in path:
+                  path = path.split(" -> ", 1)[1]
+              paths.add(path)
+          unexpected = paths - allowed
+          if unexpected:
+              raise SystemExit(f"unexpected M5 finalizer changes: {sorted(unexpected)}")
+          if paths != allowed:
+              raise SystemExit(f"M5 finalizer changed unexpected path set: {sorted(paths)}")
+          PY
+      - name: Commit closure state
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/DNA_QC_ENGINE_TODO.md
+          git commit -m "docs: close Milestone 5 coverage TODO"
+          git push origin HEAD:master
