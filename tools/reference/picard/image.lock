@@ -1,0 +1,8 @@
+version=3.4.0
+tag=broadinstitute/picard:3.4.0
+image=broadinstitute/picard@sha256:f11df229b5b49ea28a872c04fc5d33e76bd14890754079390f36897c16194b28
+jar=/usr/picard/picard.jar
+java=/opt/java/openjdk/bin/java
+java_version=17.0.14
+r=/usr/bin/R
+rscript=/usr/bin/Rscript
