@@ -65,11 +65,18 @@ jobs:
           bash -n tools/reference/samtools/compare-coverage.sh
           bash -n testdata/hg002/prepare.sh
           bash -n testdata/hg002/prepare-coverage-projection.sh
-          python -m py_compile \
-            tools/reference/samtools/summarize-depth.py \
-            tools/reference/samtools/compare-coverage.py \
-            tools/ci/check_coverage_rss.py \
-            testdata/hg002/project-coverage-sam.py
+          python - <<'PY'
+          from pathlib import Path
+
+          paths = [
+              Path("tools/reference/samtools/summarize-depth.py"),
+              Path("tools/reference/samtools/compare-coverage.py"),
+              Path("tools/ci/check_coverage_rss.py"),
+              Path("testdata/hg002/project-coverage-sam.py"),
+          ]
+          for path in paths:
+              compile(path.read_text(encoding="utf-8"), str(path), "exec")
+          PY
 
       - name: Run Clippy
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
