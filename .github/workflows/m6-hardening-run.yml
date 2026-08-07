@@ -38,7 +38,7 @@ jobs:
               raise SystemExit('coverage transform repair markers are not unique')
           start = body.index(brittle_start)
           end = body.index(next_section, start)
-          robust = r'''method_start = report.index("    /// Canonical aggregate model already reserved in `aligngauge-core`.\n")
+          robust = r"""method_start = report.index("    /// Canonical aggregate model already reserved in `aligngauge-core`.\n")
           method_end = report.index("    /// Add coverage strategy and resource planning to canonical provenance.\n", method_start)
           method = r'''    /// Canonical aggregate model already reserved in `aligngauge-core`.
               #[must_use]
@@ -79,7 +79,7 @@ jobs:
               }
 
           '''
-          report_path.write_text(report[:method_start] + method + report[method_end:], encoding='utf-8')'''
+          report_path.write_text(report[:method_start] + method + report[method_end:], encoding='utf-8')"""
           body = body[:start] + robust + body[end:]
           Path('/tmp/m6_candidate.py').write_text(body, encoding='utf-8')
           PY
