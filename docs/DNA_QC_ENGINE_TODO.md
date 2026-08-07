@@ -3,7 +3,7 @@
 **Repository:** `ekkus93/aligngauge`
 
 **Companion specification:** `docs/DNA_QC_ENGINE_SPEC.md`  
-**Status:** Ralph Loop active — Milestone 4 complete; Milestone 5 next
+**Status:** Ralph Loop active — Milestone 5 complete; Milestone 6 next
 **Last updated:** 2026-08-06  
 **Supersedes:** Initial `DNA_QC_ENGINE_TODO.md` dated 2026-08-05
 
@@ -410,70 +410,72 @@ Keep v0.1 planning minimal.
 
 ## Milestone 5 — Exact chunked coverage
 
+**Status:** Complete — implementation source SHA `27b056e5766354a63ab6a81e69cf02e8f991170b`; evidence in `docs/evidence/M5_COVERAGE.md`.
+
 ### 5.1 Coverage event generation
 
 Implement SPEC §12.1–§12.2.
 
-- [ ] Apply the `aligngauge-v0.1` record policy.
-- [ ] Emit blocks for `M`, `=`, and `X`.
-- [ ] Exclude `I`, `D`, `N`, `S`, `H`, and `P`.
-- [ ] Use checked coordinate arithmetic.
-- [ ] Reject blocks outside reference bounds.
-- [ ] Test each CIGAR operation and combination.
-- [ ] Test very long `D`/`N`.
-- [ ] Test chunk-crossing blocks.
+- [x] Apply the `aligngauge-v0.1` record policy.
+- [x] Emit blocks for `M`, `=`, and `X`.
+- [x] Exclude `I`, `D`, `N`, `S`, `H`, and `P`.
+- [x] Use checked coordinate arithmetic.
+- [x] Reject blocks outside reference bounds.
+- [x] Test each CIGAR operation and combination.
+- [x] Test very long `D`/`N`.
+- [x] Test chunk-crossing blocks.
 
 ### 5.2 Chunked accumulator
 
-- [ ] Implement one parameterized chunked sweep.
-- [ ] Carry exact depth across chunk boundaries.
-- [ ] Store pending future-end events safely.
-- [ ] Flush completed chunks deterministically.
-- [ ] Handle empty contigs and contig transitions.
-- [ ] Select chunk size from the memory plan.
-- [ ] Record chunk size and strategy in provenance.
-- [ ] Do not create separate whole-contig and target algorithms.
+- [x] Implement one parameterized chunked sweep.
+- [x] Carry exact depth across chunk boundaries.
+- [x] Store pending future-end events safely.
+- [x] Flush completed chunks deterministically.
+- [x] Handle empty contigs and contig transitions.
+- [x] Select chunk size from the memory plan.
+- [x] Record chunk size and strategy in provenance.
+- [x] Do not create separate whole-contig and target algorithms.
 
 ### 5.3 Memory planner
 
-- [ ] Account for all active coverage tracks.
-- [ ] Account for delta entries.
-- [ ] Account for pending cross-chunk events.
-- [ ] Account for reader and output buffers.
-- [ ] Include a safety margin.
-- [ ] Reject an impossible plan before traversal.
-- [ ] Test one-track and multi-track estimates.
-- [ ] Test low-memory failure.
-- [ ] Verify observed peak RSS against planned bounds with documented tolerance.
+- [x] Account for all active coverage tracks.
+- [x] Account for delta entries.
+- [x] Account for pending cross-chunk events.
+- [x] Account for reader and output buffers.
+- [x] Include a safety margin.
+- [x] Reject an impossible plan before traversal.
+- [x] Test one-track and multi-track estimates.
+- [x] Test low-memory failure.
+- [x] Verify observed peak RSS against planned bounds with documented tolerance.
 
 ### 5.4 Histogram and threshold reduction
 
-- [ ] Integer depth histogram.
-- [ ] Accepted aligned-base count.
-- [ ] Covered/uncovered reference bases.
-- [ ] Per-reference mean depth.
-- [ ] Configurable cumulative thresholds.
-- [ ] Deterministic CPU-side floating-point finalization.
-- [ ] Document median/percentile rounding if implemented.
+- [x] Integer depth histogram.
+- [x] Accepted aligned-base count.
+- [x] Covered/uncovered reference bases.
+- [x] Per-reference mean depth.
+- [x] Configurable cumulative thresholds.
+- [x] Deterministic CPU-side floating-point finalization.
+- [x] Document median/percentile rounding if implemented.
 
 ### 5.5 Differential and property testing
 
-- [ ] Compare against ADR-0002 baseline.
-- [ ] Property: changing chunk size does not change canonical results.
-- [ ] Property: sum of histogram counts equals evaluated reference territory.
-- [ ] Property: sum of depth × count equals accepted covered-base total under the
+- [x] Compare against ADR-0003 baseline.
+- [x] Property: changing chunk size does not change canonical results.
+- [x] Property: sum of histogram counts equals evaluated reference territory.
+- [x] Property: sum of depth × count equals accepted covered-base total under the
       selected semantics.
-- [ ] Property: adding an excluded record does not change coverage.
-- [ ] Fuzz CIGAR-to-block conversion.
-- [ ] Validate HG002 subset.
+- [x] Property: adding an excluded record does not change coverage.
+- [x] Fuzz CIGAR-to-block conversion.
+- [x] Validate HG002 subset.
 
 ### Milestone 5 acceptance gate
 
-- [ ] All chunk sizes tested yield identical canonical output.
-- [ ] No unresolved coverage discrepancy remains.
-- [ ] Memory-limit enforcement is demonstrated.
-- [ ] Create `docs/evidence/M5_COVERAGE.md`.
-- [ ] Permanent CI succeeds on the exact evidence commit.
+- [x] All chunk sizes tested yield identical canonical output.
+- [x] No unresolved coverage discrepancy remains.
+- [x] Memory-limit enforcement is demonstrated.
+- [x] Create `docs/evidence/M5_COVERAGE.md`.
+- [x] Permanent CI succeeds on the exact evidence commit.
 
 ---
 
