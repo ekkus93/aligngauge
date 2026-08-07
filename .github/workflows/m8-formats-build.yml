@@ -29,6 +29,50 @@ jobs:
           rustc --version --verbose
           cargo --version
 
+      - name: Correct merge-event expectations
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("crates/aligngauge-formats/src/bed.rs")
+          text = path.read_text()
+
+          old = '''        assert_eq!(targets.normalization.overlap_merges, 1);
+          assert_eq!(targets.normalization.adjacency_merges, 1);'''
+          new = '''        assert_eq!(targets.normalization.overlap_merges, 2);
+          assert_eq!(targets.normalization.adjacency_merges, 0);'''
+          if text.count(old) != 1:
+              raise SystemExit("expected exactly one mixed-merge expectation block")
+          text = text.replace(old, new, 1)
+
+          marker = '''    #[test]
+          fn configurable_flanks_clip_only_at_authoritative_boundaries() {'''
+          adjacency_test = '''    #[test]
+          fn directly_adjacent_intervals_merge_as_adjacency() {
+              let parsed = parse_bed_bytes(
+                  b"chr1\\t10\\t20\\tA\\nchr1\\t20\\t30\\tB\\n",
+                  &dictionary(),
+              )
+              .expect("BED should parse");
+              let targets = normalize_targets(parsed, TargetNormalizationConfig::default())
+                  .expect("normalization should succeed");
+              assert_eq!(targets.merged_intervals.len(), 1);
+              assert_eq!(targets.merged_intervals[0].start, 10);
+              assert_eq!(targets.merged_intervals[0].end, 30);
+              assert_eq!(targets.merged_intervals[0].source_interval_indices, [0, 1]);
+              assert_eq!(targets.normalization.overlap_merges, 0);
+              assert_eq!(targets.normalization.adjacency_merges, 1);
+          }
+
+          #[test]
+          fn configurable_flanks_clip_only_at_authoritative_boundaries() {'''
+          if text.count(marker) != 1:
+              raise SystemExit("expected exactly one configurable-flank test marker")
+          path.write_text(text.replace(marker, adjacency_test, 1))
+          PY
+
       - name: Refresh lockfile
         run: cargo update --workspace
 
