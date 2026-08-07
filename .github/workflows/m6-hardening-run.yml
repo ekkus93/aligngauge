@@ -1,0 +1,95 @@
+name: M6 Hardening Runner
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - ".github/workflows/m6-hardening-run.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  hardening:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Extract exact candidate script
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          source = Path('.github/workflows/m6-release-hardening-gate.yml').read_text(encoding='utf-8')
+          begin_marker = "          python - <<'PY'\n"
+          end_marker = "          PY\n\n      - name: Format candidate"
+          if source.count(begin_marker) != 1 or source.count(end_marker) != 1:
+              raise SystemExit('candidate script markers are not unique')
+          body = source.split(begin_marker, 1)[1].split(end_marker, 1)[0]
+          lines = body.splitlines()
+          for index, line in enumerate(lines, 1):
+              if line and not line.startswith('          '):
+                  raise SystemExit(f'candidate line {index} lost YAML indentation')
+          body = '\n'.join(line[10:] if line else '' for line in lines) + '\n'
+          Path('/tmp/m6_candidate.py').write_text(body, encoding='utf-8')
+          PY
+          python /tmp/m6_candidate.py
+
+      - name: Format candidate
+        run: cargo fmt --all
+
+      - name: Run strict Clippy
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+      - name: Run complete test suite
+        run: cargo test --workspace --all-features --locked
+
+      - name: Exercise release E2E tests explicitly
+        run: cargo test -p aligngauge-cli --test release_v0_1 --locked -- --nocapture
+
+      - name: Validate actual release JSON against committed schemas
+        run: |
+          cargo build -p aligngauge-cli --locked
+          root="$(mktemp -d)"
+          trap 'rm -rf "$root"' EXIT
+          target/debug/aligngauge qc --input testdata/fixtures/basic.bam --outdir "$root/results" --memory-limit 64MiB --quiet
+          python - "$root/results" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+          import jsonschema
+          out = Path(sys.argv[1])
+          for name in ('summary', 'provenance'):
+              instance = json.loads((out / f'{name}.json').read_text())
+              schema = json.loads((Path('schemas') / f'{name}.schema.json').read_text())
+              jsonschema.Draft202012Validator(schema).validate(instance)
+          PY
+          test -f "$root/results/_SUCCESS"
+
+      - name: Build documentation
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --workspace --all-features --no-deps --locked
+
+      - name: Upload exact validated hardening files
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: m6-release-hardening-${{ github.sha }}
+          path: |
+            crates/aligngauge-core/src/model.rs
+            crates/aligngauge-core/src/lib.rs
+            crates/aligngauge-core/tests/contracts.rs
+            crates/aligngauge-core/tests/golden/summary.json
+            crates/aligngauge-coverage/src/report.rs
+            crates/aligngauge-metrics/src/lib.rs
+            crates/aligngauge-metrics/tests/counters.rs
+            crates/aligngauge-cli/src/lib.rs
+            crates/aligngauge-cli/src/main.rs
+            crates/aligngauge-cli/tests/release_v0_1.rs
+            schemas/summary.schema.json
+            schemas/provenance.schema.json
+          if-no-files-found: error
+          retention-days: 1
