@@ -1,4 +1,4 @@
-//! Validated text formats and deterministic target normalization for AlignGauge.
+//! Validated text formats and deterministic target normalization for `AlignGauge`.
 
 pub mod bed;
 

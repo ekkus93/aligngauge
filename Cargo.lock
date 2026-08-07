@@ -42,6 +42,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "aligngauge-formats"
+version = "0.0.0"
+dependencies = [
+ "aligngauge-core",
+ "sha2",
+]
+
+[[package]]
 name = "aligngauge-hts"
 version = "0.0.0"
 dependencies = [

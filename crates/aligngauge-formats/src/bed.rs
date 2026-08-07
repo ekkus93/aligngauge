@@ -43,13 +43,11 @@ impl SequenceDictionary {
                 ));
             }
             if by_name.insert(contig.name.clone(), index).is_some() {
-                return Err(
-                    AlignGaugeError::new(
-                        ErrorCategory::Configuration,
-                        "sequence dictionary contains a duplicate contig name",
-                    )
-                    .with_detail("contig", contig.name.clone()),
-                );
+                return Err(AlignGaugeError::new(
+                    ErrorCategory::Configuration,
+                    "sequence dictionary contains a duplicate contig name",
+                )
+                .with_detail("contig", contig.name.clone()));
             }
         }
         Ok(Self { contigs, by_name })
@@ -320,12 +318,15 @@ pub fn normalize_targets(
         if left_applied < config.flank_bases {
             bump(&mut left_flank_clips)?;
         }
-        let right_capacity = interval.contig_length.checked_sub(interval.end).ok_or_else(|| {
-            AlignGaugeError::new(
-                ErrorCategory::InternalInvariant,
-                "validated target interval exceeds its contig length",
-            )
-        })?;
+        let right_capacity = interval
+            .contig_length
+            .checked_sub(interval.end)
+            .ok_or_else(|| {
+                AlignGaugeError::new(
+                    ErrorCategory::InternalInvariant,
+                    "validated target interval exceeds its contig length",
+                )
+            })?;
         let right_applied = config.flank_bases.min(right_capacity);
         if right_applied < config.flank_bases {
             bump(&mut right_flank_clips)?;
@@ -345,7 +346,10 @@ pub fn normalize_targets(
         });
     }
 
-    let original_order: Vec<u64> = expanded.iter().map(|interval| interval.source_index).collect();
+    let original_order: Vec<u64> = expanded
+        .iter()
+        .map(|interval| interval.source_index)
+        .collect();
     expanded.sort_by(|left, right| {
         left.contig_index
             .cmp(&right.contig_index)
@@ -373,12 +377,14 @@ pub fn normalize_targets(
             "merged target interval count exceeds supported range",
         )
     })?;
-    let positive_source_intervals = source_intervals.checked_sub(empty_source_intervals).ok_or_else(|| {
-        AlignGaugeError::new(
-            ErrorCategory::InternalInvariant,
-            "target interval accounting underflowed",
-        )
-    })?;
+    let positive_source_intervals = source_intervals
+        .checked_sub(empty_source_intervals)
+        .ok_or_else(|| {
+            AlignGaugeError::new(
+                ErrorCategory::InternalInvariant,
+                "target interval accounting underflowed",
+            )
+        })?;
 
     let normalization = TargetNormalizationProvenance {
         profile: BED_NORMALIZATION_PROFILE.to_owned(),
@@ -518,13 +524,14 @@ fn split_fields(line: &str, line_number: u64) -> Result<Vec<&str>, AlignGaugeErr
         ));
     }
     if !(3..=12).contains(&fields.len()) {
-        return Err(
-            target_format_error(line_number, "BED interval must contain 3 through 12 fields")
-                .with_detail(
-                    "field_count",
-                    u64::try_from(fields.len()).unwrap_or(u64::MAX),
-                ),
-        );
+        return Err(target_format_error(
+            line_number,
+            "BED interval must contain 3 through 12 fields",
+        )
+        .with_detail(
+            "field_count",
+            u64::try_from(fields.len()).unwrap_or(u64::MAX),
+        ));
     }
     Ok(fields)
 }
@@ -553,12 +560,13 @@ fn parse_interval(
         .with_detail("contig", fields[0].to_owned())
     })?;
     if end > contig.length {
-        return Err(
-            target_format_error(line_number, "BED interval exceeds authoritative contig length")
-                .with_detail("contig", contig.name.clone())
-                .with_detail("contig_length", contig.length)
-                .with_detail("end", end),
-        );
+        return Err(target_format_error(
+            line_number,
+            "BED interval exceeds authoritative contig length",
+        )
+        .with_detail("contig", contig.name.clone())
+        .with_detail("contig_length", contig.length)
+        .with_detail("end", end));
     }
     let source_index = u64::try_from(accepted_count).map_err(|_| {
         AlignGaugeError::new(
@@ -575,7 +583,11 @@ fn parse_interval(
         start,
         end,
         name: fields.get(3).map(|value| (*value).to_owned()),
-        extra_fields: fields.iter().skip(4).map(|value| (*value).to_owned()).collect(),
+        extra_fields: fields
+            .iter()
+            .skip(4)
+            .map(|value| (*value).to_owned())
+            .collect(),
     })
 }
 
@@ -642,17 +654,18 @@ fn merge_expanded(
     let mut overlap_merges = 0_u64;
     let mut adjacency_merges = 0_u64;
     for interval in expanded {
-        if let Some(last) = merged.last_mut() {
-            if last.contig_index == interval.contig_index && interval.start <= last.end {
-                if interval.start == last.end {
-                    bump(&mut adjacency_merges)?;
-                } else {
-                    bump(&mut overlap_merges)?;
-                }
-                last.end = last.end.max(interval.end);
-                last.source_interval_indices.push(interval.source_index);
-                continue;
+        if let Some(last) = merged.last_mut()
+            && last.contig_index == interval.contig_index
+            && interval.start <= last.end
+        {
+            if interval.start == last.end {
+                bump(&mut adjacency_merges)?;
+            } else {
+                bump(&mut overlap_merges)?;
             }
+            last.end = last.end.max(interval.end);
+            last.source_interval_indices.push(interval.source_index);
+            continue;
         }
         merged.push(MergedTargetInterval {
             contig: interval.contig,
@@ -774,13 +787,30 @@ mod tests {
         assert_eq!(targets.merged_intervals[0].contig, "chr1");
         assert_eq!(targets.merged_intervals[0].start, 10);
         assert_eq!(targets.merged_intervals[0].end, 30);
-        assert_eq!(targets.merged_intervals[0].source_interval_indices, [1, 2, 3]);
+        assert_eq!(
+            targets.merged_intervals[0].source_interval_indices,
+            [1, 2, 3]
+        );
         assert_eq!(targets.merged_intervals[1].contig, "chr2");
         assert_eq!(targets.merged_intervals[1].source_interval_indices, [0]);
-        assert_eq!(targets.normalization.overlap_merges, 1);
-        assert_eq!(targets.normalization.adjacency_merges, 1);
+        assert_eq!(targets.normalization.overlap_merges, 2);
+        assert_eq!(targets.normalization.adjacency_merges, 0);
         assert_eq!(targets.normalization.aggregate_territory_bases, 30);
         assert!(targets.normalization.reordered_positions > 0);
+    }
+
+    #[test]
+    fn directly_adjacent_intervals_merge_as_adjacency() {
+        let parsed = parse_bed_bytes(b"chr1\t10\t20\tA\nchr1\t20\t30\tB\n", &dictionary())
+            .expect("BED should parse");
+        let targets = normalize_targets(parsed, TargetNormalizationConfig::default())
+            .expect("normalization should succeed");
+        assert_eq!(targets.merged_intervals.len(), 1);
+        assert_eq!(targets.merged_intervals[0].start, 10);
+        assert_eq!(targets.merged_intervals[0].end, 30);
+        assert_eq!(targets.merged_intervals[0].source_interval_indices, [0, 1]);
+        assert_eq!(targets.normalization.overlap_merges, 0);
+        assert_eq!(targets.normalization.adjacency_merges, 1);
     }
 
     #[test]
@@ -822,7 +852,8 @@ mod tests {
 
     #[test]
     fn provenance_actions_are_deterministic_and_complete() {
-        let parsed = parse_bed_bytes(b"# x\nchr1\t0\t10\n", &dictionary()).expect("BED should parse");
+        let parsed =
+            parse_bed_bytes(b"# x\nchr1\t0\t10\n", &dictionary()).expect("BED should parse");
         let targets = normalize_targets(parsed, TargetNormalizationConfig { flank_bases: 3 })
             .expect("normalization should succeed");
         let first = targets.provenance_actions();
@@ -834,11 +865,7 @@ mod tests {
                 .iter()
                 .any(|item| item == "targets:comment_lines_skipped=1")
         );
-        assert!(
-            first
-                .iter()
-                .any(|item| item.starts_with("targets:sha256="))
-        );
+        assert!(first.iter().any(|item| item.starts_with("targets:sha256=")));
     }
 
     #[test]
