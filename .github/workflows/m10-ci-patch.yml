@@ -27,6 +27,7 @@ jobs:
           bash -n tools/reference/samtools/run-stats.sh
           bash -n tools/reference/multiqc/validate-samtools-stats.sh
           python -m py_compile tools/reference/samtools/compare-stats.py
+          rm -rf tools/reference/samtools/__pycache__
           git diff --check
       - name: Commit permanent CI hooks and remove probe machinery
         run: |
