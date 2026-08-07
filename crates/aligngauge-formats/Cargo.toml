@@ -1,0 +1,16 @@
+[package]
+name = "aligngauge-formats"
+version = "0.0.0"
+description = "Validated text formats and deterministic target normalization for AlignGauge"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+aligngauge-core = { path = "../aligngauge-core" }
+sha2 = "0.10"
+
+[lints]
+workspace = true
