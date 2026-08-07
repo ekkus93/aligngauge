@@ -27,8 +27,8 @@ pub const RUST_HTSLIB_VERSION: &str = "1.0.1";
 /// Exact `hts-sys` crate selected in `Cargo.lock`.
 pub const HTS_SYS_VERSION: &str = "2.2.1";
 
-/// Vendored `HTSlib` line supplied by the pinned `hts-sys` package.
-pub const HTSLIB_COMPATIBILITY_VERSION: &str = "HTSlib 1.22 series via hts-sys 2.2.1";
+/// Exact vendored `HTSlib` release carried by the pinned `hts-sys` package.
+pub const HTSLIB_COMPATIBILITY_VERSION: &str = "1.19.1";
 
 /// Network transport is intentionally unavailable in the production `HTSlib` build.
 pub const HTSLIB_NETWORK_TRANSPORT_ENABLED: bool = false;
