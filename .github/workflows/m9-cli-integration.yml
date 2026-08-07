@@ -1,0 +1,71 @@
+name: Milestone 9 CLI integration validation
+
+on:
+  push:
+    branches:
+      - milestone-9-targeted-metrics
+    paths:
+      - .github/workflows/m9-cli-integration.yml
+      - .github/m9-cli-integration.py
+
+concurrency:
+  group: milestone-9-cli-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    name: m9/cli-integration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: true
+      - name: Apply guarded CLI integration
+        run: python .github/m9-cli-integration.py
+      - name: Refresh lockfile
+        run: cargo update --workspace
+      - name: Apply scoped Clippy fixes
+        run: cargo clippy -p aligngauge-cli -p aligngauge-coverage --all-targets --all-features --fix --allow-dirty --allow-staged
+      - name: Format workspace
+        run: cargo fmt --all
+      - name: Check workspace
+        run: cargo check --workspace --all-targets --all-features
+      - name: Run strict Clippy
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - name: Run workspace tests
+        run: cargo test --workspace --all-features
+      - name: Verify targeted CLI contract explicitly
+        run: cargo test -p aligngauge-cli --test release_cli_options --all-features targeted -- --nocapture
+      - name: Verify generated diff scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          allowed='^(Cargo.lock|crates/aligngauge-cli/Cargo.toml|crates/aligngauge-cli/src/lib.rs|crates/aligngauge-cli/src/main.rs|crates/aligngauge-cli/tests/release_cli_options.rs|crates/aligngauge-coverage/src/targeted.rs)$'
+          while read -r path; do
+            [[ -z "${path}" ]] && continue
+            [[ "${path}" =~ ${allowed} ]] || { echo "unexpected generated path: ${path}" >&2; exit 1; }
+          done < <(git status --short | awk '{print $2}' | sort)
+      - name: Commit validated CLI integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo 'No generated changes to commit.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add Cargo.lock \
+            crates/aligngauge-cli/Cargo.toml \
+            crates/aligngauge-cli/src/lib.rs \
+            crates/aligngauge-cli/src/main.rs \
+            crates/aligngauge-cli/tests/release_cli_options.rs \
+            crates/aligngauge-coverage/src/targeted.rs
+          git commit -m 'feat: integrate Milestone 9 targeted CLI release path'
+          git push origin HEAD:milestone-9-targeted-metrics
