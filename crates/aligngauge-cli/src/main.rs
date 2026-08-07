@@ -8,9 +8,7 @@ use aligngauge_core::{
     AlignGaugeError, ConfigEnvironment, ConfigOverrides, ErrorCategory, LogFormat,
     ProcessEnvironment, ResolvedConfig, diagnostic_log_format_hint, resolve_config,
 };
-use aligngauge_formats::{
-    OutputFile, OutputPayload, PublisherOptions, publish_output_directory,
-};
+use aligngauge_formats::{OutputFile, OutputPayload, PublisherOptions, publish_output_directory};
 use aligngauge_hts::{FieldPlan, ReaderOptions};
 use aligngauge_metrics::{CompatibilityFormat, CounterCollector};
 
@@ -81,14 +79,14 @@ fn main() {
             output_format,
         }) => {
             let result = match output_format {
-                OutputFormat::Human => analyze_bam(&input, FieldPlan::counters_default()).map(
-                    |report| {
+                OutputFormat::Human => {
+                    analyze_bam(&input, FieldPlan::counters_default()).map(|report| {
                         format!(
                             "total_records={}\nmapped_records={}\nunmapped_records={}\n",
                             report.total_records, report.mapped_records, report.unmapped_records
                         )
-                    },
-                ),
+                    })
+                }
                 OutputFormat::Json => analyze_bam(&input, FieldPlan::counters_default())
                     .map(|report| report.to_json_pretty()),
                 OutputFormat::SamtoolsFlagstat => {
@@ -141,11 +139,8 @@ fn run_counter_compatibility(
     format: CompatibilityFormat,
 ) -> Result<String, AlignGaugeError> {
     let field_plan = CounterCollector::field_plan()?;
-    let mut reader = aligngauge_hts::BamReader::open(
-        input,
-        field_plan,
-        ReaderOptions { io_threads: 1 },
-    )?;
+    let mut reader =
+        aligngauge_hts::BamReader::open(input, field_plan, ReaderOptions { io_threads: 1 })?;
     let mut collector = CounterCollector::new(reader.header())?;
     while let Some(record) = reader.next_record()? {
         collector.observe(&record)?;
@@ -418,10 +413,7 @@ impl ParseState {
             });
         }
 
-        let diagnostic_hint = self
-            .overrides
-            .log_format
-            .unwrap_or(LogFormat::Human);
+        let diagnostic_hint = self.overrides.log_format.unwrap_or(LogFormat::Human);
         Ok(CliAction::Release {
             config_path: self.config_path,
             reference: self.reference,
@@ -458,15 +450,27 @@ fn next_value(
     Ok(value.clone())
 }
 
-fn parse_usize(value: OsString, option: &'static str, program: &OsStr) -> Result<usize, AlignGaugeError> {
+fn parse_usize(
+    value: OsString,
+    option: &'static str,
+    program: &OsStr,
+) -> Result<usize, AlignGaugeError> {
     let text = value
         .to_str()
         .ok_or_else(|| usage_error(format!("{option} must be valid UTF-8"), program))?;
-    text.parse::<usize>()
-        .map_err(|source| usage_error(format!("invalid {option} value '{text}': {source}"), program))
+    text.parse::<usize>().map_err(|source| {
+        usage_error(
+            format!("invalid {option} value '{text}': {source}"),
+            program,
+        )
+    })
 }
 
-fn parse_size(value: OsString, option: &'static str, program: &OsStr) -> Result<u64, AlignGaugeError> {
+fn parse_size(
+    value: OsString,
+    option: &'static str,
+    program: &OsStr,
+) -> Result<u64, AlignGaugeError> {
     let text = value
         .to_str()
         .ok_or_else(|| usage_error(format!("{option} must be valid UTF-8"), program))?;
@@ -474,16 +478,24 @@ fn parse_size(value: OsString, option: &'static str, program: &OsStr) -> Result<
         .find(|character: char| !character.is_ascii_digit())
         .unwrap_or(text.len());
     let (number, suffix) = text.split_at(split);
-    let magnitude = number
-        .parse::<u64>()
-        .map_err(|source| usage_error(format!("invalid {option} value '{text}': {source}"), program))?;
+    let magnitude = number.parse::<u64>().map_err(|source| {
+        usage_error(
+            format!("invalid {option} value '{text}': {source}"),
+            program,
+        )
+    })?;
     let multiplier = match suffix {
         "" | "B" => 1_u64,
         "KiB" => 1024,
         "MiB" => 1024_u64.pow(2),
         "GiB" => 1024_u64.pow(3),
         "TiB" => 1024_u64.pow(4),
-        _ => return Err(usage_error(format!("invalid {option} unit '{suffix}'"), program)),
+        _ => {
+            return Err(usage_error(
+                format!("invalid {option} unit '{suffix}'"),
+                program,
+            ));
+        }
     };
     magnitude.checked_mul(multiplier).ok_or_else(|| {
         usage_error(
@@ -530,10 +542,7 @@ fn parse_log_format(value: OsString, program: &OsStr) -> Result<LogFormat, Align
             format!("unsupported --log-format '{other}'"),
             program,
         )),
-        None => Err(usage_error(
-            "--log-format must be valid UTF-8",
-            program,
-        )),
+        None => Err(usage_error("--log-format must be valid UTF-8", program)),
     }
 }
 

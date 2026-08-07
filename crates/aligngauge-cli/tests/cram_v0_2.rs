@@ -189,17 +189,15 @@ fn cram_requires_an_explicit_reference_and_rejects_missing_or_mismatched_sequenc
     assert_eq!(missing.category(), ErrorCategory::ReferenceRequired);
 
     let missing_contig = fixtures.root.join("missing-contig.fa");
-    fs::write(
-        &missing_contig,
-        format!(">chr2\n{}\n", "ACGT".repeat(250)),
-    )
-    .expect("write missing-contig reference");
-    let missing_sequence = analyze_release_with_reference(
-        &config(&fixtures.cram),
-        Some(&missing_contig),
-    )
-    .expect_err("missing required contig must fail");
-    assert_eq!(missing_sequence.category(), ErrorCategory::ReferenceRequired);
+    fs::write(&missing_contig, format!(">chr2\n{}\n", "ACGT".repeat(250)))
+        .expect("write missing-contig reference");
+    let missing_sequence =
+        analyze_release_with_reference(&config(&fixtures.cram), Some(&missing_contig))
+            .expect_err("missing required contig must fail");
+    assert_eq!(
+        missing_sequence.category(),
+        ErrorCategory::ReferenceRequired
+    );
     let missing_report = missing_sequence.render_human(false);
     assert!(missing_report.contains("chr1"));
     assert!(missing_report.contains(REFERENCE_MD5));
