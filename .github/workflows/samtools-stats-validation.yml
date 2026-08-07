@@ -1,0 +1,175 @@
+name: Samtools Stats Validation
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - ".github/workflows/samtools-stats-validation.yml"
+      - "crates/aligngauge-cli/**"
+      - "crates/aligngauge-core/**"
+      - "crates/aligngauge-hts/**"
+      - "crates/aligngauge-metrics/**"
+      - "testdata/fixtures/**"
+      - "testdata/hg002/**"
+      - "tools/reference/samtools/**"
+      - "tools/reference/multiqc/**"
+      - "docs/DNA_QC_ENGINE_SPEC.md"
+      - "docs/DNA_QC_ENGINE_TODO.md"
+      - "docs/adr/ADR-0007-SAMTOOLS_STATS_MULTIQC_PROFILE.md"
+      - "docs/evidence/M10_SAMTOOLS_STATS_MULTIQC.md"
+  pull_request:
+    paths:
+      - ".github/workflows/samtools-stats-validation.yml"
+      - "crates/aligngauge-cli/**"
+      - "crates/aligngauge-core/**"
+      - "crates/aligngauge-hts/**"
+      - "crates/aligngauge-metrics/**"
+      - "testdata/fixtures/**"
+      - "testdata/hg002/**"
+      - "tools/reference/samtools/**"
+      - "tools/reference/multiqc/**"
+      - "docs/DNA_QC_ENGINE_SPEC.md"
+      - "docs/DNA_QC_ENGINE_TODO.md"
+      - "docs/adr/ADR-0007-SAMTOOLS_STATS_MULTIQC_PROFILE.md"
+      - "docs/evidence/M10_SAMTOOLS_STATS_MULTIQC.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: ci/samtools-stats
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Validate reference tools and locks
+        run: |
+          set -euo pipefail
+          source tools/reference/samtools/image.lock
+          source tools/reference/multiqc/image.lock
+          [[ "$SAMTOOLS_VERSION" == "1.24" ]]
+          [[ "$MULTIQC_VERSION" == "1.35" ]]
+          bash -n tools/reference/samtools/run-stats.sh
+          bash -n tools/reference/multiqc/validate-samtools-stats.sh
+          python -m py_compile tools/reference/samtools/compare-stats.py
+
+      - name: Build AlignGauge compatibility probe
+        run: cargo build -p aligngauge-cli --locked
+
+      - name: Compare synthetic Samtools stats exactly
+        run: |
+          set -euo pipefail
+          for fixture in basic flags_and_pairs; do
+            mkdir -p "target/m10/$fixture/reference"
+            bash tools/reference/samtools/run-stats.sh \
+              "testdata/fixtures/$fixture.bam" \
+              "target/m10/$fixture/reference"
+            target/debug/aligngauge qc \
+              --input "testdata/fixtures/$fixture.bam" \
+              --format samtools-stats \
+              > "target/m10/$fixture/aligngauge.stats"
+            python tools/reference/samtools/compare-stats.py \
+              "target/m10/$fixture/reference/stdout.txt" \
+              "target/m10/$fixture/aligngauge.stats" \
+              "target/m10/$fixture/differential.json"
+            python - "$fixture" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+          report = json.loads(Path(f"target/m10/{sys.argv[1]}/differential.json").read_text())
+          assert report["status"] == "exact"
+          assert report["sn_rows"] == 39
+          assert report["tolerance"] is None
+          PY
+          done
+
+      - name: Prove MultiQC 1.35 parser equivalence
+        run: |
+          set -euo pipefail
+          bash tools/reference/multiqc/validate-samtools-stats.sh \
+            target/m10/flags_and_pairs/reference/stdout.txt \
+            target/m10/flags_and_pairs/aligngauge.stats \
+            target/m10/flags_and_pairs/multiqc
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path('target/m10/flags_and_pairs/multiqc/report.json').read_text())
+          assert report['status'] == 'exact'
+          assert report['multiqc_version'] == '1.35'
+          assert report['comparison']['multiqc_samtools_stats'] == 'byte-identical'
+          assert report['comparison']['samtools_insert_size'] == 'byte-identical'
+          PY
+
+      - name: Prepare deterministic HG002 subset
+        run: testdata/hg002/prepare.sh "$GITHUB_WORKSPACE/target/m10/hg002"
+
+      - name: Compare HG002 Samtools stats exactly
+        run: |
+          set -euo pipefail
+          mkdir -p target/m10/hg002/reference
+          bash tools/reference/samtools/run-stats.sh \
+            target/m10/hg002/subset.bam \
+            target/m10/hg002/reference
+          target/debug/aligngauge qc \
+            --input target/m10/hg002/subset.bam \
+            --format samtools-stats \
+            > target/m10/hg002/aligngauge.stats
+          python tools/reference/samtools/compare-stats.py \
+            target/m10/hg002/reference/stdout.txt \
+            target/m10/hg002/aligngauge.stats \
+            target/m10/hg002/differential.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path('target/m10/hg002/differential.json').read_text())
+          assert report['status'] == 'exact'
+          assert report['sn_rows'] == 39
+          assert report['tolerance'] is None
+          PY
+
+      - name: Prove HG002 MultiQC parser equivalence
+        run: |
+          set -euo pipefail
+          bash tools/reference/multiqc/validate-samtools-stats.sh \
+            target/m10/hg002/reference/stdout.txt \
+            target/m10/hg002/aligngauge.stats \
+            target/m10/hg002/multiqc
+
+      - name: Verify unsupported sections stay absent
+        run: |
+          set -euo pipefail
+          if grep -Eq '^(CHK|FFQ|LFQ|GCF|GCL|GCC|GCT|FBC|FTC|LBC|LTC|MPC|RL|FRL|LRL|MAPQ|ID|IC|COV|GCD|RFS)\t' \
+            target/m10/hg002/aligngauge.stats; then
+            echo 'AlignGauge emitted a section outside the M10 compatibility claim' >&2
+            exit 1
+          fi
+
+      - name: Upload M10 validation evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: samtools-stats-validation-${{ github.sha }}
+          path: |
+            target/m10/basic/reference/stdout.txt
+            target/m10/basic/reference/version.txt
+            target/m10/basic/aligngauge.stats
+            target/m10/basic/differential.json
+            target/m10/flags_and_pairs/reference/stdout.txt
+            target/m10/flags_and_pairs/reference/version.txt
+            target/m10/flags_and_pairs/aligngauge.stats
+            target/m10/flags_and_pairs/differential.json
+            target/m10/flags_and_pairs/multiqc/report.json
+            target/m10/hg002/prepared.manifest
+            target/m10/hg002/reference/stdout.txt
+            target/m10/hg002/reference/version.txt
+            target/m10/hg002/aligngauge.stats
+            target/m10/hg002/differential.json
+            target/m10/hg002/multiqc/report.json
+          if-no-files-found: error
+          retention-days: 7

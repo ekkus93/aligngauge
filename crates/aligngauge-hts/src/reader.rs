@@ -112,6 +112,9 @@ pub struct ValidatedRecord<'a> {
     coordinate: Option<RecordCoordinate>,
     mate_coordinate: FieldValue<Option<RecordCoordinate>>,
     mapping_quality: FieldValue<u8>,
+    query_length: u64,
+    qualities_requested: bool,
+    template_length: FieldValue<i32>,
     cigar: FieldValue<CigarFacts>,
     edit_distance: FieldValue<u64>,
     mismatch_descriptor: FieldValue<String>,
@@ -153,6 +156,28 @@ impl ValidatedRecord<'_> {
     #[must_use]
     pub const fn mapping_quality(&self) -> &FieldValue<u8> {
         &self.mapping_quality
+    }
+
+    /// Query sequence length from the validated BAM record layout.
+    #[must_use]
+    pub const fn query_length(&self) -> u64 {
+        self.query_length
+    }
+
+    /// Planned base qualities.
+    #[must_use]
+    pub fn qualities(&self) -> FieldValue<&[u8]> {
+        if self.qualities_requested {
+            FieldValue::Value(self.record.qual())
+        } else {
+            FieldValue::NotRequested
+        }
+    }
+
+    /// Planned signed template length / TLEN.
+    #[must_use]
+    pub const fn template_length(&self) -> &FieldValue<i32> {
+        &self.template_length
     }
 
     /// Planned and validated CIGAR facts.
@@ -348,6 +373,9 @@ impl BamReader {
             coordinate: facts.coordinate,
             mate_coordinate: facts.mate_coordinate,
             mapping_quality: facts.mapping_quality,
+            query_length: facts.query_length,
+            qualities_requested: facts.qualities_requested,
+            template_length: facts.template_length,
             cigar: facts.cigar,
             edit_distance: facts.edit_distance,
             mismatch_descriptor: facts.mismatch_descriptor,
@@ -495,6 +523,9 @@ struct RecordFacts {
     coordinate: Option<RecordCoordinate>,
     mate_coordinate: FieldValue<Option<RecordCoordinate>>,
     mapping_quality: FieldValue<u8>,
+    query_length: u64,
+    qualities_requested: bool,
+    template_length: FieldValue<i32>,
     cigar: FieldValue<CigarFacts>,
     edit_distance: FieldValue<u64>,
     mismatch_descriptor: FieldValue<String>,
@@ -536,6 +567,31 @@ fn validate_record(
     } else {
         FieldValue::NotRequested
     };
+    let query_length = u64_from_usize(layout.sequence_bases)?;
+    let qualities_requested = plan.requires(RequiredField::Qualities);
+    if qualities_requested && record.qual().len() != layout.sequence_bases {
+        return Err(record_error(
+            ErrorCategory::InputCorrupt,
+            "BAM quality length differs from the validated sequence length",
+            index,
+            record,
+        ));
+    }
+    let template_length = if plan.requires(RequiredField::TemplateLength) {
+        let value = i32::try_from(record.insert_size()).map_err(|source| {
+            record_error(
+                ErrorCategory::UnsupportedRecord,
+                "BAM template length is outside the Samtools stats compatibility range",
+                index,
+                record,
+            )
+            .with_detail("template_length", record.insert_size())
+            .with_source(source)
+        })?;
+        FieldValue::Value(value)
+    } else {
+        FieldValue::NotRequested
+    };
     let cigar_facts = validate_cigar(record, header, coordinate, index)?;
     let tags = validate_auxiliary(record, header, plan, index, cigar_facts.operation_count)?;
 
@@ -544,6 +600,9 @@ fn validate_record(
         coordinate,
         mate_coordinate,
         mapping_quality,
+        query_length,
+        qualities_requested,
+        template_length,
         cigar: if plan.requires(RequiredField::Cigar) {
             FieldValue::Value(cigar_facts)
         } else {
@@ -1068,14 +1127,12 @@ fn duplicate_tag_error(tag: &'static str, index: u64, record: &Record) -> AlignG
 }
 
 fn validate_plan(plan: &FieldPlan) -> Result<(), AlignGaugeError> {
-    for unsupported in [RequiredField::Sequence, RequiredField::Qualities] {
-        if plan.requires(unsupported) {
-            return Err(AlignGaugeError::new(
-                ErrorCategory::UnsupportedRecord,
-                "v0.1 reader plan cannot materialize sequence or quality fields",
-            )
-            .with_detail("field", unsupported.as_str()));
-        }
+    if plan.requires(RequiredField::Sequence) {
+        return Err(AlignGaugeError::new(
+            ErrorCategory::UnsupportedRecord,
+            "reader plan cannot materialize packed sequence bases",
+        )
+        .with_detail("field", RequiredField::Sequence.as_str()));
     }
     if !plan.requires(RequiredField::Flags) || !plan.requires(RequiredField::Coordinates) {
         return Err(AlignGaugeError::new(

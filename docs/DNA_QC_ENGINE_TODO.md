@@ -3,7 +3,7 @@
 **Repository:** `ekkus93/aligngauge`
 
 **Companion specification:** `docs/DNA_QC_ENGINE_SPEC.md`  
-**Status:** Ralph Loop active — `v0.3.0` released; Milestone 9 complete; Milestone 10 next
+**Status:** Ralph Loop active — `v0.3.0` released; Milestone 9 complete; Milestone 10 active
 **Last updated:** 2026-08-07  
 **Supersedes:** Initial `DNA_QC_ENGINE_TODO.md` dated 2026-08-05
 
@@ -664,14 +664,24 @@ Implement SPEC §9.
 
 ## Milestone 10 — Samtools stats subsets
 
-- [ ] Select exact sections consumed by target MultiQC versions.
-- [ ] Pin Samtools.
-- [ ] Define every metric and filter.
-- [ ] Implement canonical accumulators.
-- [ ] Derive compatibility text.
-- [ ] Differential fixtures.
-- [ ] HG002 subset validation.
-- [ ] Document unsupported sections.
+**Status:** Implementation and evidence complete — pre-evidence validated head `13ec94f52cd99ed95cb0ee6a1e29103e7c9a2065`; Permanent CI run `31213026956`, job `92980046645`; Full Runtime Validation run `31213027456`, job `92980063525`; Reference Validation run `31213027019`, job `92980047514`; Targeted Validation run `31213027345`, job `92980064084`; Samtools Stats Validation run `31213026957`, job `92980062520`; all successful. Evidence: `docs/evidence/M10_SAMTOOLS_STATS_MULTIQC.md`. Final Milestone 10 acceptance remains gated on the exact evidence candidate and merged-master validation; this milestone does not publish `v0.4.0`.
+
+- [x] Select exact sections consumed by target MultiQC versions.
+- [x] Pin Samtools 1.24 and MultiQC 1.35.
+- [x] Define every supported metric/filter and the unsupported-section boundary in SPEC §12.8 and ADR-0007.
+- [x] Implement canonical accumulators.
+- [x] Derive compatibility text.
+- [x] Differential fixtures.
+- [x] HG002 subset validation.
+- [x] Document unsupported sections.
+- [x] Create `docs/evidence/M10_SAMTOOLS_STATS_MULTIQC.md`.
+
+### Milestone 10 acceptance gate
+
+- [x] The claimed ordinary 39-row `SN` and complete default `IS` surfaces match pinned Samtools 1.24 exactly with no tolerance.
+- [x] Pinned MultiQC 1.35 produces byte-identical Samtools-stats and insert-size data from the Samtools and AlignGauge texts.
+- [x] Unsupported `samtools stats` sections are explicitly documented and absent from the compatibility renderer.
+- [ ] Permanent CI succeeds on the exact evidence commit and the exact merged `master` commit is validated.
 
 ## Milestone 11 — Picard alignment and insert-size profiles
 
