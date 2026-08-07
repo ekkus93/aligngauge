@@ -129,10 +129,18 @@ replacements = {
 for old, new in replacements.items():
     text = text.replace(old, new)
 
-needle = "max(unclipped)\n"
-if text.count(needle) != 2:
-    raise SystemExit(f"expected two fragment max expressions without semicolons, found {text.count(needle)}")
-text = text.replace(needle, "max(unclipped);\n")
+first = "FragmentOrder::First => self.maximum_first_fragment_length = self.maximum_first_fragment_length.max(unclipped),"
+last = "FragmentOrder::Last => self.maximum_last_fragment_length = self.maximum_last_fragment_length.max(unclipped),"
+if text.count(first) != 1 or text.count(last) != 1:
+    raise SystemExit(f"fragment arm counts first={text.count(first)} last={text.count(last)}")
+text = text.replace(
+    first,
+    "FragmentOrder::First => { self.maximum_first_fragment_length = self.maximum_first_fragment_length.max(unclipped); }",
+)
+text = text.replace(
+    last,
+    "FragmentOrder::Last => { self.maximum_last_fragment_length = self.maximum_last_fragment_length.max(unclipped); }",
+)
 
 marker = "fn format_zero_decimals(numerator: u64, denominator: u64) -> String {"
 helpers = r'''fn u64_to_f32(value: u64) -> f32 {
