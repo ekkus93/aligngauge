@@ -592,8 +592,8 @@ Verify every criterion in SPEC §19.1.
 Verify SPEC §19.2.
 
 - [x] Create `docs/evidence/V0_2_CRAM_VALIDATION.md`.
-- [ ] Reconcile SPEC §4.2 `inspect` / `validate-reference` workflow scope before declaring v0.2 complete.
-- [ ] Reconcile SPEC §8 inherited-environment wording with ADR-0004 scoped neutralization, or amend the specification.
+- [x] Reconcile SPEC §4.2: standalone `inspect` / `validate-reference` workflows are deferred beyond v0.2 until separately specified.
+- [x] Reconcile SPEC §8 with ADR-0004: use scoped provider neutralization rather than process-global environment mutation.
 - [ ] Permanent CI succeeds on the exact release commit.
 
 ---

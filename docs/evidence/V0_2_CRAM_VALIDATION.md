@@ -127,11 +127,11 @@ Complete. The hostile-M5 case runs in a network-disabled namespace with syscall 
 
 Complete. Equivalent fixtures, exact canonical counter/coverage comparison, constrained provenance comparison, truncation, and a distinct corruption fixture are covered.
 
-## 10. Release-scope items intentionally left open
+## 10. Release-scope reconciliation
 
-Milestone 7 implementation evidence is complete, but the v0.2 release is **not** declared complete for two reasons:
+The two specification discrepancies identified during Milestone 7 evidence review are resolved explicitly:
 
-1. SPEC §4.2 says v0.2 adds `inspect` and `validate-reference` workflows. Those workflows are not implemented by Milestone 7 and are not listed in SPEC §19.2's v0.2 acceptance bullets. Their disposition must be explicitly reconciled before a v0.2 release claim.
-2. SPEC §8 literally says to override inherited reference environment state before opening CRAM. ADR-0004 implements the safer scoped-neutralization design instead. The specification should be amended or explicitly reconciled before release so normative text and implementation do not disagree.
+1. SPEC §4.2 now states that standalone `inspect` and `validate-reference` commands are not v0.2 release requirements. The released v0.2 reference-integrity surface is `qc --reference <FASTA>` plus the shared validation API. Dedicated commands are deferred until their CLI, schema, and error contracts are independently specified and tested.
+2. SPEC §8 now matches ADR-0004's scoped-neutralization design. The production build removes remote HTSlib transports; CRAM requires an explicit local FASTA; AlignGauge validates SN/LN/M5 before reference-dependent traversal; mismatch is terminal; and hostile inherited provider state is proven non-authoritative under network isolation. Process-global environment mutation is neither required nor desired.
 
-The final TODO release-gate item requiring Permanent CI on the exact release commit therefore remains unchecked. No tag, release, merge-to-master, or v0.2 completion claim is made by this evidence document.
+These reconciliations do not themselves declare v0.2 released. The remaining release gate is Permanent CI on the eventual exact release commit, followed by the repository's normal merge/tag/release discipline. No tag or v0.2 release claim is made by this evidence document.
