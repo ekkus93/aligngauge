@@ -101,11 +101,12 @@ jobs:
       - name: Run tests
         run: cargo test --workspace --all-features --locked
 
-      - name: Prove CRAM reference path makes no network syscall
+      - name: Prove CRAM reference isolation with no network access
         shell: bash
         run: |
           set -euo pipefail
           command -v strace
+          command -v unshare
           cargo test -p aligngauge-cli --test cram_v0_2 --no-run --locked
           test_bin="$(find target/debug/deps -maxdepth 1 -type f -executable \
             -name 'cram_v0_2-*' -print -quit)"
@@ -116,7 +117,7 @@ jobs:
 
           trace="$(mktemp)"
           trap 'rm -f "$trace"' EXIT
-          strace -f -qq -e trace=network -o "$trace" \
+          sudo unshare --net /usr/bin/strace -f -qq -e trace=network -o "$trace" \
             "$test_bin" --exact hostile_reference_environment_cannot_replace_explicit_local_policy
           if grep -E 'AF_INET|AF_INET6' "$trace"; then
             echo 'CRAM reference-isolation test attempted an IPv4/IPv6 network syscall' >&2
