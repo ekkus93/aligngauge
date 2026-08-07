@@ -181,7 +181,6 @@ fn deterministic_cigar_fuzz_matches_per_base_oracle() {
                     cursor += length;
                 }
                 2 | 3 => cursor += usize::try_from(length).expect("u32 fits usize"),
-                1 | 4 | 5 | 6 => {}
                 _ => {}
             }
         }
