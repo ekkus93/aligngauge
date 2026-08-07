@@ -21,6 +21,9 @@ enum CompatibilityFormat {
 
 enum CliAction {
     Help(String),
+    Legacy {
+        input: PathBuf,
+    },
     Compatibility {
         input: PathBuf,
         format: CompatibilityFormat,
@@ -38,6 +41,7 @@ fn main() -> ExitCode {
             println!("{help}");
             ExitCode::SUCCESS
         }
+        Ok(CliAction::Legacy { input }) => run_legacy(&input),
         Ok(CliAction::Compatibility { input, format }) => run_compatibility(&input, format),
         Ok(CliAction::Release {
             config_path,
@@ -63,6 +67,20 @@ fn main() -> ExitCode {
             if !config.quiet {
                 print!("{}", report.render_human());
             }
+            ExitCode::SUCCESS
+        }
+        Err(error) => exit_with_error(&error, LogFormat::Human),
+    }
+}
+
+fn run_legacy(input: &Path) -> ExitCode {
+    match analyze_bam(input) {
+        Ok(report) => {
+            let counters = report.alignment_counters();
+            print!(
+                "total\t{}\nmapped\t{}\nunmapped\t{}\n",
+                counters.total, counters.mapped, counters.unmapped
+            );
             ExitCode::SUCCESS
         }
         Err(error) => exit_with_error(&error, LogFormat::Human),
@@ -100,6 +118,69 @@ fn exit_with_error(error: &AlignGaugeError, format: LogFormat) -> ExitCode {
     ExitCode::from(error.exit_code())
 }
 
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum FlagPresence {
+    Absent,
+    Present,
+}
+
+struct ParseState {
+    overrides: ConfigOverrides,
+    config_path: Option<PathBuf>,
+    compatibility_format: Option<CompatibilityFormat>,
+    diagnostic_hint: LogFormat,
+    release_option_seen: bool,
+    quiet_seen: FlagPresence,
+    verbose_seen: FlagPresence,
+    preserve_seen: FlagPresence,
+}
+
+impl ParseState {
+    fn initial() -> Self {
+        Self {
+            overrides: ConfigOverrides::default(),
+            config_path: None,
+            compatibility_format: None,
+            diagnostic_hint: LogFormat::Human,
+            release_option_seen: false,
+            quiet_seen: FlagPresence::Absent,
+            verbose_seen: FlagPresence::Absent,
+            preserve_seen: FlagPresence::Absent,
+        }
+    }
+
+    fn finish(mut self, program: &OsStr) -> Result<CliAction, AlignGaugeError> {
+        if let Some(format) = self.compatibility_format {
+            if self.release_option_seen {
+                return Err(usage_error(
+                    "--format is a compatibility probe and cannot be combined with v0.1 release options",
+                    program,
+                ));
+            }
+            let input =
+                self.overrides.input.take().ok_or_else(|| {
+                    usage_error("compatibility mode requires --input <BAM>", program)
+                })?;
+            return Ok(CliAction::Compatibility { input, format });
+        }
+
+        if !self.release_option_seen {
+            let input = self
+                .overrides
+                .input
+                .take()
+                .ok_or_else(|| usage_error("qc requires --input <BAM>", program))?;
+            return Ok(CliAction::Legacy { input });
+        }
+
+        Ok(CliAction::Release {
+            config_path: self.config_path,
+            overrides: self.overrides,
+            diagnostic_hint: self.diagnostic_hint,
+        })
+    }
+}
+
 fn parse_args() -> Result<CliAction, AlignGaugeError> {
     let mut arguments = env::args_os();
     let program = arguments
@@ -118,198 +199,237 @@ fn parse_args() -> Result<CliAction, AlignGaugeError> {
             &program,
         ));
     }
+    parse_qc_args(arguments, &program)
+}
 
-    let mut overrides = ConfigOverrides::default();
-    let mut config_path = None;
-    let mut compatibility_format = None;
-    let mut diagnostic_hint = LogFormat::Human;
-    let mut release_option_seen = false;
-    let mut quiet_seen = false;
-    let mut verbose_seen = false;
-    let mut preserve_seen = false;
-
+fn parse_qc_args(
+    mut arguments: impl Iterator<Item = OsString>,
+    program: &OsStr,
+) -> Result<CliAction, AlignGaugeError> {
+    let mut state = ParseState::initial();
     while let Some(argument) = arguments.next() {
         if is_help(&argument) {
-            return Ok(CliAction::Help(usage(&program)));
+            return Ok(CliAction::Help(usage(program)));
         }
-        match argument.to_str() {
-            Some("--input") => {
-                set_path_option(
-                    &mut overrides.input,
-                    next_value(&mut arguments, "--input", &program)?,
-                    "--input",
-                    &program,
-                )?;
-            }
-            Some("--outdir") => {
-                release_option_seen = true;
-                set_path_option(
-                    &mut overrides.outdir,
-                    next_value(&mut arguments, "--outdir", &program)?,
-                    "--outdir",
-                    &program,
-                )?;
-            }
-            Some("--threads") => {
-                release_option_seen = true;
-                set_once(
-                    &mut overrides.threads,
-                    parse_positive_usize(
-                        next_value(&mut arguments, "--threads", &program)?,
-                        "--threads",
-                        &program,
-                    )?,
-                    "--threads",
-                    &program,
-                )?;
-            }
-            Some("--io-threads") => {
-                release_option_seen = true;
-                set_once(
-                    &mut overrides.io_threads,
-                    parse_usize(
-                        next_value(&mut arguments, "--io-threads", &program)?,
-                        "--io-threads",
-                        &program,
-                    )?,
-                    "--io-threads",
-                    &program,
-                )?;
-            }
-            Some("--memory-limit") => {
-                release_option_seen = true;
-                let value = utf8_value(
-                    next_value(&mut arguments, "--memory-limit", &program)?,
-                    "--memory-limit",
-                    &program,
-                )?;
-                set_once(
-                    &mut overrides.memory_limit_bytes,
-                    parse_memory_limit(&value)?,
-                    "--memory-limit",
-                    &program,
-                )?;
-            }
-            Some("--coverage-thresholds") => {
-                release_option_seen = true;
-                let value = utf8_value(
-                    next_value(&mut arguments, "--coverage-thresholds", &program)?,
-                    "--coverage-thresholds",
-                    &program,
-                )?;
-                set_once(
-                    &mut overrides.coverage_thresholds,
-                    parse_coverage_thresholds(&value)?,
-                    "--coverage-thresholds",
-                    &program,
-                )?;
-            }
-            Some("--config") => {
-                release_option_seen = true;
-                if config_path.is_some() {
-                    return Err(usage_error("--config may be supplied only once", &program));
-                }
-                config_path = Some(PathBuf::from(next_value(
-                    &mut arguments,
-                    "--config",
-                    &program,
-                )?));
-            }
-            Some("--log-format") => {
-                release_option_seen = true;
-                if overrides.log_format.is_some() {
-                    return Err(usage_error(
-                        "--log-format may be supplied only once",
-                        &program,
-                    ));
-                }
-                let value = utf8_value(
-                    next_value(&mut arguments, "--log-format", &program)?,
-                    "--log-format",
-                    &program,
-                )?;
-                let format = match value.as_str() {
-                    "human" => LogFormat::Human,
-                    "json" => LogFormat::Json,
-                    _ => {
-                        return Err(usage_error("--log-format must be human or json", &program));
-                    }
-                };
-                diagnostic_hint = format;
-                overrides.log_format = Some(format);
-            }
-            Some("--quiet") => {
-                release_option_seen = true;
-                set_flag(&mut quiet_seen, "--quiet", &program)?;
-                overrides.quiet = Some(true);
-            }
-            Some("--verbose") => {
-                release_option_seen = true;
-                set_flag(&mut verbose_seen, "--verbose", &program)?;
-                overrides.verbose = Some(true);
-            }
-            Some("--preserve-failed-staging") => {
-                release_option_seen = true;
-                set_flag(&mut preserve_seen, "--preserve-failed-staging", &program)?;
-                overrides.preserve_failed_staging = Some(true);
-            }
-            Some("--format") => {
-                if compatibility_format.is_some() {
-                    return Err(usage_error("--format may be supplied only once", &program));
-                }
-                compatibility_format = Some(parse_compatibility_format(
-                    &next_value(&mut arguments, "--format", &program)?,
-                    &program,
-                )?);
-            }
-            Some("--reference") => {
-                return Err(unsupported_option(
-                    "--reference",
-                    "CRAM reference resolution is a v0.2 feature",
-                    &program,
-                ));
-            }
-            Some("--targets") | Some("--profile") => {
-                return Err(unsupported_option(
-                    argument.to_string_lossy(),
-                    "targeted analysis is a v0.3 feature",
-                    &program,
-                ));
-            }
-            Some("--backend") | Some("--cuda-device") => {
-                return Err(unsupported_option(
-                    argument.to_string_lossy(),
-                    "hardware/backend selection is not a released v0.1 feature",
-                    &program,
-                ));
-            }
-            _ => {
-                return Err(usage_error(
-                    format!("unsupported argument '{}'", argument.to_string_lossy()),
-                    &program,
-                ));
-            }
-        }
+        parse_qc_option(&mut state, argument.as_os_str(), &mut arguments, program)?;
     }
+    state.finish(program)
+}
 
-    if let Some(format) = compatibility_format {
-        if release_option_seen || config_path.is_some() {
-            return Err(usage_error(
-                "--format is a compatibility probe and cannot be combined with v0.1 release options",
-                &program,
-            ));
+fn parse_qc_option(
+    state: &mut ParseState,
+    argument: &OsStr,
+    arguments: &mut impl Iterator<Item = OsString>,
+    program: &OsStr,
+) -> Result<(), AlignGaugeError> {
+    match argument.to_str() {
+        Some("--input") => set_path_option(
+            &mut state.overrides.input,
+            next_value(arguments, "--input", program)?,
+            "--input",
+            program,
+        ),
+        Some(
+            option @ ("--outdir"
+            | "--threads"
+            | "--io-threads"
+            | "--memory-limit"
+            | "--coverage-thresholds"
+            | "--config"
+            | "--log-format"),
+        ) => parse_release_value_option(state, option, arguments, program),
+        Some(option @ ("--quiet" | "--verbose" | "--preserve-failed-staging")) => {
+            parse_release_flag_option(state, option, program)
         }
-        let input = overrides
-            .input
-            .ok_or_else(|| usage_error("compatibility mode requires --input <BAM>", &program))?;
-        return Ok(CliAction::Compatibility { input, format });
+        Some("--format") => parse_format_option(state, arguments, program),
+        Some("--reference") => Err(unsupported_option(
+            "--reference",
+            "CRAM reference resolution is a v0.2 feature",
+            program,
+        )),
+        Some("--targets" | "--profile") => Err(unsupported_option(
+            argument.to_string_lossy(),
+            "targeted analysis is a v0.3 feature",
+            program,
+        )),
+        Some("--backend" | "--cuda-device") => Err(unsupported_option(
+            argument.to_string_lossy(),
+            "hardware/backend selection is not a released v0.1 feature",
+            program,
+        )),
+        _ => Err(usage_error(
+            format!("unsupported argument '{}'", argument.to_string_lossy()),
+            program,
+        )),
     }
+}
 
-    Ok(CliAction::Release {
-        config_path,
-        overrides,
-        diagnostic_hint,
-    })
+fn parse_release_value_option(
+    state: &mut ParseState,
+    option: &str,
+    arguments: &mut impl Iterator<Item = OsString>,
+    program: &OsStr,
+) -> Result<(), AlignGaugeError> {
+    state.release_option_seen = true;
+    match option {
+        "--outdir" => set_path_option(
+            &mut state.overrides.outdir,
+            next_value(arguments, "--outdir", program)?,
+            "--outdir",
+            program,
+        ),
+        "--threads" => {
+            let value = parse_positive_usize(
+                next_value(arguments, "--threads", program)?,
+                "--threads",
+                program,
+            )?;
+            set_once(&mut state.overrides.threads, value, "--threads", program)
+        }
+        "--io-threads" => {
+            let value = parse_usize(
+                next_value(arguments, "--io-threads", program)?,
+                "--io-threads",
+                program,
+            )?;
+            set_once(
+                &mut state.overrides.io_threads,
+                value,
+                "--io-threads",
+                program,
+            )
+        }
+        "--memory-limit" => parse_memory_limit_option(state, arguments, program),
+        "--coverage-thresholds" => parse_coverage_threshold_option(state, arguments, program),
+        "--config" => parse_config_option(state, arguments, program),
+        "--log-format" => parse_log_format_option(state, arguments, program),
+        _ => Err(parser_invariant(option)),
+    }
+}
+
+fn parse_memory_limit_option(
+    state: &mut ParseState,
+    arguments: &mut impl Iterator<Item = OsString>,
+    program: &OsStr,
+) -> Result<(), AlignGaugeError> {
+    let value = utf8_value(
+        next_value(arguments, "--memory-limit", program)?,
+        "--memory-limit",
+        program,
+    )?;
+    set_once(
+        &mut state.overrides.memory_limit_bytes,
+        parse_memory_limit(&value)?,
+        "--memory-limit",
+        program,
+    )
+}
+
+fn parse_coverage_threshold_option(
+    state: &mut ParseState,
+    arguments: &mut impl Iterator<Item = OsString>,
+    program: &OsStr,
+) -> Result<(), AlignGaugeError> {
+    let value = utf8_value(
+        next_value(arguments, "--coverage-thresholds", program)?,
+        "--coverage-thresholds",
+        program,
+    )?;
+    set_once(
+        &mut state.overrides.coverage_thresholds,
+        parse_coverage_thresholds(&value)?,
+        "--coverage-thresholds",
+        program,
+    )
+}
+
+fn parse_config_option(
+    state: &mut ParseState,
+    arguments: &mut impl Iterator<Item = OsString>,
+    program: &OsStr,
+) -> Result<(), AlignGaugeError> {
+    if state.config_path.is_some() {
+        return Err(usage_error("--config may be supplied only once", program));
+    }
+    state.config_path = Some(PathBuf::from(next_value(arguments, "--config", program)?));
+    Ok(())
+}
+
+fn parse_log_format_option(
+    state: &mut ParseState,
+    arguments: &mut impl Iterator<Item = OsString>,
+    program: &OsStr,
+) -> Result<(), AlignGaugeError> {
+    if state.overrides.log_format.is_some() {
+        return Err(usage_error(
+            "--log-format may be supplied only once",
+            program,
+        ));
+    }
+    let value = utf8_value(
+        next_value(arguments, "--log-format", program)?,
+        "--log-format",
+        program,
+    )?;
+    let format = match value.as_str() {
+        "human" => LogFormat::Human,
+        "json" => LogFormat::Json,
+        _ => return Err(usage_error("--log-format must be human or json", program)),
+    };
+    state.diagnostic_hint = format;
+    state.overrides.log_format = Some(format);
+    Ok(())
+}
+
+fn parse_release_flag_option(
+    state: &mut ParseState,
+    option: &str,
+    program: &OsStr,
+) -> Result<(), AlignGaugeError> {
+    state.release_option_seen = true;
+    match option {
+        "--quiet" => {
+            set_flag(&mut state.quiet_seen, "--quiet", program)?;
+            state.overrides.quiet = Some(true);
+        }
+        "--verbose" => {
+            set_flag(&mut state.verbose_seen, "--verbose", program)?;
+            state.overrides.verbose = Some(true);
+        }
+        "--preserve-failed-staging" => {
+            set_flag(
+                &mut state.preserve_seen,
+                "--preserve-failed-staging",
+                program,
+            )?;
+            state.overrides.preserve_failed_staging = Some(true);
+        }
+        _ => return Err(parser_invariant(option)),
+    }
+    Ok(())
+}
+
+fn parse_format_option(
+    state: &mut ParseState,
+    arguments: &mut impl Iterator<Item = OsString>,
+    program: &OsStr,
+) -> Result<(), AlignGaugeError> {
+    if state.compatibility_format.is_some() {
+        return Err(usage_error("--format may be supplied only once", program));
+    }
+    state.compatibility_format = Some(parse_compatibility_format(
+        &next_value(arguments, "--format", program)?,
+        program,
+    )?);
+    Ok(())
+}
+
+fn parser_invariant(option: &str) -> AlignGaugeError {
+    AlignGaugeError::new(
+        ErrorCategory::InternalInvariant,
+        "CLI parser dispatched an unrecognized option",
+    )
+    .with_detail("option", option.to_owned())
 }
 
 fn preflight_output_destination(outdir: &Path) -> Result<(), AlignGaugeError> {
@@ -433,14 +553,18 @@ fn set_once<T>(
     Ok(())
 }
 
-fn set_flag(seen: &mut bool, option: &'static str, program: &OsStr) -> Result<(), AlignGaugeError> {
-    if *seen {
+fn set_flag(
+    seen: &mut FlagPresence,
+    option: &'static str,
+    program: &OsStr,
+) -> Result<(), AlignGaugeError> {
+    if matches!(*seen, FlagPresence::Present) {
         return Err(usage_error(
             format!("{option} may be supplied only once"),
             program,
         ));
     }
-    *seen = true;
+    *seen = FlagPresence::Present;
     Ok(())
 }
 
@@ -465,7 +589,7 @@ fn usage_error(message: impl Into<String>, program: &OsStr) -> AlignGaugeError {
 
 fn usage(program: &OsStr) -> String {
     format!(
-        "Usage:\n  {0} qc --input <BAM> --outdir <DIR> [OPTIONS]\n\nRequired v0.1 values:\n  --input <PATH>                  Local BAM input (may also come from --config)\n  --outdir <PATH>                 New output directory (may also come from --config)\n\nOptional v0.1 values:\n  --threads <N>                   Collector/reduction thread limit (v0.1 collector is deterministic serial)\n  --io-threads <N>                HTSlib I/O workers; 0 or 1 selects serial decoding\n  --memory-limit <SIZE>           B, KiB, MiB, GiB, or TiB (default 4GiB)\n  --coverage-thresholds <LIST>    Comma-separated positive depths (default 1,10,20,30)\n  --config <PATH>                 Strict schema_version=1 config file\n  --log-format <human|json>       Diagnostic error format\n  --quiet                         Suppress routine completion summary\n  --verbose                       Enable verbose mode in resolved provenance\n  --preserve-failed-staging       Preserve clearly incomplete staging on publication failure\n  -h, --help                      Show this help\n\nConfiguration precedence:\n  built-ins < config file < documented ALIGNGAUGE_* environment < CLI\n\nNot released in v0.1:\n  --reference (v0.2 CRAM), --targets/--profile targeted (v0.3), --backend, --cuda-device\n\nCompatibility probe retained for differential validation:\n  {0} qc --input <BAM> --format <human|json|samtools-flagstat|samtools-idxstats>",
+        "Usage:\n  {0} qc --input <BAM> --outdir <DIR> [OPTIONS]\n\nRequired v0.1 values:\n  --input <PATH>                  Local BAM input (may also come from --config)\n  --outdir <PATH>                 New output directory (may also come from --config)\n\nOptional v0.1 values:\n  --threads <N>                   Collector/reduction thread limit (v0.1 collector is deterministic serial)\n  --io-threads <N>                HTSlib I/O workers; 0 or 1 selects serial decoding\n  --memory-limit <SIZE>           B, KiB, MiB, GiB, or TiB (default 4GiB)\n  --coverage-thresholds <LIST>    Comma-separated positive depths (default 1,10,20,30)\n  --config <PATH>                 Strict schema_version=1 config file\n  --log-format <human|json>       Diagnostic error format\n  --quiet                         Suppress routine completion summary\n  --verbose                       Enable verbose mode in resolved provenance\n  --preserve-failed-staging       Preserve clearly incomplete staging on publication failure\n  -h, --help                      Show this help\n\nConfiguration precedence:\n  built-ins < config file < documented ALIGNGAUGE_* environment < CLI\n\nNot released in v0.1:\n  --reference (v0.2 CRAM), --targets/--profile targeted (v0.3), --backend, --cuda-device\n\nLegacy three-counter compatibility probe:\n  {0} qc --input <BAM>\n\nCompatibility projections retained for differential validation:\n  {0} qc --input <BAM> --format <human|json|samtools-flagstat|samtools-idxstats>",
         program.to_string_lossy()
     )
 }

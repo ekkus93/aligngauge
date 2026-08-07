@@ -193,14 +193,9 @@ pub fn analyze_release(config: &ResolvedConfig) -> Result<ReleaseReport, AlignGa
     let mut summary = counters.to_summary(application.clone());
     summary.coverage = Availability::Available(coverage.to_core_summary());
     add_coverage_metric_definitions(&mut summary.metric_definitions);
-    summary.warnings = warnings.clone();
+    summary.warnings.clone_from(&warnings);
 
-    let mut normalization_actions = Vec::new();
-    if config.io_threads == 0 {
-        normalization_actions.push(String::from(
-            "io_threads=0 normalized to the serial HTSlib reader setting io_threads=1",
-        ));
-    }
+    let normalization_actions = release_normalization_actions(config);
     let mut provenance = Provenance::new(
         application,
         config.clone(),
@@ -261,6 +256,16 @@ pub fn analyze_release(config: &ResolvedConfig) -> Result<ReleaseReport, AlignGa
         provenance,
         input_traversals: 1,
     })
+}
+
+fn release_normalization_actions(config: &ResolvedConfig) -> Vec<String> {
+    if config.io_threads == 0 {
+        vec![String::from(
+            "io_threads=0 normalized to the serial HTSlib reader setting io_threads=1",
+        )]
+    } else {
+        Vec::new()
+    }
 }
 
 /// Validate a BAM and return the original three-counter projection.
