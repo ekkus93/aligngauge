@@ -2,9 +2,11 @@ name: Milestone 8 formats validation
 
 on:
   push:
-    branches: [milestone-8-bed-normalization]
+    branches:
+      - milestone-8-bed-normalization
     paths:
       - .github/workflows/m8-formats-build.yml
+      - .github/m8-harden-bed.py
       - Cargo.toml
       - Cargo.lock
       - crates/aligngauge-formats/**
@@ -33,130 +35,8 @@ jobs:
           rustc --version --verbose
           cargo --version
 
-      - name: Harden BED field parsing
-        shell: bash
-        run: |
-          set -euo pipefail
-          python - <<'PY'
-          import re
-          from pathlib import Path
-
-          path = Path("crates/aligngauge-formats/src/bed.rs")
-          text = path.read_text()
-
-          old = "    let mut stats = BedParseStats::default();\n    let mut intervals = Vec::new();"
-          new = (
-              "    let mut stats = BedParseStats::default();\n"
-              "    let mut intervals = Vec::new();\n"
-              "    let mut expected_field_count = None;"
-          )
-          if text.count(old) == 1:
-              text = text.replace(old, new, 1)
-          elif text.count("    let mut expected_field_count = None;") != 1:
-              raise SystemExit("parser-state initialization is neither original nor hardened")
-
-          old = (
-              "        let fields = split_fields(line, line_number)?;\n"
-              "        let interval = parse_interval(&fields, line_number, intervals.len(), dictionary)?;"
-          )
-          new = (
-              "        let fields = split_fields(line, line_number)?;\n"
-              "        validate_field_count_consistency(&fields, line_number, &mut expected_field_count)?;\n"
-              "        let interval = parse_interval(&fields, line_number, intervals.len(), dictionary)?;"
-          )
-          if text.count(old) == 1:
-              text = text.replace(old, new, 1)
-          elif text.count("validate_field_count_consistency(&fields, line_number, &mut expected_field_count)?;") != 1:
-              raise SystemExit("parser interval path is neither original nor hardened")
-
-          pattern = re.compile(
-              r"fn split_fields\(line: &str, line_number: u64\) -> Result<Vec<&str>, AlignGaugeError> \{.*?\n\}\n\n(?:fn validate_field_count_consistency\(.*?\n\}\n\n)?fn parse_interval\(",
-              re.S,
-          )
-          replacement = '''fn split_fields(line: &str, line_number: u64) -> Result<Vec<&str>, AlignGaugeError> {
-              if line.contains('\\t')
-                  && line
-                      .split('\\t')
-                      .any(|segment| segment.trim_matches(' ').is_empty())
-              {
-                  return Err(target_format_error(
-                      line_number,
-                      "BED interval contains an empty tab-delimited field",
-                  ));
-              }
-              let fields: Vec<&str> = line.split_ascii_whitespace().collect();
-              if !(3..=12).contains(&fields.len()) {
-                  return Err(target_format_error(
-                      line_number,
-                      "BED interval must contain 3 through 12 fields",
-                  )
-                  .with_detail(
-                      "field_count",
-                      u64::try_from(fields.len()).unwrap_or(u64::MAX),
-                  ));
-              }
-              Ok(fields)
-          }
-
-          fn validate_field_count_consistency(
-              fields: &[&str],
-              line_number: u64,
-              expected_field_count: &mut Option<usize>,
-          ) -> Result<(), AlignGaugeError> {
-              if let Some(expected) = *expected_field_count {
-                  if fields.len() != expected {
-                      return Err(target_format_error(
-                          line_number,
-                          "BED field count is inconsistent within the target dataset",
-                      )
-                      .with_detail(
-                          "expected_field_count",
-                          u64::try_from(expected).unwrap_or(u64::MAX),
-                      )
-                      .with_detail(
-                          "actual_field_count",
-                          u64::try_from(fields.len()).unwrap_or(u64::MAX),
-                      ));
-                  }
-              } else {
-                  *expected_field_count = Some(fields.len());
-              }
-              Ok(())
-          }
-
-          fn parse_interval('''
-          text, count = pattern.subn(lambda _match: replacement, text, count=1)
-          if count != 1:
-              raise SystemExit(f"expected one BED field parser block, found {count}")
-
-          if 'BED3 should parse' not in text:
-              test_pattern = re.compile(
-                  r"    #\[test\]\n    fn accepts_bed3_through_bed12_and_preserves_optional_fields\(\) \{.*?\n    \}\n",
-                  re.S,
-              )
-              new_test = '''    #[test]
-              fn accepts_bed3_through_bed12_and_preserves_optional_fields() {
-                  let bed3 = parse_bed_bytes(b"chr1\\t0\\t1\\n", &dictionary())
-                      .expect("BED3 should parse");
-                  assert_eq!(bed3.intervals[0].name, None);
-
-                  let bed12 = parse_bed_bytes(
-                      b"chr1\\t1\\t2\\tname\\t1\\t+\\t1\\t2\\t255,0,0\\t1\\t1\\t0\\n",
-                      &dictionary(),
-                  )
-                  .expect("BED12 should parse");
-                  assert_eq!(bed12.intervals[0].name.as_deref(), Some("name"));
-                  assert_eq!(bed12.intervals[0].extra_fields.len(), 8);
-              }
-'''
-              text, count = test_pattern.subn(lambda _match: new_test, text, count=1)
-              if count != 1:
-                  raise SystemExit(f"expected one BED3/BED12 unit test, found {count}")
-          elif text.count('BED3 should parse') != 1:
-              raise SystemExit("hardened BED3/BED12 test is duplicated")
-
-          path.write_text(text)
-          PY
+      - name: Apply idempotent BED hardening
+        run: python .github/m8-harden-bed.py
 
       - name: Refresh lockfile
         run: cargo update --workspace
