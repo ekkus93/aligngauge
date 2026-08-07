@@ -1,0 +1,31 @@
+name: M10 MultiQC image resolver
+
+on:
+  push:
+    branches:
+      - milestone-10-samtools-stats
+    paths:
+      - .github/workflows/m10-multiqc-resolve.yml
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Resolve exact MultiQC 1.35 image
+        run: |
+          set -euo pipefail
+          for tag in 1.35--pyhdfd78af_1 1.35--pyhdfd78af_0; do
+            image="quay.io/biocontainers/multiqc:$tag"
+            if docker pull "$image"; then
+              echo "RESOLVED_TAG=$image"
+              docker run --rm --network none "$image" multiqc --version
+              docker image inspect "$image" --format '{{json .RepoDigests}}'
+              exit 0
+            fi
+          done
+          echo 'No expected MultiQC 1.35 Bioconda tag resolved' >&2
+          exit 1
