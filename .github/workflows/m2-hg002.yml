@@ -11,9 +11,13 @@ on:
       - "crates/aligngauge-hts/**"
       - "crates/aligngauge-metrics/**"
       - "testdata/hg002/**"
+      - "tools/ci/v0_1_benchmark.py"
       - "tools/reference/samtools/**"
       - "docs/DNA_QC_ENGINE_TODO.md"
       - "docs/evidence/M5_COVERAGE.md"
+      - "docs/evidence/V0_1_PERFORMANCE_REPORT.md"
+      - "docs/evidence/V0_1_VALIDATION_REPORT.md"
+      - "docs/evidence/V0_1_RELEASE_CHECKLIST.md"
   workflow_dispatch:
 
 permissions:
@@ -23,7 +27,7 @@ jobs:
   prepare:
     name: ci/hg002-preparation
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 60
 
     steps:
       - name: Check out repository
@@ -110,7 +114,54 @@ jobs:
             target/hg002-m5/reference-summary.json \
             target/hg002-m5/aligngauge-probe.json
 
-      - name: Upload preparation evidence
+      - name: Run complete v0.1 HG002 release path
+        run: |
+          cargo build --release -p aligngauge-cli --bin aligngauge --locked
+          target/release/aligngauge qc \
+            --input target/hg002-first/subset.bam \
+            --outdir target/hg002-v0_1-release \
+            --memory-limit 1GiB \
+            --quiet
+          test -f target/hg002-v0_1-release/summary.json
+          test -f target/hg002-v0_1-release/provenance.json
+          test -f target/hg002-v0_1-release/_SUCCESS
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          out = Path('target/hg002-v0_1-release')
+          summary = json.loads((out / 'summary.json').read_text())
+          provenance = json.loads((out / 'provenance.json').read_text())
+          assert summary['alignment_counters']['status'] == 'available'
+          assert summary['coverage']['status'] == 'available'
+          assert summary['coverage']['value']['per_reference']
+          assert summary['coverage']['value']['threshold_percentages']
+          assert provenance['analysis_plan']['bam_traversals'] == 1
+          assert provenance['analysis_plan']['coverage_strategy'] == 'parameterized-chunked-delta-v1'
+          PY
+
+      - name: Measure v0.1 performance baseline
+        run: |
+          cargo build --release -p aligngauge-cli --example v0_1_benchmark_probe --locked
+          python tools/ci/v0_1_benchmark.py \
+            --probe target/release/examples/v0_1_benchmark_probe \
+            --input target/hg002-first/subset.bam \
+            --output target/v0_1-performance-baseline.json \
+            --memory-limit-bytes 1073741824 \
+            --repetitions 3
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path('target/v0_1-performance-baseline.json').read_text())
+          assert report['schema'] == 'aligngauge-v0.1-performance-baseline-v1'
+          assert report['benchmark']['warmups_per_mode'] == 1
+          assert report['benchmark']['measured_repetitions_per_mode'] == 3
+          assert report['benchmark']['modes']['combined']['semantic_output']['input_traversals'] == 1
+          assert report['interpretation']['speedup_claim'] is None
+          for mode in ('reader', 'counters', 'coverage', 'combined'):
+              assert len(report['benchmark']['modes'][mode]['measurements']) == 3
+          PY
+
+      - name: Upload preparation and v0.1 evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: hg002-preparation-${{ github.sha }}
@@ -131,5 +182,9 @@ jobs:
             target/hg002-m5/reference-depth/stdout.txt
             target/hg002-m5/reference-summary.json
             target/hg002-m5/aligngauge-probe.json
+            target/hg002-v0_1-release/summary.json
+            target/hg002-v0_1-release/provenance.json
+            target/hg002-v0_1-release/_SUCCESS
+            target/v0_1-performance-baseline.json
           if-no-files-found: error
           retention-days: 7
