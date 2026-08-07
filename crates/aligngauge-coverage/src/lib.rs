@@ -11,6 +11,7 @@ mod plan;
 mod report;
 mod util;
 
+pub use accumulator::CoverageCollector;
 pub use cigar::{CoverageBlock, cigar_to_coverage_blocks};
 pub use plan::{CoverageMemoryPlan, CoverageOptions};
 pub use report::{CoverageReport, PerReferenceCoverage};
@@ -34,8 +35,7 @@ pub fn analyze_bam(
     let plan =
         CoverageMemoryPlan::plan(options.memory_limit_bytes, 1, options.chunk_size_override)?;
     let mut reader = BamReader::open(path, FieldPlan::coverage(), ReaderOptions::default())?;
-    let mut collector =
-        accumulator::CoverageCollector::new(reader.header(), options.thresholds, plan)?;
+    let mut collector = CoverageCollector::new(reader.header(), options.thresholds, plan)?;
     while let Some(record) = reader.next_record()? {
         collector.observe(&record)?;
     }
