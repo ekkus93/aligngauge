@@ -3,11 +3,12 @@
 use std::collections::BTreeMap;
 
 use aligngauge_core::{
-    AlignGaugeError, CoveragePolicy, CoverageSummary, JsonValue, MateOverlapPolicy,
+    AlignGaugeError, Availability, CoveragePolicy, CoverageSummary, JsonValue, MateOverlapPolicy,
     PerReferenceCoverageSummary, Provenance, RecordInclusion, ToJson,
 };
 
 use crate::plan::CoverageMemoryPlan;
+use crate::targeted::TargetedCoverageReport;
 use crate::util::u64_from_usize;
 use crate::{COVERAGE_PROFILE, COVERAGE_STRATEGY};
 
@@ -65,6 +66,7 @@ pub struct CoverageReport {
     pub(crate) uncovered_reference_bases: u64,
     pub(crate) per_reference: Vec<PerReferenceCoverage>,
     pub(crate) memory_plan: CoverageMemoryPlan,
+    pub(crate) targeted: Option<TargetedCoverageReport>,
 }
 
 impl CoverageReport {
@@ -110,6 +112,12 @@ impl CoverageReport {
         &self.memory_plan
     }
 
+    /// Native targeted reductions when a target BED was supplied.
+    #[must_use]
+    pub const fn targeted(&self) -> Option<&TargetedCoverageReport> {
+        self.targeted.as_ref()
+    }
+
     /// Canonical aggregate model already reserved in `aligngauge-core`.
     #[must_use]
     pub fn to_core_summary(&self) -> CoverageSummary {
@@ -145,6 +153,10 @@ impl CoverageReport {
                     mean_depth: reference.mean_depth.clone(),
                 })
                 .collect(),
+            targeted: self.targeted.as_ref().map_or_else(
+                || Availability::unavailable("target_bed_not_supplied"),
+                |report| Availability::Available(report.to_core_summary()),
+            ),
         }
     }
 
@@ -181,6 +193,9 @@ impl CoverageReport {
             String::from("coverage_planned_peak_bytes"),
             self.memory_plan.planned_peak_bytes,
         );
+        if let Some(targeted) = &self.targeted {
+            targeted.apply_provenance(provenance);
+        }
         Ok(())
     }
 }
@@ -206,6 +221,18 @@ impl ToJson for CoverageReport {
             (
                 String::from("schema"),
                 JsonValue::String(String::from("aligngauge-coverage-v1")),
+            ),
+            (
+                String::from("targeted"),
+                self.targeted.as_ref().map_or_else(
+                    || {
+                        Availability::<aligngauge_core::TargetedCoverageSummary>::unavailable(
+                            "target_bed_not_supplied",
+                        )
+                        .to_json()
+                    },
+                    |report| Availability::Available(report.to_core_summary()).to_json(),
+                ),
             ),
             (
                 String::from("threshold_bases"),

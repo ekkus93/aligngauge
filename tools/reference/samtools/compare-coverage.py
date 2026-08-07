@@ -35,6 +35,22 @@ def differences(expected: Any, observed: Any, path: str = "$") -> list[str]:
     return []
 
 
+def legacy_coverage_projection(coverage: dict[str, Any]) -> dict[str, Any]:
+    """Project schema 1.1 coverage onto the v0.1 differential contract explicitly."""
+    observed = dict(coverage)
+    targeted = observed.pop("targeted", None)
+    expected_unavailable = {
+        "reason": "target_bed_not_supplied",
+        "status": "unavailable",
+    }
+    if targeted != expected_unavailable:
+        raise SystemExit(
+            "legacy coverage differential requires targeted coverage to be explicitly "
+            f"unavailable; observed {targeted!r}"
+        )
+    return observed
+
+
 def main() -> None:
     if len(sys.argv) != 3:
         raise SystemExit("usage: compare-coverage.py EXPECTED.json ALIGNGAUGE-PROBE.json")
@@ -42,7 +58,7 @@ def main() -> None:
     probe = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
     if set(probe) != {"coverage", "memory_plan", "strategy"}:
         raise SystemExit(f"unexpected coverage probe top-level fields: {sorted(probe)}")
-    observed = probe["coverage"]
+    observed = legacy_coverage_projection(probe["coverage"])
     discrepancy = differences(expected, observed)
     if discrepancy:
         print("coverage discrepancy detected:", file=sys.stderr)

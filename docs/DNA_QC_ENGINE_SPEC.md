@@ -580,7 +580,9 @@ Counters use checked `u64` accumulation. Overflow is fatal.
 
 No counter saturates silently.
 
-## 12. v0.1 coverage semantics
+## 12. Coverage semantics
+
+Sections 12.1–12.6 are normative for the v0.1 canonical coverage track. Section 12.7 is normative for v0.3 targeted reductions over that same exact track.
 
 ### 12.1 Named default profile
 
@@ -693,6 +695,49 @@ differential proof exist.
 
 The specification shall name the reference tool being matched; “reference-tool
 profile” without a named tool and version is insufficient.
+
+### 12.7 v0.3 targeted metrics
+
+The v0.3 native targeted profile is `aligngauge-targeted-v0.3`. It is a reduction over the exact `aligngauge-v0.1` coverage track; targeted analysis shall not create a second read-filtering or coverage algorithm. Consequently mapped primary QC-pass non-duplicate records are included, the minimum MAPQ is 0, base quality is not filtered, mate overlaps are counted independently, and only `M`, `=`, and `X` contribute covered reference bases.
+
+One validated BED supplies the v0.3 target set. The zero-flank normalized union defines **target territory**. A second normalization using `near_distance_bases`, default 250, defines **selected territory**. Near-target territory is selected territory minus target territory. Expansion is clipped only at validated contig boundaries and every clipping action is provenance.
+
+Every accepted aligned reference-base observation belongs to exactly one aggregate class by genomic position: on-target inside target territory; near-target inside selected but outside target territory; off-target otherwise. The implementation shall check:
+
+```text
+on_target_bases + near_target_bases + off_target_bases
+    == total_accepted_aligned_bases
+```
+
+Aggregate target coverage uses unique target union territory. It records target territory, target depth histogram, covered and uncovered target bases, mean target depth, and cumulative base counts/percentages at the configured coverage thresholds. The weighted target histogram depth shall equal `on_target_bases`.
+
+Per-target coverage uses original source BED intervals, preserving source index, source line, coordinates, and optional name. Overlapping source targets may each receive the shared bases in their own per-target results; aggregate union metrics must not double-count them. Each non-empty source target records exact depth sum, mean depth, covered/uncovered bases, threshold counts/percentages, maximal zero-depth runs, and the longest such run. A valid zero-length source target is retained but denominator-based values are explicitly unavailable.
+
+A **dropout target** is a non-empty source interval containing at least one zero-depth target base. A zero-coverage run is a maximal half-open zero-depth subinterval within that source interval.
+
+The v0.3 project-native enrichment metric is:
+
+```text
+target_enrichment
+  = (on_target_bases / total_accepted_aligned_bases)
+    / (target_territory_bases / genome_territory_bases)
+```
+
+where genome territory is the checked sum of validated reference lengths. Reduction should use exact integer products before deterministic decimal rendering. The metric is unavailable when a required denominator is zero. It is not labeled Picard `FOLD_ENRICHMENT`.
+
+The ADR-approved fold-80 alternative is `target_uniformity_penalty_80`. Let `D20` be the deterministic nearest-rank 20th-percentile depth across **all bases in unique target territory**, including zeros, and let `M` be mean target depth:
+
+```text
+target_uniformity_penalty_80 = M / D20
+```
+
+For `N > 0` target bases, the ascending one-based percentile rank is `ceil(0.20 * N)`. The metric is unavailable when target territory is empty or `D20 == 0`; AlignGauge shall not serialize infinity or silently remove zero-depth bases. This metric is native and shall not be labeled Picard `FOLD_80_BASE_PENALTY`.
+
+The same coverage thresholds configured for canonical coverage are used for aggregate and per-source-target threshold results. Percentages and ratios use deterministic final CPU reduction.
+
+Target identity, near distance, normalization actions, metric profile, and exact target checksum are recorded in provenance. Targeted BAM and CRAM runs over equivalent records and the same target/reference definitions must produce identical targeted canonical results except for already defined format-specific provenance.
+
+External differential tools may validate comparable primitives, such as per-region mean depth and threshold counts, but no named compatibility claim is permitted unless the full filtering and metric definition are matched and pinned. ADR-0006 records this compatibility boundary.
 
 ## 13. Architecture
 

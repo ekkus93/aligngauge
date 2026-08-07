@@ -54,6 +54,10 @@
         "minimum_mapq": 0,
         "name": "aligngauge-v0.1"
       },
+      "targeted": {
+        "reason": "target_bed_not_supplied",
+        "status": "unavailable"
+      },
       "threshold_bases": {
         "1": 100
       },
@@ -84,7 +88,7 @@
       }
     ]
   },
-  "schema_version": "1.0.0",
+  "schema_version": "1.1.0",
   "warnings": [
     {
       "code": "test_warning",

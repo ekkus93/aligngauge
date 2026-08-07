@@ -21,7 +21,7 @@ impl CoverageCollector {
             .get(reference_index)
             .ok_or_else(|| internal_error("unvisited reference index is invalid"))?
             .length;
-        self.accumulate_for_reference(reference_index, 0, length)?;
+        self.accumulate_for_reference(reference_index, 0, 0, length)?;
         self.finalize_reference(reference_index)?;
         self.next_reference_index = reference_index
             .checked_add(1)
@@ -29,21 +29,33 @@ impl CoverageCollector {
         Ok(())
     }
 
-    pub(super) fn accumulate_run(&mut self, depth: u64, bases: u64) -> Result<(), AlignGaugeError> {
+    pub(super) fn accumulate_run(
+        &mut self,
+        start: u64,
+        depth: u64,
+        bases: u64,
+    ) -> Result<(), AlignGaugeError> {
         let reference_index = self
             .current_reference_index
             .ok_or_else(|| internal_error("coverage run has no current reference"))?;
-        self.accumulate_for_reference(reference_index, depth, bases)
+        self.accumulate_for_reference(reference_index, start, depth, bases)
     }
 
     fn accumulate_for_reference(
         &mut self,
         reference_index: usize,
+        start: u64,
         depth: u64,
         bases: u64,
     ) -> Result<(), AlignGaugeError> {
         if bases == 0 {
             return Ok(());
+        }
+        let end = start
+            .checked_add(bases)
+            .ok_or_else(|| coverage_overflow("coverage run end"))?;
+        if let Some(targeted) = &mut self.targeted {
+            targeted.observe_run(reference_index, start, end, depth)?;
         }
         let existing = self.depth_histogram.get(&depth).copied();
         if existing.is_none() && self.depth_histogram.len() >= self.plan.max_histogram_bins {
@@ -84,6 +96,16 @@ impl CoverageCollector {
             .checked_add(depth_bases)
             .ok_or_else(|| coverage_overflow("per-reference depth sum"))?;
         Ok(())
+    }
+
+    fn finish_targeted(
+        &mut self,
+    ) -> Result<Option<crate::targeted::TargetedCoverageReport>, AlignGaugeError> {
+        let total_accepted_aligned_bases = self.total_accepted_aligned_bases;
+        self.targeted
+            .take()
+            .map(|targeted| targeted.finish(total_accepted_aligned_bases))
+            .transpose()
     }
 
     pub(super) fn finalize_reference(
@@ -198,6 +220,7 @@ impl CoverageCollector {
                     .checked_add(reference.uncovered_reference_bases)
                     .ok_or_else(|| coverage_overflow("whole-run uncovered bases"))
             })?;
+        let targeted = self.finish_targeted()?;
         let per_reference = self
             .references
             .into_iter()
@@ -226,6 +249,7 @@ impl CoverageCollector {
             uncovered_reference_bases,
             per_reference,
             memory_plan: self.plan,
+            targeted,
         })
     }
 }

@@ -4,7 +4,9 @@ use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use aligngauge_cli::{analyze_release, analyze_release_with_reference};
+use aligngauge_cli::{
+    analyze_release, analyze_release_with_reference, analyze_release_with_reference_and_targets,
+};
 use aligngauge_core::{ConfigOverrides, ErrorCategory, MapEnvironment, ToJson, resolve_config};
 use aligngauge_hts::{AlignmentFormat, detect_alignment_format};
 use aligngauge_testkit::bam::{CigarOp, RecordSpec, ReferenceSpec, serialize_bam};
@@ -19,6 +21,7 @@ struct FixturePair {
     cram: PathBuf,
     reference: PathBuf,
     wrong_reference: PathBuf,
+    targets: PathBuf,
 }
 
 impl Drop for FixturePair {
@@ -46,10 +49,12 @@ fn make_pair() -> FixturePair {
     let wrong_reference = root.join("wrong.fa");
     let bam_path = root.join("equivalent.bam");
     let cram_path = root.join("equivalent.cram");
+    let targets = root.join("targets.bed");
     let sequence = "ACGT".repeat(250);
     fs::write(&reference, format!(">chr1\n{sequence}\n")).expect("write reference");
     fs::write(&wrong_reference, format!(">chr1\n{}\n", "A".repeat(1000)))
         .expect("write wrong reference");
+    fs::write(&targets, "chr1\t95\t135\tequivalent-target\n").expect("write target BED");
     rust_htslib::faidx::build(reference.clone()).expect("index reference");
     rust_htslib::faidx::build(wrong_reference.clone()).expect("index wrong reference");
 
@@ -105,6 +110,7 @@ fn make_pair() -> FixturePair {
         cram: cram_path,
         reference,
         wrong_reference,
+        targets,
     }
 }
 
@@ -262,4 +268,59 @@ fn hostile_reference_environment_cannot_replace_explicit_local_policy() {
         String::from_utf8_lossy(&output.stderr)
     );
     assert!(outdir.join("_SUCCESS").is_file());
+}
+
+#[test]
+fn targeted_bam_and_cram_have_identical_canonical_results() {
+    let fixtures = make_pair();
+    let bam = analyze_release_with_reference_and_targets(
+        &config(&fixtures.bam),
+        None,
+        Some(&fixtures.targets),
+        Some(5),
+    )
+    .expect("analyze targeted BAM");
+    let cram = analyze_release_with_reference_and_targets(
+        &config(&fixtures.cram),
+        Some(&fixtures.reference),
+        Some(&fixtures.targets),
+        Some(5),
+    )
+    .expect("analyze targeted CRAM");
+
+    assert_eq!(bam.input_traversals(), 1);
+    assert_eq!(cram.input_traversals(), 1);
+    assert_eq!(bam.counters(), cram.counters());
+    assert_eq!(bam.coverage(), cram.coverage());
+    assert_eq!(bam.summary(), cram.summary());
+    let bam_targeted = bam.coverage().targeted().expect("BAM targeted summary");
+    let cram_targeted = cram.coverage().targeted().expect("CRAM targeted summary");
+    assert_eq!(bam_targeted.summary(), cram_targeted.summary());
+
+    let mut bam_plan = bam.provenance().analysis_plan.clone();
+    let mut cram_plan = cram.provenance().analysis_plan.clone();
+    for key in [
+        "input_format",
+        "bam_traversals",
+        "cram_traversals",
+        "local_reference",
+    ] {
+        bam_plan.remove(key);
+        cram_plan.remove(key);
+    }
+    assert_eq!(bam_plan, cram_plan);
+    assert_eq!(
+        bam.provenance().normalization_actions,
+        cram.provenance().normalization_actions
+    );
+    assert_eq!(
+        bam.provenance().analysis_plan.get("alignment_traversals"),
+        Some(&aligngauge_core::JsonValue::Unsigned(1))
+    );
+    assert_eq!(
+        bam.provenance().analysis_plan.get("target_path"),
+        Some(&aligngauge_core::JsonValue::String(
+            fixtures.targets.display().to_string()
+        ))
+    );
 }

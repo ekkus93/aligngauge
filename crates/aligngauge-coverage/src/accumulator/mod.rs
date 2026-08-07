@@ -3,10 +3,12 @@
 use std::collections::BTreeMap;
 
 use aligngauge_core::AlignGaugeError;
+use aligngauge_formats::TargetSet;
 use aligngauge_hts::{ValidatedHeader, ValidatedRecord};
 
 use crate::cigar::{for_each_coverage_block, record_is_accepted};
 use crate::plan::CoverageMemoryPlan;
+use crate::targeted::{TargetedReducer, memory_reservation};
 use crate::util::{chunk_size_u64, coverage_overflow, internal_error, resource_error};
 
 struct ReferenceReduction {
@@ -51,6 +53,7 @@ pub struct CoverageCollector {
     pending_events: BTreeMap<u64, i128>,
     depth_histogram: BTreeMap<u64, u64>,
     total_accepted_aligned_bases: u64,
+    targeted: Option<TargetedReducer>,
 }
 
 impl CoverageCollector {
@@ -63,6 +66,40 @@ impl CoverageCollector {
         header: &ValidatedHeader,
         thresholds: Vec<u32>,
         plan: CoverageMemoryPlan,
+    ) -> Result<Self, AlignGaugeError> {
+        Self::build(header, thresholds, plan, None)
+    }
+
+    /// Initialize canonical coverage with native v0.3 targeted reductions.
+    ///
+    /// # Errors
+    /// Returns a typed resource or target invariant failure before traversal.
+    pub fn new_targeted(
+        header: &ValidatedHeader,
+        thresholds: Vec<u32>,
+        plan: CoverageMemoryPlan,
+        target_set: TargetSet,
+        selected_set: TargetSet,
+        near_distance_bases: u64,
+    ) -> Result<Self, AlignGaugeError> {
+        let reservation = memory_reservation(&target_set, &selected_set, thresholds.len())?;
+        let plan = plan.with_additional_reduction_bytes(reservation.additional_bytes)?;
+        let targeted = TargetedReducer::new(
+            header,
+            target_set,
+            selected_set,
+            thresholds.clone(),
+            near_distance_bases,
+            reservation,
+        )?;
+        Self::build(header, thresholds, plan, Some(targeted))
+    }
+
+    fn build(
+        header: &ValidatedHeader,
+        thresholds: Vec<u32>,
+        plan: CoverageMemoryPlan,
+        targeted: Option<TargetedReducer>,
     ) -> Result<Self, AlignGaugeError> {
         let delta_len = plan
             .chunk_size_bases
@@ -88,6 +125,7 @@ impl CoverageCollector {
             pending_events: BTreeMap::new(),
             depth_histogram,
             total_accepted_aligned_bases: 0,
+            targeted,
         })
     }
 

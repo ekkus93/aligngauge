@@ -11,6 +11,7 @@ publish = false
 # v0.1 composes M4 counters and M5 coverage over one BAM traversal; legacy and differential probes remain explicit compatibility paths.
 [dependencies]
 aligngauge-core = { path = "../aligngauge-core" }
+aligngauge-formats = { path = "../aligngauge-formats" }
 aligngauge-coverage = { path = "../aligngauge-coverage" }
 aligngauge-hts = { path = "../aligngauge-hts" }
 aligngauge-metrics = { path = "../aligngauge-metrics" }

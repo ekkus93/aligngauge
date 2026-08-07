@@ -58,6 +58,53 @@ pub(crate) fn format_percentage_six(
     Ok(format!("{whole}.{fraction:06}"))
 }
 
+pub(crate) fn format_ratio_u128_six(
+    numerator: u128,
+    denominator: u128,
+) -> Result<String, AlignGaugeError> {
+    if denominator == 0 {
+        return Err(internal_error("u128 decimal ratio denominator is zero"));
+    }
+    let mut whole = numerator / denominator;
+    let mut remainder = numerator % denominator;
+    let mut fraction = 0_u32;
+    for _ in 0..6 {
+        let mut digit = 0_u32;
+        let mut next_remainder = 0_u128;
+        for _ in 0..10 {
+            if next_remainder >= denominator - remainder {
+                next_remainder -= denominator - remainder;
+                digit = digit
+                    .checked_add(1)
+                    .ok_or_else(|| coverage_overflow("u128 decimal digit"))?;
+            } else {
+                next_remainder += remainder;
+            }
+        }
+        if digit > 9 {
+            return Err(internal_error("u128 decimal digit exceeded nine"));
+        }
+        fraction = fraction
+            .checked_mul(10)
+            .and_then(|value| value.checked_add(digit))
+            .ok_or_else(|| coverage_overflow("u128 decimal fraction"))?;
+        remainder = next_remainder;
+    }
+    let round_up = remainder != 0 && remainder >= denominator - remainder;
+    if round_up {
+        fraction = fraction
+            .checked_add(1)
+            .ok_or_else(|| coverage_overflow("u128 decimal rounding"))?;
+        if fraction == 1_000_000 {
+            fraction = 0;
+            whole = whole
+                .checked_add(1)
+                .ok_or_else(|| coverage_overflow("u128 decimal whole part"))?;
+        }
+    }
+    Ok(format!("{whole}.{fraction:06}"))
+}
+
 pub(crate) fn delta_bytes(
     chunk_size: usize,
     bytes_per_chunk_base: u64,

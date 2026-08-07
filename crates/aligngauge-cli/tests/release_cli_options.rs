@@ -56,13 +56,15 @@ fn help_documents_complete_v0_1_and_deferred_surface() {
         "--preserve-failed-staging",
         "--reference",
         "--targets",
+        "--near-distance",
         "--backend",
         "--cuda-device",
     ] {
         assert!(stdout.contains(option), "missing help option {option}");
     }
-    assert!(stdout.contains("v0.2"));
     assert!(stdout.contains("v0.3"));
+    assert!(stdout.contains("default 250"));
+    assert!(stdout.contains("no Picard compatibility claim"));
 }
 
 #[test]
@@ -166,8 +168,7 @@ fn json_log_format_applies_to_configuration_failures() {
 fn deferred_release_options_are_rejected_explicitly() {
     let input = fixture("basic.bam");
     for (option, marker) in [
-        ("--targets", "v0.3"),
-        ("--profile", "v0.3"),
+        ("--profile", "not released"),
         ("--backend", "not released"),
         ("--cuda-device", "not released"),
     ] {
@@ -196,5 +197,88 @@ fn compatibility_format_cannot_silently_switch_into_release_mode() {
         .expect("run mixed compatibility/release mode");
     assert!(!output.status.success());
     assert!(utf8(&output.stderr).contains("cannot be combined"));
+    assert!(!outdir.exists());
+}
+
+#[test]
+fn targeted_release_options_publish_native_metrics_and_preserve_one_traversal() {
+    let input = fixture("chunk_boundary.bam");
+    let targets = repository_root()
+        .join("crates/aligngauge-coverage/tests/fixtures/chunk_boundary_targets.bed");
+    let outdir = temp_path("targeted-release");
+    let output = Command::new(binary())
+        .args(["qc", "--input"])
+        .arg(&input)
+        .args(["--outdir"])
+        .arg(&outdir)
+        .args(["--targets"])
+        .arg(&targets)
+        .args([
+            "--near-distance",
+            "5",
+            "--coverage-thresholds",
+            "1,2",
+            "--memory-limit",
+            "1GiB",
+        ])
+        .output()
+        .expect("run targeted release");
+    assert!(output.status.success(), "{}", utf8(&output.stderr));
+    let stdout = utf8(&output.stdout);
+    assert!(stdout.contains("targeted\n"));
+    assert!(stdout.contains("on_target_bases\t16"));
+    assert!(stdout.contains("near_target_bases\t12"));
+    assert!(stdout.contains("off_target_bases\t0"));
+
+    let summary = fs::read_to_string(outdir.join("summary.json")).expect("read summary");
+    assert!(summary.contains("\"schema_version\": \"1.1.0\""));
+    assert!(summary.contains("\"profile\": \"aligngauge-targeted-v0.3\""));
+    assert!(summary.contains("\"target_territory_bases\": 22"));
+    assert!(summary.contains("\"on_target_bases\": 16"));
+    assert!(summary.contains("\"near_target_bases\": 12"));
+    assert!(summary.contains("\"off_target_bases\": 0"));
+    assert!(summary.contains("\"dropout_target_count\": 1"));
+
+    let provenance = fs::read_to_string(outdir.join("provenance.json")).expect("read provenance");
+    assert!(provenance.contains("\"alignment_traversals\": 1"));
+    assert!(provenance.contains("\"near_distance_bases\": 5"));
+    assert!(provenance.contains("\"targeted_profile\": \"aligngauge-targeted-v0.3\""));
+    assert!(provenance.contains(&targets.to_string_lossy().replace('\\', "\\\\")));
+    fs::remove_dir_all(outdir).expect("cleanup targeted output");
+}
+
+#[test]
+fn near_distance_without_targets_fails_before_output_creation() {
+    let input = fixture("basic.bam");
+    let outdir = temp_path("near-without-targets");
+    let output = Command::new(binary())
+        .args(["qc", "--input"])
+        .arg(&input)
+        .args(["--outdir"])
+        .arg(&outdir)
+        .args(["--near-distance", "5"])
+        .output()
+        .expect("run invalid near-distance release");
+    assert!(!output.status.success());
+    assert!(utf8(&output.stderr).contains("requires --targets"));
+    assert!(!outdir.exists());
+}
+
+#[test]
+fn missing_target_bed_fails_closed_without_publishing() {
+    let input = fixture("basic.bam");
+    let outdir = temp_path("missing-target");
+    let missing = temp_path("missing-target-bed");
+    let output = Command::new(binary())
+        .args(["qc", "--input"])
+        .arg(&input)
+        .args(["--outdir"])
+        .arg(&outdir)
+        .args(["--targets"])
+        .arg(&missing)
+        .output()
+        .expect("run missing target release");
+    assert!(!output.status.success());
+    assert!(utf8(&output.stderr).contains("input_not_found"));
     assert!(!outdir.exists());
 }
