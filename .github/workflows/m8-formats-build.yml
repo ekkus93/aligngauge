@@ -50,9 +50,10 @@ jobs:
               "    let mut intervals = Vec::new();\n"
               "    let mut expected_field_count = None;"
           )
-          if text.count(old) != 1:
-              raise SystemExit("expected one parser-state initialization block")
-          text = text.replace(old, new, 1)
+          if text.count(old) == 1:
+              text = text.replace(old, new, 1)
+          elif text.count("    let mut expected_field_count = None;") != 1:
+              raise SystemExit("parser-state initialization is neither original nor hardened")
 
           old = (
               "        let fields = split_fields(line, line_number)?;\n"
@@ -63,12 +64,13 @@ jobs:
               "        validate_field_count_consistency(&fields, line_number, &mut expected_field_count)?;\n"
               "        let interval = parse_interval(&fields, line_number, intervals.len(), dictionary)?;"
           )
-          if text.count(old) != 1:
-              raise SystemExit("expected one parser interval block")
-          text = text.replace(old, new, 1)
+          if text.count(old) == 1:
+              text = text.replace(old, new, 1)
+          elif text.count("validate_field_count_consistency(&fields, line_number, &mut expected_field_count)?;") != 1:
+              raise SystemExit("parser interval path is neither original nor hardened")
 
           pattern = re.compile(
-              r"fn split_fields\(line: &str, line_number: u64\) -> Result<Vec<&str>, AlignGaugeError> \{.*?\n\}\n\nfn parse_interval\(",
+              r"fn split_fields\(line: &str, line_number: u64\) -> Result<Vec<&str>, AlignGaugeError> \{.*?\n\}\n\n(?:fn validate_field_count_consistency\(.*?\n\}\n\n)?fn parse_interval\(",
               re.S,
           )
           replacement = '''fn split_fields(line: &str, line_number: u64) -> Result<Vec<&str>, AlignGaugeError> {
@@ -125,7 +127,7 @@ jobs:
           fn parse_interval('''
           text, count = pattern.subn(lambda _match: replacement, text, count=1)
           if count != 1:
-              raise SystemExit(f"expected one split_fields function, found {count}")
+              raise SystemExit(f"expected one BED field parser block, found {count}")
 
           path.write_text(text)
           PY
