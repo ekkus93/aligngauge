@@ -29,26 +29,30 @@ jobs:
           rustc --version --verbose
           cargo --version
 
-      - name: Correct merge-event expectations
+      - name: Correct merge-event tests
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
+          import re
           from pathlib import Path
 
           path = Path("crates/aligngauge-formats/src/bed.rs")
           text = path.read_text()
 
-          old = '''        assert_eq!(targets.normalization.overlap_merges, 1);
-          assert_eq!(targets.normalization.adjacency_merges, 1);'''
-          new = '''        assert_eq!(targets.normalization.overlap_merges, 2);
-          assert_eq!(targets.normalization.adjacency_merges, 0);'''
-          if text.count(old) != 1:
-              raise SystemExit("expected exactly one mixed-merge expectation block")
-          text = text.replace(old, new, 1)
+          pattern = re.compile(
+              r"assert_eq!\(targets\.normalization\.overlap_merges, 1\);\s*"
+              r"assert_eq!\(targets\.normalization\.adjacency_merges, 1\);"
+          )
+          replacement = (
+              "assert_eq!(targets.normalization.overlap_merges, 2);\n"
+              "        assert_eq!(targets.normalization.adjacency_merges, 0);"
+          )
+          text, count = pattern.subn(replacement, text, count=1)
+          if count != 1:
+              raise SystemExit(f"expected one mixed-merge expectation block, found {count}")
 
-          marker = '''    #[test]
-          fn configurable_flanks_clip_only_at_authoritative_boundaries() {'''
+          marker = "    #[test]\n    fn configurable_flanks_clip_only_at_authoritative_boundaries() {"
           adjacency_test = '''    #[test]
           fn directly_adjacent_intervals_merge_as_adjacency() {
               let parsed = parse_bed_bytes(
