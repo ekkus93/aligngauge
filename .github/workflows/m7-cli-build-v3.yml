@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      - name: Reconstruct validated candidate from prior builder
+      - name: Reconstruct candidate from prior builder
         shell: bash
         run: |
           python - <<'PY'
@@ -24,7 +24,6 @@ jobs:
           import textwrap
 
           source = Path('.github/workflows/m7-reader-build-v2.yml').read_text()
-
           python_marker = "          python - <<'PY'\n"
           start = source.index(python_marker) + len(python_marker)
           end = source.index("\n          PY", start)
@@ -34,163 +33,160 @@ jobs:
           test_marker = "          cat > crates/aligngauge-cli/tests/cram_v0_2.rs <<'RS'\n"
           start = source.index(test_marker) + len(test_marker)
           end = source.index("\n          RS", start)
-          test_source = textwrap.dedent(source[start:end])
-          Path('crates/aligngauge-cli/tests/cram_v0_2.rs').write_text(test_source)
+          Path('crates/aligngauge-cli/tests/cram_v0_2.rs').write_text(
+              textwrap.dedent(source[start:end])
+          )
           PY
 
-      - name: Refactor release reader and provenance helpers
+      - name: Refactor reader selection and analysis plan
         shell: bash
         run: |
+          cat > /tmp/reader-block.txt <<'EOF'
+              let traversal_started = Instant::now();
+              let (input_format, mut reader) = open_release_reader(
+                  config,
+                  reference,
+                  &field_plan,
+                  effective_io_threads,
+              )?;
+              let reference_identity = reader.reference_identity().map(ToJson::to_json);
+              let header_identity = reader.header().identity().sha256().to_owned();
+          EOF
+
+          cat > /tmp/helpers.txt <<'EOF'
+          fn open_release_reader(
+              config: &ResolvedConfig,
+              reference: Option<&Path>,
+              field_plan: &FieldPlan,
+              effective_io_threads: usize,
+          ) -> Result<(AlignmentFormat, BamReader), AlignGaugeError> {
+              let input_format = detect_alignment_format(&config.input)?;
+              let reader = match input_format {
+                  AlignmentFormat::Bam => {
+                      if let Some(reference) = reference {
+                          return Err(AlignGaugeError::new(
+                              ErrorCategory::Configuration,
+                              "--reference is valid only for CRAM input",
+                          )
+                          .with_detail("reference", reference.to_string_lossy().into_owned()));
+                      }
+                      BamReader::open(
+                          &config.input,
+                          field_plan.clone(),
+                          ReaderOptions {
+                              io_threads: effective_io_threads,
+                          },
+                      )?
+                  }
+                  AlignmentFormat::Cram => {
+                      let reference = reference.ok_or_else(|| {
+                          AlignGaugeError::new(
+                              ErrorCategory::ReferenceRequired,
+                              "CRAM input requires an explicit local FASTA supplied with --reference",
+                          )
+                          .with_detail("input", config.input.to_string_lossy().into_owned())
+                      })?;
+                      BamReader::open_cram(
+                          &config.input,
+                          reference,
+                          field_plan.clone(),
+                          ReaderOptions {
+                              io_threads: effective_io_threads,
+                          },
+                      )?
+                  }
+              };
+              Ok((input_format, reader))
+          }
+
+          fn release_analysis_plan(
+              field_plan: &FieldPlan,
+              input_format: AlignmentFormat,
+              reference_identity: Option<JsonValue>,
+              config: &ResolvedConfig,
+              effective_io_threads: usize,
+          ) -> Result<BTreeMap<String, JsonValue>, AlignGaugeError> {
+              Ok(BTreeMap::from([
+                  (String::from("field_plan"), field_plan.to_json()),
+                  (
+                      String::from("input_format"),
+                      input_format.as_str().to_json(),
+                  ),
+                  (String::from("alignment_traversals"), JsonValue::Unsigned(1)),
+                  (
+                      String::from("bam_traversals"),
+                      JsonValue::Unsigned(u64::from(matches!(input_format, AlignmentFormat::Bam))),
+                  ),
+                  (
+                      String::from("cram_traversals"),
+                      JsonValue::Unsigned(u64::from(matches!(input_format, AlignmentFormat::Cram))),
+                  ),
+                  (
+                      String::from("htslib_network_transport_enabled"),
+                      HTSLIB_NETWORK_TRANSPORT_ENABLED.to_json(),
+                  ),
+                  (
+                      String::from("local_reference"),
+                      reference_identity.unwrap_or(JsonValue::Null),
+                  ),
+                  (
+                      String::from("configured_collector_threads"),
+                      JsonValue::Unsigned(usize_to_u64(config.threads, "configured threads")?),
+                  ),
+                  (
+                      String::from("collector_threads_used"),
+                      JsonValue::Unsigned(1),
+                  ),
+                  (
+                      String::from("configured_io_threads"),
+                      JsonValue::Unsigned(usize_to_u64(config.io_threads, "configured I/O threads")?),
+                  ),
+                  (
+                      String::from("effective_reader_io_threads"),
+                      JsonValue::Unsigned(usize_to_u64(
+                          effective_io_threads,
+                          "effective I/O threads",
+                      )?),
+                  ),
+              ]))
+          }
+          EOF
+
           python - <<'PY'
           from pathlib import Path
 
           path = Path('crates/aligngauge-cli/src/lib.rs')
           text = path.read_text()
-
           reader_start = text.index('    let input_format = detect_alignment_format(&config.input)?;')
           reader_end_marker = '    let header_identity = reader.header().identity().sha256().to_owned();'
           reader_end = text.index(reader_end_marker, reader_start) + len(reader_end_marker)
-          reader_replacement = '''    let traversal_started = Instant::now();
-    let (input_format, mut reader) = open_release_reader(
-        config,
-        reference,
-        &field_plan,
-        effective_io_threads,
-    )?;
-    let reference_identity = reader.reference_identity().map(ToJson::to_json);
-    let header_identity = reader.header().identity().sha256().to_owned();'''
+          reader_replacement = Path('/tmp/reader-block.txt').read_text().rstrip()
           text = text[:reader_start] + reader_replacement + text[reader_end:]
 
           plan_start = text.index(
               '        BTreeMap::from([\n            (String::from("field_plan"), field_plan.to_json()),'
           )
-          resource_marker = '''        BTreeMap::from([
-            (
-                String::from("memory_limit_bytes"),'''
+          resource_marker = (
+              '        BTreeMap::from([\n'
+              '            (\n'
+              '                String::from("memory_limit_bytes"),'
+          )
           plan_end = text.index(resource_marker, plan_start)
-          plan_replacement = '''        release_analysis_plan(
-            &field_plan,
-            input_format,
-            reference_identity,
-            config,
-            effective_io_threads,
-        )?,
-'''
+          plan_replacement = (
+              '        release_analysis_plan(\n'
+              '            &field_plan,\n'
+              '            input_format,\n'
+              '            reference_identity,\n'
+              '            config,\n'
+              '            effective_io_threads,\n'
+              '        )?,\n'
+          )
           text = text[:plan_start] + plan_replacement + text[plan_end:]
 
-          insertion_marker = '''fn release_coverage_setup(
-    config: &ResolvedConfig,
-) -> Result<(CoverageOptions, CoverageMemoryPlan), AlignGaugeError> {
-    let coverage_options = CoverageOptions::new(
-        config.memory_limit_bytes,
-        config.coverage_thresholds.clone(),
-    )?;
-    let memory_plan = CoverageMemoryPlan::plan(
-        coverage_options.memory_limit_bytes,
-        1,
-        coverage_options.chunk_size_override,
-    )?;
-    Ok((coverage_options, memory_plan))
-}
-'''
-          helpers = '''
-fn open_release_reader(
-    config: &ResolvedConfig,
-    reference: Option<&Path>,
-    field_plan: &FieldPlan,
-    effective_io_threads: usize,
-) -> Result<(AlignmentFormat, BamReader), AlignGaugeError> {
-    let input_format = detect_alignment_format(&config.input)?;
-    let reader = match input_format {
-        AlignmentFormat::Bam => {
-            if let Some(reference) = reference {
-                return Err(AlignGaugeError::new(
-                    ErrorCategory::Configuration,
-                    "--reference is valid only for CRAM input",
-                )
-                .with_detail("reference", reference.to_string_lossy().into_owned()));
-            }
-            BamReader::open(
-                &config.input,
-                field_plan.clone(),
-                ReaderOptions {
-                    io_threads: effective_io_threads,
-                },
-            )?
-        }
-        AlignmentFormat::Cram => {
-            let reference = reference.ok_or_else(|| {
-                AlignGaugeError::new(
-                    ErrorCategory::ReferenceRequired,
-                    "CRAM input requires an explicit local FASTA supplied with --reference",
-                )
-                .with_detail("input", config.input.to_string_lossy().into_owned())
-            })?;
-            BamReader::open_cram(
-                &config.input,
-                reference,
-                field_plan.clone(),
-                ReaderOptions {
-                    io_threads: effective_io_threads,
-                },
-            )?
-        }
-    };
-    Ok((input_format, reader))
-}
-
-fn release_analysis_plan(
-    field_plan: &FieldPlan,
-    input_format: AlignmentFormat,
-    reference_identity: Option<JsonValue>,
-    config: &ResolvedConfig,
-    effective_io_threads: usize,
-) -> Result<BTreeMap<String, JsonValue>, AlignGaugeError> {
-    Ok(BTreeMap::from([
-        (String::from("field_plan"), field_plan.to_json()),
-        (
-            String::from("input_format"),
-            input_format.as_str().to_json(),
-        ),
-        (String::from("alignment_traversals"), JsonValue::Unsigned(1)),
-        (
-            String::from("bam_traversals"),
-            JsonValue::Unsigned(u64::from(matches!(input_format, AlignmentFormat::Bam))),
-        ),
-        (
-            String::from("cram_traversals"),
-            JsonValue::Unsigned(u64::from(matches!(input_format, AlignmentFormat::Cram))),
-        ),
-        (
-            String::from("htslib_network_transport_enabled"),
-            HTSLIB_NETWORK_TRANSPORT_ENABLED.to_json(),
-        ),
-        (
-            String::from("local_reference"),
-            reference_identity.unwrap_or(JsonValue::Null),
-        ),
-        (
-            String::from("configured_collector_threads"),
-            JsonValue::Unsigned(usize_to_u64(config.threads, "configured threads")?),
-        ),
-        (
-            String::from("collector_threads_used"),
-            JsonValue::Unsigned(1),
-        ),
-        (
-            String::from("configured_io_threads"),
-            JsonValue::Unsigned(usize_to_u64(config.io_threads, "configured I/O threads")?),
-        ),
-        (
-            String::from("effective_reader_io_threads"),
-            JsonValue::Unsigned(usize_to_u64(effective_io_threads, "effective I/O threads")?),
-        ),
-    ]))
-}
-'''
-          if insertion_marker not in text:
-              raise SystemExit('coverage setup marker not found')
-          text = text.replace(insertion_marker, insertion_marker + helpers, 1)
+          coverage_marker = '    Ok((coverage_options, memory_plan))\n}\n'
+          insertion = text.index(coverage_marker) + len(coverage_marker)
+          helpers = '\n' + Path('/tmp/helpers.txt').read_text()
+          text = text[:insertion] + helpers + text[insertion:]
           path.write_text(text)
           PY
 
