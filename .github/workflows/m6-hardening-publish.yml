@@ -1,0 +1,78 @@
+name: M6 Hardening Publish
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - ".github/workflows/m6-hardening-publish.yml"
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Download exact validated artifact
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          rm -rf /tmp/m6-hardening
+          mkdir -p /tmp/m6-hardening
+          gh run download 31160870468 \
+            --repo "$GITHUB_REPOSITORY" \
+            --name m6-release-hardening-8270b8d7d33a0cc006748186bfe22b7bb638f60c \
+            --dir /tmp/m6-hardening
+
+      - name: Verify exact validated file identities
+        run: |
+          cat >/tmp/m6-hardening.sha256 <<'EOF'
+          62108567a0ba1c9ae7917c1343de91ec783b78ba7dd1475c6617dfab3a155c87  /tmp/m6-hardening/crates/aligngauge-cli/src/lib.rs
+          22d0fe8ce911fa9597b575cfbee0375dcde44c72b84a98cbfa0dfb993bdbc72f  /tmp/m6-hardening/crates/aligngauge-cli/src/main.rs
+          93acb4bd03ff7d90e48714c7ee0ea0475ae5b769beb9873f3ade37ecb0ba7d77  /tmp/m6-hardening/crates/aligngauge-cli/tests/release_v0_1.rs
+          25579a84afc91a982c8f7def70a1e72800feaf05a06f16e9ce7f0c3c2c504a6c  /tmp/m6-hardening/crates/aligngauge-core/src/lib.rs
+          d197314425470ae27524b43411deaf17655a9c7bb27ed6960cc96dd2f1063c4b  /tmp/m6-hardening/crates/aligngauge-core/src/model.rs
+          ede5302704cfe6992461b8ca4fa4a967d0996503414cd5a39ae4f9db38f1b7ef  /tmp/m6-hardening/crates/aligngauge-core/tests/contracts.rs
+          890fe74ede27d45b4312576dd463eefa6dc6c8e19ccc04060d6e74ba482fb11d  /tmp/m6-hardening/crates/aligngauge-core/tests/golden/summary.json
+          49fcc1e35ac4a11bee29fb170500969d41d3b3fd999a61795159f703f6914edb  /tmp/m6-hardening/crates/aligngauge-coverage/src/report.rs
+          27ee552bd6e75ad93e8c84b9521aa6163a40fcd9248c78c47d0dac3434b6c2bd  /tmp/m6-hardening/crates/aligngauge-metrics/src/lib.rs
+          d936942d77ba8d22031866492d59a1fc281b1636939feb9067d160306a93b275  /tmp/m6-hardening/crates/aligngauge-metrics/tests/counters.rs
+          407aba31e12346ed6e4f8ad0483d1dcb3afa06dea8cbf4072485d40d81e0f620  /tmp/m6-hardening/schemas/provenance.schema.json
+          f2ce4f0cd0ca09c2c17349aef94f48c9034924df6fd9d3248fc28848027a086f  /tmp/m6-hardening/schemas/summary.schema.json
+          EOF
+          sha256sum --check /tmp/m6-hardening.sha256
+
+      - name: Install exact validated files
+        run: |
+          cp -a /tmp/m6-hardening/crates/aligngauge-cli/src/lib.rs crates/aligngauge-cli/src/lib.rs
+          cp -a /tmp/m6-hardening/crates/aligngauge-cli/src/main.rs crates/aligngauge-cli/src/main.rs
+          cp -a /tmp/m6-hardening/crates/aligngauge-cli/tests/release_v0_1.rs crates/aligngauge-cli/tests/release_v0_1.rs
+          cp -a /tmp/m6-hardening/crates/aligngauge-core/src/lib.rs crates/aligngauge-core/src/lib.rs
+          cp -a /tmp/m6-hardening/crates/aligngauge-core/src/model.rs crates/aligngauge-core/src/model.rs
+          cp -a /tmp/m6-hardening/crates/aligngauge-core/tests/contracts.rs crates/aligngauge-core/tests/contracts.rs
+          cp -a /tmp/m6-hardening/crates/aligngauge-core/tests/golden/summary.json crates/aligngauge-core/tests/golden/summary.json
+          cp -a /tmp/m6-hardening/crates/aligngauge-coverage/src/report.rs crates/aligngauge-coverage/src/report.rs
+          cp -a /tmp/m6-hardening/crates/aligngauge-metrics/src/lib.rs crates/aligngauge-metrics/src/lib.rs
+          cp -a /tmp/m6-hardening/crates/aligngauge-metrics/tests/counters.rs crates/aligngauge-metrics/tests/counters.rs
+          cp -a /tmp/m6-hardening/schemas/provenance.schema.json schemas/provenance.schema.json
+          cp -a /tmp/m6-hardening/schemas/summary.schema.json schemas/summary.schema.json
+          cargo fmt --all --check
+          git diff --check
+
+      - name: Commit source-only hardening
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git add crates/aligngauge-cli crates/aligngauge-core crates/aligngauge-coverage/src/report.rs crates/aligngauge-metrics schemas
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix: harden v0.1 release output and failure contracts'
+          git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:master
