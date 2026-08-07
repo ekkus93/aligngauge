@@ -447,6 +447,7 @@ fn parse_bed(
     })?;
     let mut stats = BedParseStats::default();
     let mut intervals = Vec::new();
+    let mut expected_field_count = None;
 
     for (line_index, raw_line) in text.split_inclusive('\n').enumerate() {
         let line_number = u64::try_from(line_index)
@@ -474,6 +475,7 @@ fn parse_bed(
             continue;
         }
         let fields = split_fields(line, line_number)?;
+        validate_field_count_consistency(&fields, line_number, &mut expected_field_count)?;
         let interval = parse_interval(&fields, line_number, intervals.len(), dictionary)?;
         intervals.push(interval);
     }
@@ -512,17 +514,17 @@ fn skipped_line_kind(line: &str) -> Option<SkippedLine> {
 }
 
 fn split_fields(line: &str, line_number: u64) -> Result<Vec<&str>, AlignGaugeError> {
-    let fields: Vec<&str> = if line.contains('\t') {
-        line.split('\t').map(str::trim).collect()
-    } else {
-        line.split_ascii_whitespace().collect()
-    };
-    if fields.iter().any(|field| field.is_empty()) {
+    if line.contains('\t')
+        && line
+            .split('\t')
+            .any(|segment| segment.trim_matches(' ').is_empty())
+    {
         return Err(target_format_error(
             line_number,
-            "BED interval contains an empty field",
+            "BED interval contains an empty tab-delimited field",
         ));
     }
+    let fields: Vec<&str> = line.split_ascii_whitespace().collect();
     if !(3..=12).contains(&fields.len()) {
         return Err(target_format_error(
             line_number,
@@ -534,6 +536,32 @@ fn split_fields(line: &str, line_number: u64) -> Result<Vec<&str>, AlignGaugeErr
         ));
     }
     Ok(fields)
+}
+
+fn validate_field_count_consistency(
+    fields: &[&str],
+    line_number: u64,
+    expected_field_count: &mut Option<usize>,
+) -> Result<(), AlignGaugeError> {
+    if let Some(expected) = *expected_field_count {
+        if fields.len() != expected {
+            return Err(target_format_error(
+                line_number,
+                "BED field count is inconsistent within the target dataset",
+            )
+            .with_detail(
+                "expected_field_count",
+                u64::try_from(expected).unwrap_or(u64::MAX),
+            )
+            .with_detail(
+                "actual_field_count",
+                u64::try_from(fields.len()).unwrap_or(u64::MAX),
+            ));
+        }
+    } else {
+        *expected_field_count = Some(fields.len());
+    }
+    Ok(())
 }
 
 fn parse_interval(
@@ -741,11 +769,16 @@ mod tests {
 
     #[test]
     fn accepts_bed3_through_bed12_and_preserves_optional_fields() {
-        let bytes = b"chr1\t0\t1\nchr1\t1\t2\tname\t1\t+\t1\t2\t255,0,0\t1\t1\t0\n";
-        let parsed = parse_bed_bytes(bytes, &dictionary()).expect("BED should parse");
-        assert_eq!(parsed.intervals[0].name, None);
-        assert_eq!(parsed.intervals[1].name.as_deref(), Some("name"));
-        assert_eq!(parsed.intervals[1].extra_fields.len(), 8);
+        let bed3 = parse_bed_bytes(b"chr1\t0\t1\n", &dictionary()).expect("BED3 should parse");
+        assert_eq!(bed3.intervals[0].name, None);
+
+        let bed12 = parse_bed_bytes(
+            b"chr1\t1\t2\tname\t1\t+\t1\t2\t255,0,0\t1\t1\t0\n",
+            &dictionary(),
+        )
+        .expect("BED12 should parse");
+        assert_eq!(bed12.intervals[0].name.as_deref(), Some("name"));
+        assert_eq!(bed12.intervals[0].extra_fields.len(), 8);
     }
 
     #[test]

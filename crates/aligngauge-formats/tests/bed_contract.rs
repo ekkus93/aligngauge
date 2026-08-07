@@ -21,8 +21,7 @@ fn dictionary() -> SequenceDictionary {
 }
 
 fn fixture_path() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/vendor_style_capture_panel.bed")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/vendor_style_capture_panel.bed")
 }
 
 #[test]
@@ -30,7 +29,10 @@ fn committed_vendor_style_fixture_preserves_identity_and_normalizes_exactly() {
     let path = fixture_path();
     let parsed = parse_bed_path(&path, &dictionary()).expect("fixture should parse");
 
-    assert_eq!(parsed.identity.path.as_deref(), Some(path.to_string_lossy().as_ref()));
+    assert_eq!(
+        parsed.identity.path.as_deref(),
+        Some(path.to_string_lossy().as_ref())
+    );
     assert_eq!(parsed.identity.size_bytes, 275);
     assert_eq!(
         parsed.identity.sha256,
@@ -55,18 +57,40 @@ fn committed_vendor_style_fixture_preserves_identity_and_normalizes_exactly() {
         .expect("fixture normalization should succeed");
     assert_eq!(targets.merged_intervals.len(), 3);
     assert_eq!(targets.merged_intervals[0].contig, "chr1");
-    assert_eq!((targets.merged_intervals[0].start, targets.merged_intervals[0].end), (5, 40));
+    assert_eq!(
+        (
+            targets.merged_intervals[0].start,
+            targets.merged_intervals[0].end
+        ),
+        (5, 40)
+    );
     assert_eq!(targets.merged_intervals[0].source_interval_indices, [0, 1]);
-    assert_eq!((targets.merged_intervals[1].start, targets.merged_intervals[1].end), (85, 105));
+    assert_eq!(
+        (
+            targets.merged_intervals[1].start,
+            targets.merged_intervals[1].end
+        ),
+        (85, 105)
+    );
     assert_eq!(targets.merged_intervals[2].contig, "chr2");
-    assert_eq!((targets.merged_intervals[2].start, targets.merged_intervals[2].end), (0, 17));
+    assert_eq!(
+        (
+            targets.merged_intervals[2].start,
+            targets.merged_intervals[2].end
+        ),
+        (0, 17)
+    );
     assert_eq!(targets.normalization.overlap_merges, 1);
     assert_eq!(targets.normalization.left_flank_clips, 0);
     assert_eq!(targets.normalization.aggregate_territory_bases, 72);
 
     let actions = targets.provenance_actions();
     assert!(actions.iter().any(|value| value == "targets:flank_bases=5"));
-    assert!(actions.iter().any(|value| value == "targets:aggregate_territory_bases=72"));
+    assert!(
+        actions
+            .iter()
+            .any(|value| value == "targets:aggregate_territory_bases=72")
+    );
     assert!(actions.iter().any(|value| {
         value == "targets:sha256=ebab4ad34dc4b17fbc418a3d3274003aa2d1927dae47f18f4cef6761c54b9094"
     }));
