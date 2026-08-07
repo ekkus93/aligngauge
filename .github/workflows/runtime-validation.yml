@@ -61,6 +61,26 @@ jobs:
             target/release/aligngauge \
             testdata/manifest.v1.tsv
 
+      - name: Verify coverage memory plan and sparse large-reference runtime
+        run: |
+          /usr/bin/time -v -o target/coverage-rss.txt \
+            target/release/coverage_probe \
+            testdata/fixtures/integer_boundary.bam \
+            > target/coverage-probe.json
+          python tools/ci/check_coverage_rss.py \
+            target/coverage-rss.txt \
+            target/coverage-probe.json
+          if target/release/coverage_probe \
+            testdata/fixtures/basic.bam \
+            --memory-limit-bytes 268435456 \
+            > target/coverage-low-memory.stdout \
+            2> target/coverage-low-memory.stderr; then
+            echo "coverage unexpectedly accepted an impossible memory plan" >&2
+            exit 1
+          fi
+          test ! -s target/coverage-low-memory.stdout
+          grep -F '[resource_limit]' target/coverage-low-memory.stderr
+
       - name: Verify repository remains clean
         run: |
           if [[ -n "$(git status --porcelain)" ]]; then

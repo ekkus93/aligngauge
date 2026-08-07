@@ -1,4 +1,0 @@
-metric	type	expected	rounding_decimals	compatibility_note
-total_records	integer	3	-	-
-mapped_records	integer	2	-	-
-unmapped_records	integer	1	-	-

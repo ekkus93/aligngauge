@@ -17,7 +17,7 @@ jobs:
   samtools:
     name: ci/reference
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 40
 
     steps:
       - name: Check out repository
@@ -31,6 +31,9 @@ jobs:
       - name: Run exact counter differential suite
         run: tools/reference/samtools/compare-counters.sh
 
+      - name: Run exact coverage differential suite
+        run: tools/reference/samtools/compare-coverage.sh
+
       - name: Run digest-pinned coverage baseline
         run: |
           tools/reference/samtools/run-reference.sh \
@@ -42,8 +45,10 @@ jobs:
         run: |
           test -f target/reference/m4-counters/basic/_SUCCESS
           test -f target/reference/m4-counters/flags_and_pairs/_SUCCESS
+          test -f target/reference/m5-coverage/_SUCCESS
+          test -f target/reference/m5-coverage/chunk_boundary/reference-depth/_SUCCESS
           test -f target/reference/basic-depth/_SUCCESS
           grep -F 'samtools 1.24' \
             target/reference/m4-counters/basic/reference-flagstat/version.txt
           grep -F 'sha256:a130447589651ed09252aa95a5e4f4132942cdb54d835d81a04a9a930d656561' \
-            target/reference/m4-counters/basic/reference-flagstat/image.txt
+            target/reference/m5-coverage/chunk_boundary/reference-depth/image.txt

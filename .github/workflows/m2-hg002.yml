@@ -7,6 +7,7 @@ on:
       - ".github/workflows/m2-hg002.yml"
       - "crates/aligngauge-cli/**"
       - "crates/aligngauge-core/**"
+      - "crates/aligngauge-coverage/**"
       - "crates/aligngauge-hts/**"
       - "crates/aligngauge-metrics/**"
       - "testdata/hg002/**"
@@ -20,7 +21,7 @@ jobs:
   prepare:
     name: ci/hg002-preparation
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 40
 
     steps:
       - name: Check out repository
@@ -73,6 +74,40 @@ jobs:
             target/hg002-m4/reference-idxstats/stdout.txt \
             target/hg002-m4/aligngauge-idxstats.txt
 
+      - name: Prepare deterministic HG002 coverage projection twice
+        run: |
+          testdata/hg002/prepare-coverage-projection.sh \
+            target/hg002-first/subset.bam \
+            "$GITHUB_WORKSPACE/target/hg002-coverage-first"
+          testdata/hg002/prepare-coverage-projection.sh \
+            target/hg002-first/subset.bam \
+            "$GITHUB_WORKSPACE/target/hg002-coverage-second"
+          cmp \
+            target/hg002-coverage-first/prepared.manifest \
+            target/hg002-coverage-second/prepared.manifest
+          grep -F 'schema=aligngauge-hg002-coverage-projection-v1' \
+            target/hg002-coverage-first/prepared.manifest
+
+      - name: Compare HG002 coverage to pinned Samtools
+        run: |
+          cargo build -p aligngauge-coverage --bin coverage_probe --locked
+          target/debug/coverage_probe \
+            target/hg002-first/subset.bam \
+            > target/hg002-m5-full-header-probe.json
+          tools/reference/samtools/run-reference.sh \
+            depth \
+            target/hg002-coverage-first/subset.bam \
+            target/hg002-m5/reference-depth
+          python tools/reference/samtools/summarize-depth.py \
+            target/hg002-m5/reference-depth/stdout.txt \
+            target/hg002-m5/reference-summary.json
+          target/debug/coverage_probe \
+            target/hg002-coverage-first/subset.bam \
+            > target/hg002-m5/aligngauge-probe.json
+          python tools/reference/samtools/compare-coverage.py \
+            target/hg002-m5/reference-summary.json \
+            target/hg002-m5/aligngauge-probe.json
+
       - name: Upload preparation evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
@@ -86,5 +121,13 @@ jobs:
             target/hg002-m4/reference-idxstats/stdout.txt
             target/hg002-m4/aligngauge-flagstat.txt
             target/hg002-m4/aligngauge-idxstats.txt
+            target/hg002-coverage-first/prepared.manifest
+            target/hg002-coverage-first/_SUCCESS
+            target/hg002-coverage-second/prepared.manifest
+            target/hg002-coverage-second/_SUCCESS
+            target/hg002-m5-full-header-probe.json
+            target/hg002-m5/reference-depth/stdout.txt
+            target/hg002-m5/reference-summary.json
+            target/hg002-m5/aligngauge-probe.json
           if-no-files-found: error
           retention-days: 7
