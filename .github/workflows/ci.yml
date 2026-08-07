@@ -33,6 +33,23 @@ jobs:
       - name: Verify dependency lockfile
         run: cargo update --workspace --locked --dry-run
 
+      - name: Verify CRAM network transports are excluded
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -q '^name = "curl-sys"$' Cargo.lock; then
+            echo 'curl-sys must not be present in the production dependency graph' >&2
+            exit 1
+          fi
+
+          cargo tree -p aligngauge-hts -e features --locked > /tmp/aligngauge-hts-features.txt
+          cat /tmp/aligngauge-hts-features.txt
+          if grep -E 'rust-htslib feature "(curl|s3|gcs)"|hts-sys feature "(curl|s3|gcs)"' \
+            /tmp/aligngauge-hts-features.txt; then
+            echo 'HTSlib network transport feature is enabled' >&2
+            exit 1
+          fi
+
       - name: Check formatting
         run: cargo fmt --all --check
 
@@ -83,6 +100,28 @@ jobs:
 
       - name: Run tests
         run: cargo test --workspace --all-features --locked
+
+      - name: Prove CRAM reference path makes no network syscall
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v strace
+          cargo test -p aligngauge-cli --test cram_v0_2 --no-run --locked
+          test_bin="$(find target/debug/deps -maxdepth 1 -type f -executable \
+            -name 'cram_v0_2-*' -print -quit)"
+          if [[ -z "${test_bin}" ]]; then
+            echo 'CRAM integration-test binary was not found' >&2
+            exit 1
+          fi
+
+          trace="$(mktemp)"
+          trap 'rm -f "$trace"' EXIT
+          strace -f -qq -e trace=network -o "$trace" \
+            "$test_bin" --exact hostile_reference_environment_cannot_replace_explicit_local_policy
+          if grep -E 'AF_INET|AF_INET6' "$trace"; then
+            echo 'CRAM reference-isolation test attempted an IPv4/IPv6 network syscall' >&2
+            exit 1
+          fi
 
       - name: Build documentation
         env:
