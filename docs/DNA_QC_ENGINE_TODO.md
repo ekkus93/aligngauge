@@ -3,7 +3,7 @@
 **Repository:** `ekkus93/aligngauge`
 
 **Companion specification:** `docs/DNA_QC_ENGINE_SPEC.md`  
-**Status:** Ralph Loop active — `v0.2.0` released; Milestone 8 complete; Milestone 9 next
+**Status:** Ralph Loop active — `v0.2.0` released; Milestone 8 complete; Milestone 9 active
 **Last updated:** 2026-08-07  
 **Supersedes:** Initial `DNA_QC_ENGINE_TODO.md` dated 2026-08-05
 
