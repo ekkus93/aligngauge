@@ -97,7 +97,8 @@ jobs:
             .github/m10-semantic-fixes.py \
             .github/workflows/m10-build.yml \
             .github/workflows/m10-stats-probe.yml \
-            .github/workflows/m10-multiqc-resolve.yml
+            .github/workflows/m10-multiqc-resolve.yml \
+            .github/workflows/m10-oracle-line-diagnostic.yml
           git diff --check
           changed="$(git status --short | awk '{print $2}' | sort)"
           expected="$(printf '%s\n' \
@@ -108,6 +109,7 @@ jobs:
             .github/workflows/m10-build.yml \
             .github/workflows/m10-stats-probe.yml \
             .github/workflows/m10-multiqc-resolve.yml \
+            .github/workflows/m10-oracle-line-diagnostic.yml \
             crates/aligngauge-cli/src/main.rs \
             crates/aligngauge-hts/src/plan.rs \
             crates/aligngauge-hts/src/reader.rs \
