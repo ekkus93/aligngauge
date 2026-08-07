@@ -19,6 +19,12 @@ FORMATS: tuple[str | None, ...] = (
     "samtools-idxstats",
 )
 
+EXPECTED_SUCCESS_STDERR: dict[str, str] = {
+    "tags_and_read_groups": (
+        '[W::sam_hrecs_update_hashes] Duplicate entry "contradictory" in sam header\n'
+    ),
+}
+
 
 def fail(message: str) -> None:
     raise SystemExit(message)
@@ -46,6 +52,7 @@ def require_success(
     arguments: list[str],
     *,
     label: str,
+    expected_stderr: str = "",
 ) -> subprocess.CompletedProcess[str]:
     result = run(binary, arguments)
     if result.returncode != 0:
@@ -53,8 +60,11 @@ def require_success(
             f"{label}: expected success, got exit {result.returncode}\n"
             f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
         )
-    if result.stderr:
-        fail(f"{label}: successful command emitted stderr:\n{result.stderr}")
+    if result.stderr != expected_stderr:
+        fail(
+            f"{label}: stderr differed from the exact pinned expectation\n"
+            f"expected: {expected_stderr!r}\nactual:   {result.stderr!r}"
+        )
     return result
 
 
@@ -214,13 +224,20 @@ def validate_manifest_fixtures(binary: Path, manifest: Path) -> None:
         validity = row["expected_validity"]
         if validity == "valid":
             valid_count += 1
+            expected_stderr = EXPECTED_SUCCESS_STDERR.get(row["id"], "")
             for output_format in FORMATS:
                 label = f"fixture={row['id']} format={output_format or 'legacy'}"
-                first = require_success(binary, qc_args(fixture, output_format), label=label)
+                first = require_success(
+                    binary,
+                    qc_args(fixture, output_format),
+                    label=label,
+                    expected_stderr=expected_stderr,
+                )
                 second = require_success(
                     binary,
                     qc_args(fixture, output_format),
                     label=f"{label} repeat",
+                    expected_stderr=expected_stderr,
                 )
                 if first.stdout != second.stdout:
                     fail(f"{label}: output is not deterministic across repeated runs")
