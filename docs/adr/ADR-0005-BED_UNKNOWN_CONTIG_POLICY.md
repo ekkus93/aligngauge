@@ -51,7 +51,9 @@ AlignGauge accepts standard BED3 through BED12 records. The first three fields a
 
 Field separators may be ASCII horizontal whitespace as permitted by the UCSC BED custom-track format. Blank lines, `#` comments, and UCSC `track`/`browser` directive lines are skipped as required by SPEC §9. CRLF is normalized. Trailing whitespace is ignored.
 
-Records with fewer than three or more than twelve fields are fatal `target_format` errors. Quoted-field or BED-detail extensions are not inferred implicitly.
+Every accepted interval record in one BED data set must use the same field count. When tabs are present, an empty tab-delimited column is fatal rather than collapsed. This prevents an omitted lower optional field from silently shifting a later field into a different BED position.
+
+Records with fewer than three or more than twelve fields are fatal `target_format` errors. Inconsistent record width and empty tab-delimited columns are also fatal `target_format` errors. Quoted-field or BED-detail extensions are not inferred implicitly.
 
 ### Deterministic normalization
 
@@ -98,10 +100,15 @@ Rejected. Unlike flank expansion, an out-of-range source interval indicates a mi
 
 Rejected for Milestone 8. UCSC BED custom tracks permit whitespace-delimited fields, and accepting horizontal whitespace improves compatibility without changing coordinate semantics.
 
+### Collapse empty tab fields
+
+Rejected. Collapsing an empty optional column can reinterpret every later optional field without an obvious parse error. A malformed tabular record must fail instead.
+
 ## Consequences
 
 - Milestone 8 receives one fail-closed, deterministic contig policy.
 - BED files using `chr` aliases that do not match the alignment dictionary fail until the caller supplies a matching target file or a future explicit alias-map feature exists.
+- A BED data set with inconsistent record width fails instead of silently changing optional-field meaning between records.
 - Aggregate territory never depends on input ordering.
 - Normalization can safely support configurable flanks without treating malformed source coordinates as repairable.
 - Milestone 9 can compute source-target and merged-territory metrics from the same normalized target model without reparsing BED.
@@ -111,6 +118,8 @@ Rejected for Milestone 8. UCSC BED custom tracks permit whitespace-delimited fie
 Milestone 8 tests must cover at least:
 
 - BED3 and BED4–BED12 acceptance;
+- consistent field count within one BED data set;
+- empty tab-delimited field rejection;
 - whitespace and tab separation;
 - CRLF and trailing whitespace;
 - blank/comment/`track`/`browser` skipping;
