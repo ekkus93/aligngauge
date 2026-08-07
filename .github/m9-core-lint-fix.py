@@ -60,10 +60,20 @@ replace_once(
     "        let thresholds = self.target_thresholds()?;",
 )
 replace_once(
+    "        Ok(AggregateTargetMetrics {\n"
+    "            target_covered_bases,\n"
+    "            target_uncovered_bases,\n"
+    "            target_mean_depth,\n"
     "            threshold_bases,\n"
-    "            threshold_percentages,",
+    "            threshold_percentages,\n"
+    "            target_depth_20th_percentile,",
+    "        Ok(AggregateTargetMetrics {\n"
+    "            target_covered_bases,\n"
+    "            target_uncovered_bases,\n"
+    "            target_mean_depth,\n"
     "            threshold_bases: thresholds.bases,\n"
-    "            threshold_percentages: thresholds.percentages,",
+    "            threshold_percentages: thresholds.percentages,\n"
+    "            target_depth_20th_percentile,",
 )
 replace_once(
     "    fn target_thresholds(\n"
