@@ -1,12 +1,12 @@
 from pathlib import Path
 
 
-def replace_once(path: str, old: str, new: str) -> None:
+def replace_once(path: str, old: str, new: str, *, allowed_count: int = 1) -> None:
     p = Path(path)
     text = p.read_text()
     count = text.count(old)
-    if count != 1:
-        raise SystemExit(f"{path}: expected one match, found {count}: {old[:80]!r}")
+    if count != allowed_count:
+        raise SystemExit(f"{path}: expected {allowed_count} match(es), found {count}: {old[:80]!r}")
     p.write_text(text.replace(old, new, 1))
 
 # Field plan: expose sequence/noise only for the explicit Picard alignment profile,
@@ -30,16 +30,14 @@ replace_once(path,
 path = "crates/aligngauge-hts/src/reader.rs"
 replace_once(path,
 "    query_length: u64,\n    qualities_requested: bool,\n    template_length: FieldValue<i32>,\n",
-"    query_length: u64,\n    sequence: FieldValue<Vec<u8>>,\n    qualities_requested: bool,\n    noise_read: FieldValue<bool>,\n    template_length: FieldValue<i32>,\n")
+"    query_length: u64,\n    sequence: FieldValue<Vec<u8>>,\n    qualities_requested: bool,\n    noise_read: FieldValue<bool>,\n    template_length: FieldValue<i32>,\n",
+allowed_count=2)
 replace_once(path,
 "    /// Planned base qualities.\n",
 "    /// Planned decoded sequence bases.\n    #[must_use]\n    pub fn sequence(&self) -> FieldValue<&[u8]> {\n        match &self.sequence {\n            FieldValue::NotRequested => FieldValue::NotRequested,\n            FieldValue::Missing => FieldValue::Missing,\n            FieldValue::Value(value) => FieldValue::Value(value.as_slice()),\n        }\n    }\n\n    /// Planned Picard `XN` noise state. Missing is distinct from false.\n    #[must_use]\n    pub const fn noise_read(&self) -> &FieldValue<bool> {\n        &self.noise_read\n    }\n\n    /// Planned base qualities.\n")
 replace_once(path,
 "            query_length: facts.query_length,\n            qualities_requested: facts.qualities_requested,\n            template_length: facts.template_length,\n",
 "            query_length: facts.query_length,\n            sequence: facts.sequence,\n            qualities_requested: facts.qualities_requested,\n            noise_read: facts.noise_read,\n            template_length: facts.template_length,\n")
-replace_once(path,
-"    query_length: u64,\n    qualities_requested: bool,\n    template_length: FieldValue<i32>,\n",
-"    query_length: u64,\n    sequence: FieldValue<Vec<u8>>,\n    qualities_requested: bool,\n    noise_read: FieldValue<bool>,\n    template_length: FieldValue<i32>,\n")
 replace_once(path,
 "    let query_length = u64_from_usize(layout.sequence_bases)?;\n    let qualities_requested = plan.requires(RequiredField::Qualities);\n",
 "    let query_length = u64_from_usize(layout.sequence_bases)?;\n    let sequence = if plan.requires(RequiredField::Sequence) {\n        let decoded = record.seq().as_bytes();\n        if decoded.len() != layout.sequence_bases {\n            return Err(record_error(\n                ErrorCategory::InputCorrupt,\n                \"decoded BAM sequence length differs from the validated record layout\",\n                index,\n                record,\n            ));\n        }\n        FieldValue::Value(decoded)\n    } else {\n        FieldValue::NotRequested\n    };\n    let qualities_requested = plan.requires(RequiredField::Qualities);\n")
@@ -67,7 +65,7 @@ replace_once(path,
 
 # Metrics public module/export.
 path = "crates/aligngauge-metrics/src/lib.rs"
-replace_once(path, "pub mod samtools_stats;\n", "pub mod picard;\npub mod samtools_stats;\n")
+replace_once(path, "mod samtools_stats;\n", "pub mod picard;\nmod samtools_stats;\n")
 replace_once(path,
 "pub use samtools_stats::{\n",
 "pub use picard::{\n    PICARD_ALIGNMENT_SUMMARY_PROFILE, PICARD_INSERT_SIZE_PROFILE, PICARD_VERSION,\n    PicardAlignmentCategory, PicardAlignmentSummaryCollector, PicardAlignmentSummaryReport,\n    PicardAlignmentSummaryRow, PicardInsertSizeCollector, PicardInsertSizeReport,\n    PicardInsertSizeRow, PicardPairOrientation, analyze_picard_alignment_summary_bam,\n    analyze_picard_insert_size_bam,\n};\npub use samtools_stats::{\n")
