@@ -8,6 +8,7 @@ license.workspace = true
 repository.workspace = true
 publish = false
 
+# The release CLI composes the M4 counter and M5 coverage collectors over one BAM reader.
 [dependencies]
 aligngauge-core = { path = "../aligngauge-core" }
 aligngauge-coverage = { path = "../aligngauge-coverage" }
