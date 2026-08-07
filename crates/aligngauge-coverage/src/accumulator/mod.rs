@@ -33,7 +33,11 @@ impl ReferenceReduction {
     }
 }
 
-pub(crate) struct CoverageCollector {
+/// Stateful exact coverage collector driven by an already validated record stream.
+///
+/// This is the collector boundary used by v0.1 release orchestration to feed counters and
+/// coverage from the same `BamReader` traversal. It does not open or seek the input itself.
+pub struct CoverageCollector {
     thresholds: Vec<u32>,
     plan: CoverageMemoryPlan,
     references: Vec<ReferenceReduction>,
@@ -50,7 +54,12 @@ pub(crate) struct CoverageCollector {
 }
 
 impl CoverageCollector {
-    pub(crate) fn new(
+    /// Initialize one exact collector from a validated header and precomputed memory plan.
+    ///
+    /// # Errors
+    /// Returns a typed resource or arithmetic failure if the planned delta allocation cannot be
+    /// represented safely.
+    pub fn new(
         header: &ValidatedHeader,
         thresholds: Vec<u32>,
         plan: CoverageMemoryPlan,
@@ -82,7 +91,12 @@ impl CoverageCollector {
         })
     }
 
-    pub(crate) fn observe(&mut self, record: &ValidatedRecord<'_>) -> Result<(), AlignGaugeError> {
+    /// Observe one record from the same validated stream used by the other v0.1 collectors.
+    ///
+    /// # Errors
+    /// Returns a typed fatal error for impossible validated state, checked arithmetic failure,
+    /// out-of-bounds CIGAR coverage, or bounded-memory exhaustion.
+    pub fn observe(&mut self, record: &ValidatedRecord<'_>) -> Result<(), AlignGaugeError> {
         if !record_is_accepted(record.flags()) {
             return Ok(());
         }
