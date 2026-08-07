@@ -21,7 +21,9 @@ jobs:
       - name: Capture pinned stats
         run: |
           set -euo pipefail
-          image='quay.io/biocontainers/samtools@sha256:58c844089e2bd5114921b679be5956a0cd503140dcaed545caab37cd9947d64b'
+          source tools/reference/samtools/image.lock
+          image="$SAMTOOLS_IMAGE"
+          [[ "$SAMTOOLS_VERSION" == "1.24" ]]
           docker pull "$image" >/dev/null
           for fixture in basic flags_and_pairs chunk_boundary coverage_mixed; do
             path="testdata/fixtures/${fixture}.bam"
