@@ -229,3 +229,11 @@ orchestration, final JSON/provenance publication, human/compatibility output ass
 atomic run-directory publication, end-to-end failure injection, and v0.1 performance
 baselines. Milestone 5 establishes the exact coverage engine and evidence consumed by
 that release-integration work.
+
+## 12. Exact evidence-trigger note
+
+This maintainer-authored documentation update is the final Milestone 5 evidence
+trigger. The M5 evidence/TODO paths are included in both path-filtered runtime and
+HG002 workflows, so this exact commit must receive Permanent CI, Full Runtime
+Validation, Reference Validation, and HG002 Preparation Validation. No completion
+claim should be made until all four finish successfully on this SHA.
