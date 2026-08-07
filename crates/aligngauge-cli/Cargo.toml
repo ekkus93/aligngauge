@@ -16,7 +16,8 @@ aligngauge-hts = { path = "../aligngauge-hts" }
 aligngauge-metrics = { path = "../aligngauge-metrics" }
 
 [dev-dependencies]
-rust-htslib = { version = "1.0.1", default-features = false }
+aligngauge-testkit = { path = "../aligngauge-testkit" }
+rust-htslib = { version = "=1.0.1", default-features = false, features = ["bzip2", "lzma"] }
 
 [[bin]]
 name = "aligngauge"

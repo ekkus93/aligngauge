@@ -1,4 +1,4 @@
-//! Command-line orchestration over the production BAM reader and v0.1 collectors.
+//! Command-line orchestration over the production BAM/CRAM reader and release collectors.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -11,7 +11,10 @@ use aligngauge_core::{
     Warning,
 };
 use aligngauge_coverage::{CoverageCollector, CoverageMemoryPlan, CoverageOptions, CoverageReport};
-use aligngauge_hts::{BamReader, FieldPlan, ReaderOptions};
+use aligngauge_hts::{
+    AlignmentFormat, BamReader, FieldPlan, HTS_SYS_VERSION, HTSLIB_COMPATIBILITY_VERSION,
+    HTSLIB_NETWORK_TRANSPORT_ENABLED, RUST_HTSLIB_VERSION, ReaderOptions, detect_alignment_format,
+};
 use aligngauge_metrics::{CounterCollector, analyze_bam as analyze_metrics_bam};
 
 pub use aligngauge_metrics::CounterReport;
@@ -211,7 +214,18 @@ pub fn analyze_bam(path: impl AsRef<Path>) -> Result<CounterReport, AlignGaugeEr
 /// # Errors
 /// Returns a typed configuration, resource, input-validation, collector, or provenance failure.
 pub fn analyze_release(config: &ResolvedConfig) -> Result<ReleaseReport, AlignGaugeError> {
-    analyze_release_with_hook(config, &mut NoopReleaseHook)
+    analyze_release_with_reference(config, None)
+}
+
+/// Analyze a BAM or CRAM release run, requiring an explicit local FASTA for CRAM.
+///
+/// # Errors
+/// Returns the first configuration, reference-integrity, reader, collector, or provenance failure.
+pub fn analyze_release_with_reference(
+    config: &ResolvedConfig,
+    reference: Option<&Path>,
+) -> Result<ReleaseReport, AlignGaugeError> {
+    analyze_release_with_reference_and_hook(config, reference, &mut NoopReleaseHook)
 }
 
 fn release_coverage_setup(
@@ -229,6 +243,100 @@ fn release_coverage_setup(
     Ok((coverage_options, memory_plan))
 }
 
+fn open_release_reader(
+    config: &ResolvedConfig,
+    reference: Option<&Path>,
+    field_plan: &FieldPlan,
+    effective_io_threads: usize,
+) -> Result<(AlignmentFormat, BamReader), AlignGaugeError> {
+    let input_format = detect_alignment_format(&config.input)?;
+    let reader = match input_format {
+        AlignmentFormat::Bam => {
+            if let Some(reference) = reference {
+                return Err(AlignGaugeError::new(
+                    ErrorCategory::Configuration,
+                    "--reference is valid only for CRAM input",
+                )
+                .with_detail("reference", reference.to_string_lossy().into_owned()));
+            }
+            BamReader::open(
+                &config.input,
+                field_plan.clone(),
+                ReaderOptions {
+                    io_threads: effective_io_threads,
+                },
+            )?
+        }
+        AlignmentFormat::Cram => {
+            let reference = reference.ok_or_else(|| {
+                AlignGaugeError::new(
+                    ErrorCategory::ReferenceRequired,
+                    "CRAM input requires an explicit local FASTA supplied with --reference",
+                )
+                .with_detail("input", config.input.to_string_lossy().into_owned())
+            })?;
+            BamReader::open_cram(
+                &config.input,
+                reference,
+                field_plan.clone(),
+                ReaderOptions {
+                    io_threads: effective_io_threads,
+                },
+            )?
+        }
+    };
+    Ok((input_format, reader))
+}
+
+fn release_analysis_plan(
+    field_plan: &FieldPlan,
+    input_format: AlignmentFormat,
+    reference_identity: Option<JsonValue>,
+    config: &ResolvedConfig,
+    effective_io_threads: usize,
+) -> Result<BTreeMap<String, JsonValue>, AlignGaugeError> {
+    Ok(BTreeMap::from([
+        (String::from("field_plan"), field_plan.to_json()),
+        (
+            String::from("input_format"),
+            input_format.as_str().to_json(),
+        ),
+        (String::from("alignment_traversals"), JsonValue::Unsigned(1)),
+        (
+            String::from("bam_traversals"),
+            JsonValue::Unsigned(u64::from(matches!(input_format, AlignmentFormat::Bam))),
+        ),
+        (
+            String::from("cram_traversals"),
+            JsonValue::Unsigned(u64::from(matches!(input_format, AlignmentFormat::Cram))),
+        ),
+        (
+            String::from("htslib_network_transport_enabled"),
+            HTSLIB_NETWORK_TRANSPORT_ENABLED.to_json(),
+        ),
+        (
+            String::from("local_reference"),
+            reference_identity.unwrap_or(JsonValue::Null),
+        ),
+        (
+            String::from("configured_collector_threads"),
+            JsonValue::Unsigned(usize_to_u64(config.threads, "configured threads")?),
+        ),
+        (
+            String::from("collector_threads_used"),
+            JsonValue::Unsigned(1),
+        ),
+        (
+            String::from("configured_io_threads"),
+            JsonValue::Unsigned(usize_to_u64(config.io_threads, "configured I/O threads")?),
+        ),
+        (
+            String::from("effective_reader_io_threads"),
+            JsonValue::Unsigned(usize_to_u64(effective_io_threads, "effective I/O threads")?),
+        ),
+    ]))
+}
+
 /// Analyze one v0.1 run with deterministic fault-injection checkpoints.
 ///
 /// # Errors
@@ -237,19 +345,27 @@ pub fn analyze_release_with_hook(
     config: &ResolvedConfig,
     hook: &mut impl ReleaseHook,
 ) -> Result<ReleaseReport, AlignGaugeError> {
+    analyze_release_with_reference_and_hook(config, None, hook)
+}
+
+/// Analyze a BAM or CRAM release run with deterministic fault-injection checkpoints.
+///
+/// # Errors
+/// Returns the first injected or production release failure.
+pub fn analyze_release_with_reference_and_hook(
+    config: &ResolvedConfig,
+    reference: Option<&Path>,
+    hook: &mut impl ReleaseHook,
+) -> Result<ReleaseReport, AlignGaugeError> {
     let (coverage_options, memory_plan) = release_coverage_setup(config)?;
     let input_identity = input_identity(&config.input)?;
     let field_plan = FieldPlan::counters().union(&FieldPlan::coverage());
     let effective_io_threads = effective_io_threads(config.io_threads);
 
     let traversal_started = Instant::now();
-    let mut reader = BamReader::open(
-        &config.input,
-        field_plan.clone(),
-        ReaderOptions {
-            io_threads: effective_io_threads,
-        },
-    )?;
+    let (input_format, mut reader) =
+        open_release_reader(config, reference, &field_plan, effective_io_threads)?;
+    let reference_identity = reader.reference_identity().map(ToJson::to_json);
     let header_identity = reader.header().identity().sha256().to_owned();
     let mut counter_collector = CounterCollector::new(reader.header());
     let mut coverage_collector =
@@ -261,7 +377,7 @@ pub fn analyze_release_with_hook(
         hook.checkpoint(ReleaseCheckpoint::BeforeCoverageCollector)?;
         coverage_collector.observe(&record)?;
     }
-    let traversal_ns = elapsed_ns(traversal_started, "BAM traversal")?;
+    let traversal_ns = elapsed_ns(traversal_started, "alignment traversal")?;
 
     let reduction_started = Instant::now();
     let counters = counter_collector.finish()?;
@@ -281,27 +397,24 @@ pub fn analyze_release_with_hook(
         config.clone(),
         input_identity,
         Availability::Available(header_identity),
-        BTreeMap::from([(String::from("rust-htslib"), String::from("1.0.1"))]),
         BTreeMap::from([
-            (String::from("field_plan"), field_plan.to_json()),
-            (String::from("bam_traversals"), JsonValue::Unsigned(1)),
+            (String::from("hts-sys"), String::from(HTS_SYS_VERSION)),
             (
-                String::from("configured_collector_threads"),
-                JsonValue::Unsigned(usize_to_u64(config.threads, "configured threads")?),
+                String::from("htslib"),
+                String::from(HTSLIB_COMPATIBILITY_VERSION),
             ),
             (
-                String::from("collector_threads_used"),
-                JsonValue::Unsigned(1),
-            ),
-            (
-                String::from("configured_io_threads"),
-                JsonValue::Unsigned(usize_to_u64(config.io_threads, "configured I/O threads")?),
-            ),
-            (
-                String::from("effective_reader_io_threads"),
-                JsonValue::Unsigned(usize_to_u64(effective_io_threads, "effective I/O threads")?),
+                String::from("rust-htslib"),
+                String::from(RUST_HTSLIB_VERSION),
             ),
         ]),
+        release_analysis_plan(
+            &field_plan,
+            input_format,
+            reference_identity,
+            config,
+            effective_io_threads,
+        )?,
         BTreeMap::from([
             (
                 String::from("memory_limit_bytes"),
@@ -317,7 +430,7 @@ pub fn analyze_release_with_hook(
             ),
         ]),
         BTreeMap::from([
-            (String::from("bam_traversal"), traversal_ns),
+            (String::from("alignment_traversal"), traversal_ns),
             (String::from("collector_finalization"), reduction_ns),
         ]),
         normalization_actions,
@@ -387,7 +500,7 @@ fn input_identity(path: &Path) -> Result<InputIdentity, AlignGaugeError> {
         path: path.to_string_lossy().into_owned(),
         size_bytes: Availability::Available(metadata.len()),
         checksum: Availability::unavailable(
-            "v0.1 does not compute a whole-file checksum during the single streaming pass",
+            "the streaming release path does not compute a whole-file checksum during analysis",
         ),
     })
 }

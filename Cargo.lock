@@ -25,6 +25,7 @@ dependencies = [
  "aligngauge-coverage",
  "aligngauge-hts",
  "aligngauge-metrics",
+ "aligngauge-testkit",
  "rust-htslib",
 ]
 
