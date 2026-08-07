@@ -1,5 +1,5 @@
 name: M11 Core Builder
-# rerun after exact two-struct wiring fix
+# rerun after checked-arithmetic and doc-lint repairs
 
 on:
   push:
@@ -20,6 +20,80 @@ jobs:
           fetch-depth: 0
       - name: Apply guarded core wiring
         run: python3 scripts/m11_core_wire.py
+      - name: Apply checked-arithmetic and documentation repairs
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('crates/aligngauge-hts/src/plan.rs')
+          text = p.read_text()
+          old = '/// Build the Picard 3.4.0 default ALL_READS insert-size plan.'
+          new = '/// Build the Picard 3.4.0 default `ALL_READS` insert-size plan.'
+          if text.count(old) != 1:
+              raise SystemExit('plan documentation guard drifted')
+          p.write_text(text.replace(old, new, 1))
+
+          p = Path('crates/aligngauge-metrics/src/picard.rs')
+          text = p.read_text()
+          old = '''    pub fn finish(self) -> PicardAlignmentSummaryReport {
+        let first = self.first.finish(PicardAlignmentCategory::FirstOfPair);
+        let second = self.second.finish(PicardAlignmentCategory::SecondOfPair);
+        let mut pair = self.pair.finish(PicardAlignmentCategory::Pair);
+        pair.bad_cycles = first.bad_cycles.saturating_add(second.bad_cycles);
+        let unpaired = self.unpaired.finish(PicardAlignmentCategory::Unpaired);
+
+        let mut rows = Vec::with_capacity(4);
+        if first.total_reads > 0 {
+            rows.push(first);
+            rows.push(second);
+            rows.push(pair);
+        }
+        if unpaired.total_reads > 0 || rows.is_empty() {
+            rows.push(unpaired);
+        }
+        PicardAlignmentSummaryReport { rows }
+    }
+'''
+          new = '''    pub fn finish(self) -> Result<PicardAlignmentSummaryReport, AlignGaugeError> {
+        let first = self.first.finish(PicardAlignmentCategory::FirstOfPair);
+        let second = self.second.finish(PicardAlignmentCategory::SecondOfPair);
+        let mut pair = self.pair.finish(PicardAlignmentCategory::Pair);
+        pair.bad_cycles = checked_add(
+            first.bad_cycles,
+            second.bad_cycles,
+            "alignment.pair_bad_cycles",
+        )?;
+        let unpaired = self.unpaired.finish(PicardAlignmentCategory::Unpaired);
+
+        let mut rows = Vec::with_capacity(4);
+        if first.total_reads > 0 {
+            rows.push(first);
+            rows.push(second);
+            rows.push(pair);
+        }
+        if unpaired.total_reads > 0 || rows.is_empty() {
+            rows.push(unpaired);
+        }
+        Ok(PicardAlignmentSummaryReport { rows })
+    }
+'''
+          if text.count(old) != 1:
+              raise SystemExit('alignment finish guard drifted')
+          text = text.replace(old, new, 1)
+          old = '        seen = seen.saturating_add(*value);'
+          new = '''        seen = seen
+            .checked_add(*value)
+            .expect("cumulative histogram count cannot exceed the checked source count");'''
+          if text.count(old) != 2:
+              raise SystemExit(f'weighted median guard found {text.count(old)} matches')
+          text = text.replace(old, new)
+          old = '    Ok(collector.finish())\n'
+          new = '    collector.finish()\n'
+          if text.count(old) != 1:
+              raise SystemExit('alignment analyze finish guard drifted')
+          text = text.replace(old, new, 1)
+          p.write_text(text)
+          PY
       - name: Format
         run: cargo fmt --all
       - name: Check workspace
@@ -38,7 +112,7 @@ jobs:
           set -euo pipefail
           git diff --check
           mapfile -t changed < <(git diff --name-only)
-          allowed='^(crates/aligngauge-hts/src/(plan|reader)\.rs|crates/aligngauge-metrics/src/lib\.rs|crates/aligngauge-cli/src/main\.rs)$'
+          allowed='^(crates/aligngauge-hts/src/(plan|reader)\.rs|crates/aligngauge-metrics/src/(lib|picard)\.rs|crates/aligngauge-cli/src/main\.rs)$'
           for path in "${changed[@]}"; do
             if ! [[ "$path" =~ $allowed ]]; then
               echo "unexpected generated path: $path" >&2
@@ -50,7 +124,7 @@ jobs:
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add crates/aligngauge-hts/src/plan.rs crates/aligngauge-hts/src/reader.rs crates/aligngauge-metrics/src/lib.rs crates/aligngauge-cli/src/main.rs
+          git add crates/aligngauge-hts/src/plan.rs crates/aligngauge-hts/src/reader.rs crates/aligngauge-metrics/src/lib.rs crates/aligngauge-metrics/src/picard.rs crates/aligngauge-cli/src/main.rs
           git rm .github/workflows/m11-core-builder.yml scripts/m11_core_wire.py
           git commit -m 'feat: wire Picard compatibility field plans and CLI'
           git push origin HEAD:milestone-11-picard-profiles
