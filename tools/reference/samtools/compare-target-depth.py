@@ -158,6 +158,10 @@ def expected_aggregate(union_depth, thresholds):
     depths = list(union_depth.values())
     territory = len(depths)
     histogram = Counter(depths)
+    # AlignGauge's canonical histogram representation always includes the zero bin,
+    # even when the measured count is zero. Preserve that representation while the
+    # independently measured positive-depth bins remain exact Samtools reductions.
+    histogram.setdefault(0, 0)
     on_target = sum(depths)
     threshold_bases = {str(value): sum(depth >= value for depth in depths) for value in thresholds}
     expected = {
@@ -274,6 +278,7 @@ def main() -> None:
             "Samtools invocation explicitly excludes UNMAP,SECONDARY,QCFAIL,DUP,SUPPLEMENTARY.",
             "Minimum base and mapping quality are both zero.",
             "Deletions remain excluded and mate-overlap removal remains disabled.",
+            "AlignGauge's canonical histogram representation keeps an explicit zero bin even when its count is zero.",
             "This validates comparable coverage primitives and is not a Picard compatibility claim.",
         ],
     }
