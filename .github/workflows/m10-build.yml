@@ -8,6 +8,7 @@ on:
       - .github/m10-build.py
       - .github/m10-postgen.py
       - .github/m10-oracle-tests.py
+      - .github/m10-semantic-fixes.py
       - .github/workflows/m10-build.yml
 
 permissions:
@@ -69,6 +70,7 @@ jobs:
           p.write_text(text)
           PY
           python .github/m10-postgen.py
+          python .github/m10-semantic-fixes.py
           python .github/m10-oracle-tests.py
           cargo fmt --all
           git diff --check
@@ -92,6 +94,7 @@ jobs:
             .github/m10-build.py \
             .github/m10-postgen.py \
             .github/m10-oracle-tests.py \
+            .github/m10-semantic-fixes.py \
             .github/workflows/m10-build.yml \
             .github/workflows/m10-stats-probe.yml \
             .github/workflows/m10-multiqc-resolve.yml
@@ -101,6 +104,7 @@ jobs:
             .github/m10-build.py \
             .github/m10-postgen.py \
             .github/m10-oracle-tests.py \
+            .github/m10-semantic-fixes.py \
             .github/workflows/m10-build.yml \
             .github/workflows/m10-stats-probe.yml \
             .github/workflows/m10-multiqc-resolve.yml \
