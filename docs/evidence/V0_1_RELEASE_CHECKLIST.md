@@ -7,7 +7,7 @@
 - Input format released: local coordinate-sorted BAM.
 - Execution model: CPU, one validated streaming BAM reader, deterministic collectors/reduction.
 
-The release tag is intentionally pending until the evidence commit containing this checklist passes exact-SHA validation.
+Release `v0.1.0` was published on 2026-08-07 and the tag points exactly to validated evidence SHA `9423a9d3496459fdbceb2e7bc5178b4b3100357c`. Post-release documentation commits on `master` are intentionally outside the tagged release.
 
 ## Required product gates
 
@@ -17,6 +17,18 @@ All four product-SHA gates succeeded on `f93001cf22a2315f01e6b857c295720d99e392c
 - [x] Full Runtime Validation — run `31162821531`, job `92816808007`.
 - [x] Reference Validation — run `31162821541`, job `92816808194`.
 - [x] HG002 Preparation Validation — run `31162819757`, job `92816800461`.
+
+## Required evidence-SHA gates
+
+All four evidence-SHA gates succeeded on `9423a9d3496459fdbceb2e7bc5178b4b3100357c` before publication:
+
+- [x] Permanent CI — run `31163469057`, job `92818867067`.
+- [x] Full Runtime Validation — run `31163469075`, job `92818867219`.
+- [x] Reference Validation — run `31163469014`, job `92818866656`.
+- [x] HG002 Preparation Validation — run `31163468950`, job `92818866320`.
+- [x] HG002 evidence artifact — ID `8988064820`, digest `sha256:b475363f37ab9cba171d127c7a5ff37efaef2191bb405a341982a9694f7249c0`.
+
+The one-time publisher then succeeded in run `31166976043`, job `92829955705`, and verified `refs/tags/v0.1.0 -> 9423a9d3496459fdbceb2e7bc5178b4b3100357c` after publication.
 
 ## SPEC §19.1 acceptance
 
@@ -101,6 +113,6 @@ Neither caveat changes the executable's validation result, but neither should be
 
 ## Tag/release rule
 
-- [ ] Validate the evidence commit with Permanent CI, Full Runtime, Reference Validation, and HG002.
-- [ ] Only after that exact SHA is green, create tag/release `v0.1.0` pointing to the validated evidence SHA.
-- [ ] Never move the release tag to an unvalidated commit.
+- [x] Validated evidence SHA `9423a9d3496459fdbceb2e7bc5178b4b3100357c` with Permanent CI, Full Runtime Validation, Reference Validation, and HG002 Preparation Validation.
+- [x] Created tag/release `v0.1.0` only after those exact-SHA gates were green; both the release target and Git ref resolve to `9423a9d3496459fdbceb2e7bc5178b4b3100357c`.
+- [x] Release policy keeps `v0.1.0` pinned to `9423a9d3496459fdbceb2e7bc5178b4b3100357c`; post-release documentation commits do not move the tag.

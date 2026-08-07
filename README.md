@@ -8,7 +8,7 @@ AlignGauge analyzes existing aligned sequencing data. It is not software for con
 
 ## Status
 
-The v0.1 BAM/CPU release candidate is implemented and has passed its product-SHA validation gates. Release evidence is being validated before the `v0.1.0` tag is created.
+AlignGauge `v0.1.0` is released. The release tag is pinned by policy to validated evidence SHA `9423a9d3496459fdbceb2e7bc5178b4b3100357c` (product implementation SHA `f93001cf22a2315f01e6b857c295720d99e392ca`). Later commits on `master` may contain post-release documentation and are not part of the tagged release.
 
 - v0.1: local coordinate-sorted BAM, CPU counters, exact canonical coverage, JSON/provenance, and atomic output publication.
 - v0.2: CRAM with strictly local reference resolution; not released in v0.1.

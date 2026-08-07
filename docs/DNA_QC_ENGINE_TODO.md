@@ -3,8 +3,8 @@
 **Repository:** `ekkus93/aligngauge`
 
 **Companion specification:** `docs/DNA_QC_ENGINE_SPEC.md`  
-**Status:** Ralph Loop active — Milestone 5 complete; Milestone 6 next
-**Last updated:** 2026-08-06  
+**Status:** Ralph Loop active — `v0.1.0` released; Milestone 6 complete; Milestone 7 next
+**Last updated:** 2026-08-07  
 **Supersedes:** Initial `DNA_QC_ENGINE_TODO.md` dated 2026-08-05
 
 ## 1. How to use this TODO
@@ -481,47 +481,50 @@ Implement SPEC §12.1–§12.2.
 
 ## Milestone 6 — v0.1 release integration
 
+**Status:** Complete — product SHA `f93001cf22a2315f01e6b857c295720d99e392ca`; validated evidence/release SHA `9423a9d3496459fdbceb2e7bc5178b4b3100357c`; `v0.1.0` published after Permanent CI, Full Runtime Validation, Reference Validation, and HG002 Preparation Validation all succeeded on the exact release SHA.
+
+
 ### 6.1 CLI completion
 
-- [ ] Implement final v0.1 options from SPEC §6.2.
-- [ ] Helpful `--help`.
-- [ ] Stable nonzero exit codes.
-- [ ] Refuse v0.2/v0.3 options such as CRAM reference or targets with clear
+- [x] Implement final v0.1 options from SPEC §6.2.
+- [x] Helpful `--help`.
+- [x] Stable nonzero exit codes.
+- [x] Refuse v0.2/v0.3 options such as CRAM reference or targets with clear
       unsupported-feature diagnostics.
-- [ ] Validate output destination before expensive traversal.
+- [x] Validate output destination before expensive traversal.
 
 ### 6.2 Output completion
 
-- [ ] Finalize v0.1 JSON schemas.
-- [ ] Finalize provenance.
-- [ ] Finalize human summary.
-- [ ] Finalize optional Samtools-like compatibility files.
-- [ ] Ensure compatibility exporters fail when required source metrics are absent.
-- [ ] Exclude volatile timing fields from deterministic-result comparison.
+- [x] Finalize v0.1 JSON schemas.
+- [x] Finalize provenance.
+- [x] Finalize human summary.
+- [x] Finalize optional Samtools-like compatibility files.
+- [x] Ensure compatibility exporters fail when required source metrics are absent.
+- [x] Exclude volatile timing fields from deterministic-result comparison.
 
 ### 6.3 End-to-end tests
 
-- [ ] Valid synthetic BAM.
-- [ ] Empty BAM.
-- [ ] Corrupt BAM.
-- [ ] Unsorted BAM.
-- [ ] Output destination exists.
-- [ ] Permission failure.
-- [ ] Injected collector failure.
-- [ ] Injected serialization failure.
-- [ ] Injected publication failure.
-- [ ] HG002 subset complete run.
+- [x] Valid synthetic BAM.
+- [x] Empty BAM.
+- [x] Corrupt BAM.
+- [x] Unsorted BAM.
+- [x] Output destination exists.
+- [x] Permission failure.
+- [x] Injected collector failure.
+- [x] Injected serialization failure.
+- [x] Injected publication failure.
+- [x] HG002 subset complete run.
 
 ### 6.4 v0.1 performance baseline
 
-- [ ] Measure simple rust-htslib traversal.
-- [ ] Measure counters only.
-- [ ] Measure coverage only.
-- [ ] Measure counters plus coverage.
-- [ ] Confirm counters plus coverage uses one input traversal.
-- [ ] Record CPU, RAM, storage, cache state, and versions.
-- [ ] Run sufficient repetitions to identify variance.
-- [ ] Do not claim a speedup unsupported by the data.
+- [x] Measure simple rust-htslib traversal.
+- [x] Measure counters only.
+- [x] Measure coverage only.
+- [x] Measure counters plus coverage.
+- [x] Confirm counters plus coverage uses one input traversal.
+- [x] Record CPU, RAM, storage, cache state, and versions.
+- [x] Run sufficient repetitions to identify variance.
+- [x] Do not claim a speedup unsupported by the data.
 
 ### 6.5 v0.1 release evidence
 
@@ -535,11 +538,11 @@ Create:
 
 Verify every criterion in SPEC §19.1.
 
-- [ ] All criteria mapped to tests/evidence.
-- [ ] No known silent fallback.
-- [ ] No unexplained differential discrepancy.
-- [ ] CI succeeds on the exact release commit.
-- [ ] Tag and release only after exact-SHA validation.
+- [x] All criteria mapped to tests/evidence.
+- [x] No known silent fallback.
+- [x] No unexplained differential discrepancy.
+- [x] CI succeeds on the exact release commit.
+- [x] Tag and release only after exact-SHA validation.
 
 ---
 
