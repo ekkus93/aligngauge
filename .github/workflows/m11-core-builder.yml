@@ -1,0 +1,55 @@
+name: M11 Core Builder
+
+on:
+  push:
+    branches:
+      - milestone-11-picard-profiles
+    paths:
+      - .github/workflows/m11-core-builder.yml
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply guarded core wiring
+        run: python3 scripts/m11_core_wire.py
+      - name: Format
+        run: cargo fmt --all
+      - name: Check workspace
+        run: cargo check --workspace --all-features --locked
+      - name: Strict Clippy
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+      - name: Test workspace
+        run: cargo test --workspace --all-features --locked
+      - name: Smoke Picard compatibility help
+        run: |
+          set -euo pipefail
+          cargo run -q -p aligngauge-cli -- --help | grep -F 'picard-alignment-summary'
+          cargo run -q -p aligngauge-cli -- --help | grep -F 'picard-insert-size'
+      - name: Verify restricted diff
+        run: |
+          set -euo pipefail
+          git diff --check
+          mapfile -t changed < <(git diff --name-only)
+          allowed='^(crates/aligngauge-hts/src/(plan|reader)\.rs|crates/aligngauge-metrics/src/lib\.rs|crates/aligngauge-cli/src/main\.rs)$'
+          for path in "${changed[@]}"; do
+            if ! [[ "$path" =~ $allowed ]]; then
+              echo "unexpected generated path: $path" >&2
+              exit 1
+            fi
+          done
+      - name: Commit validated wiring and remove builder
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add crates/aligngauge-hts/src/plan.rs crates/aligngauge-hts/src/reader.rs crates/aligngauge-metrics/src/lib.rs crates/aligngauge-cli/src/main.rs
+          git rm .github/workflows/m11-core-builder.yml scripts/m11_core_wire.py
+          git commit -m 'feat: wire Picard compatibility field plans and CLI'
+          git push origin HEAD:milestone-11-picard-profiles
