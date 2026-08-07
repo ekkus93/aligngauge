@@ -48,7 +48,11 @@ impl CoverageCollector {
             return Ok(false);
         }
 
-        self.accumulate_run(self.current_depth, skip_end - self.chunk_start)?;
+        self.accumulate_run(
+            self.chunk_start,
+            self.current_depth,
+            skip_end - self.chunk_start,
+        )?;
         self.chunk_start = skip_end;
         self.chunk_end = reference_length.min(
             self.chunk_start
@@ -156,7 +160,7 @@ impl CoverageCollector {
         })?;
 
         if self.active_delta_positions == 0 {
-            self.accumulate_run(self.current_depth, chunk_len_u64)?;
+            self.accumulate_run(self.chunk_start, self.current_depth, chunk_len_u64)?;
         } else {
             for offset in 0..chunk_len {
                 let change = self.delta[offset];
@@ -168,7 +172,13 @@ impl CoverageCollector {
                         .checked_sub(1)
                         .ok_or_else(|| internal_error("active delta count underflowed"))?;
                 }
-                self.accumulate_run(self.current_depth, 1)?;
+                let position = self
+                    .chunk_start
+                    .checked_add(u64::try_from(offset).map_err(|source| {
+                        internal_error("coverage chunk offset does not fit u64").with_source(source)
+                    })?)
+                    .ok_or_else(|| coverage_overflow("coverage run position"))?;
+                self.accumulate_run(position, self.current_depth, 1)?;
             }
             let boundary_change = self.delta[chunk_len];
             if boundary_change != 0 {
@@ -202,7 +212,11 @@ impl CoverageCollector {
         let reference_length = self.references[reference_index].length;
         while self.chunk_start < reference_length {
             if self.active_delta_positions == 0 && self.pending_events.is_empty() {
-                self.accumulate_run(self.current_depth, reference_length - self.chunk_start)?;
+                self.accumulate_run(
+                    self.chunk_start,
+                    self.current_depth,
+                    reference_length - self.chunk_start,
+                )?;
                 self.chunk_start = reference_length;
                 self.chunk_end = reference_length;
                 break;

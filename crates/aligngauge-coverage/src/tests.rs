@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use aligngauge_core::{ErrorCategory, ToJson};
 
 use crate::cigar::record_is_accepted;
-use crate::util::{format_percentage_six, format_ratio_six};
+use crate::util::{format_percentage_six, format_ratio_six, format_ratio_u128_six};
 use crate::{CoverageMemoryPlan, CoverageOptions, analyze_bam, cigar_to_coverage_blocks};
 
 fn fixture(name: &str) -> PathBuf {
@@ -194,6 +194,18 @@ fn deterministic_cigar_fuzz_matches_per_base_oracle() {
             .collect::<Vec<_>>();
         assert_eq!(observed, expected);
     }
+}
+
+#[test]
+fn u128_ratio_rendering_handles_large_exact_products() {
+    let numerator = u128::from(u64::MAX) * u128::from(u64::MAX - 2);
+    let denominator = u128::from(u64::MAX) * u128::from(u64::MAX - 1);
+    assert_eq!(
+        format_ratio_u128_six(numerator, denominator).expect("u128 ratio"),
+        "1.000000"
+    );
+    assert_eq!(format_ratio_u128_six(1, 3).expect("u128 ratio"), "0.333333");
+    assert_eq!(format_ratio_u128_six(2, 3).expect("u128 ratio"), "0.666667");
 }
 
 #[test]

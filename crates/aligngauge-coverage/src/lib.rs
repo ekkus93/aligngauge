@@ -3,18 +3,24 @@
 use std::path::Path;
 
 use aligngauge_core::AlignGaugeError;
+use aligngauge_formats::{
+    SequenceContig, SequenceDictionary, TargetNormalizationConfig, normalize_targets,
+    parse_bed_path,
+};
 use aligngauge_hts::{BamReader, FieldPlan, ReaderOptions};
 
 mod accumulator;
 mod cigar;
 mod plan;
 mod report;
+mod targeted;
 mod util;
 
 pub use accumulator::CoverageCollector;
 pub use cigar::{CoverageBlock, cigar_to_coverage_blocks};
 pub use plan::{CoverageMemoryPlan, CoverageOptions};
 pub use report::{CoverageReport, PerReferenceCoverage};
+pub use targeted::{DEFAULT_NEAR_DISTANCE_BASES, TARGETED_PROFILE, TargetedCoverageReport};
 
 /// Stable canonical coverage profile name.
 pub const COVERAGE_PROFILE: &str = "aligngauge-v0.1";
@@ -36,6 +42,56 @@ pub fn analyze_bam(
         CoverageMemoryPlan::plan(options.memory_limit_bytes, 1, options.chunk_size_override)?;
     let mut reader = BamReader::open(path, FieldPlan::coverage(), ReaderOptions::default())?;
     let mut collector = CoverageCollector::new(reader.header(), options.thresholds, plan)?;
+    while let Some(record) = reader.next_record()? {
+        collector.observe(&record)?;
+    }
+    collector.finish()
+}
+
+/// Analyze one local BAM with canonical whole-genome and native targeted reductions.
+///
+/// This convenience entry point is primarily useful for exact coverage differential tests.
+/// Production release orchestration feeds the same targeted collector from its shared reader.
+///
+/// # Errors
+/// Returns typed target, resource, reader-validation, or checked-arithmetic failures.
+pub fn analyze_bam_with_targets(
+    path: impl AsRef<Path>,
+    targets: impl AsRef<Path>,
+    near_distance_bases: u64,
+    options: CoverageOptions,
+) -> Result<CoverageReport, AlignGaugeError> {
+    let plan =
+        CoverageMemoryPlan::plan(options.memory_limit_bytes, 1, options.chunk_size_override)?;
+    let mut reader = BamReader::open(path, FieldPlan::coverage(), ReaderOptions::default())?;
+    let dictionary = SequenceDictionary::new(
+        reader
+            .header()
+            .references()
+            .iter()
+            .map(|reference| SequenceContig {
+                name: reference.name().to_owned(),
+                length: reference.length(),
+            })
+            .collect(),
+    )?;
+    let parsed = parse_bed_path(targets.as_ref(), &dictionary)?;
+    let target_set =
+        normalize_targets(parsed.clone(), TargetNormalizationConfig { flank_bases: 0 })?;
+    let selected_set = normalize_targets(
+        parsed,
+        TargetNormalizationConfig {
+            flank_bases: near_distance_bases,
+        },
+    )?;
+    let mut collector = CoverageCollector::new_targeted(
+        reader.header(),
+        options.thresholds,
+        plan,
+        target_set,
+        selected_set,
+        near_distance_bases,
+    )?;
     while let Some(record) = reader.next_record()? {
         collector.observe(&record)?;
     }

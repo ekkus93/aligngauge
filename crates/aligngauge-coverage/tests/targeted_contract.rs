@@ -12,8 +12,7 @@ fn alignment_fixture() -> PathBuf {
 }
 
 fn target_fixture() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/chunk_boundary_targets.bed")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/chunk_boundary_targets.bed")
 }
 
 fn assert_aggregate_oracle(targeted: &TargetedCoverageSummary, total_aligned_bases: u64) {
@@ -34,15 +33,25 @@ fn assert_aggregate_oracle(targeted: &TargetedCoverageSummary, total_aligned_bas
     );
     assert_eq!(
         targeted.target_depth_histogram,
-        [("0".to_owned(), 10), ("1".to_owned(), 8), ("2".to_owned(), 4)]
-            .into_iter()
-            .collect()
+        [
+            ("0".to_owned(), 10),
+            ("1".to_owned(), 8),
+            ("2".to_owned(), 4)
+        ]
+        .into_iter()
+        .collect()
     );
     assert_eq!(
         targeted.target_mean_depth,
         Availability::Available(String::from("0.727273"))
     );
-    assert_eq!((targeted.target_covered_bases, targeted.target_uncovered_bases), (12, 10));
+    assert_eq!(
+        (
+            targeted.target_covered_bases,
+            targeted.target_uncovered_bases
+        ),
+        (12, 10)
+    );
     assert_eq!(targeted.threshold_bases.get("1"), Some(&12));
     assert_eq!(targeted.threshold_bases.get("2"), Some(&4));
     assert_eq!(
@@ -58,7 +67,10 @@ fn assert_aggregate_oracle(targeted: &TargetedCoverageSummary, total_aligned_bas
         targeted.target_enrichment,
         Availability::Available(String::from("51948.051948"))
     );
-    assert_eq!(targeted.target_depth_20th_percentile, Availability::Available(0));
+    assert_eq!(
+        targeted.target_depth_20th_percentile,
+        Availability::Available(0)
+    );
     assert_eq!(
         targeted.target_uniformity_penalty_80,
         Availability::unavailable("target_depth_20th_percentile_is_zero")
@@ -68,22 +80,34 @@ fn assert_aggregate_oracle(targeted: &TargetedCoverageSummary, total_aligned_bas
 fn assert_per_target_oracle(targeted: &TargetedCoverageSummary) {
     assert_eq!(targeted.per_target.len(), 4);
     let a = &targeted.per_target[0];
-    assert_eq!((a.source_index, a.line_number, a.start, a.end), (0, 1, 65_534, 65_542));
+    assert_eq!(
+        (a.source_index, a.line_number, a.start, a.end),
+        (0, 1, 65_534, 65_542)
+    );
     assert_eq!(a.name.as_deref(), Some("targetA"));
     assert_eq!(a.depth_sum, 12);
-    assert_eq!(a.mean_depth, Availability::Available(String::from("1.500000")));
+    assert_eq!(
+        a.mean_depth,
+        Availability::Available(String::from("1.500000"))
+    );
     assert_eq!((a.covered_bases, a.uncovered_bases), (8, 0));
 
     let b = &targeted.per_target[1];
     assert_eq!(b.name.as_deref(), Some("targetB"));
     assert_eq!(b.depth_sum, 4);
-    assert_eq!(b.mean_depth, Availability::Available(String::from("1.000000")));
+    assert_eq!(
+        b.mean_depth,
+        Availability::Available(String::from("1.000000"))
+    );
     assert_eq!((b.covered_bases, b.uncovered_bases), (4, 0));
 
     let c = &targeted.per_target[2];
     assert_eq!(c.name.as_deref(), Some("targetC"));
     assert_eq!(c.depth_sum, 2);
-    assert_eq!(c.mean_depth, Availability::Available(String::from("0.166667")));
+    assert_eq!(
+        c.mean_depth,
+        Availability::Available(String::from("0.166667"))
+    );
     assert_eq!((c.covered_bases, c.uncovered_bases), (2, 10));
     assert_eq!(c.threshold_bases.get("1"), Some(&2));
     assert_eq!(
@@ -91,13 +115,19 @@ fn assert_per_target_oracle(targeted: &TargetedCoverageSummary) {
         Some(&Availability::Available(String::from("16.666667")))
     );
     assert_eq!(c.zero_coverage_runs.len(), 1);
-    assert_eq!((c.zero_coverage_runs[0].start, c.zero_coverage_runs[0].end), (65_550, 65_560));
+    assert_eq!(
+        (c.zero_coverage_runs[0].start, c.zero_coverage_runs[0].end),
+        (65_550, 65_560)
+    );
     assert_eq!(c.longest_zero_coverage_run_bases, 10);
 
     let empty = &targeted.per_target[3];
     assert_eq!(empty.name.as_deref(), Some("targetEmpty"));
     assert_eq!((empty.length, empty.depth_sum), (0, 0));
-    assert_eq!(empty.mean_depth, Availability::unavailable("zero_length_target"));
+    assert_eq!(
+        empty.mean_depth,
+        Availability::unavailable("zero_length_target")
+    );
     assert_eq!(
         empty.threshold_percentages.get("1"),
         Some(&Availability::unavailable("zero_length_target"))
@@ -131,7 +161,11 @@ fn targeted_reduction_is_independent_of_chunk_size() {
             .with_chunk_size_override(chunk_size);
         let report = analyze_bam_with_targets(alignment_fixture(), target_fixture(), 5, options)
             .expect("targeted coverage");
-        let targeted = report.targeted().expect("targeted report").summary().clone();
+        let targeted = report
+            .targeted()
+            .expect("targeted report")
+            .summary()
+            .clone();
         if let Some(expected) = &baseline {
             assert_eq!(&targeted, expected, "chunk size {chunk_size}");
         } else {

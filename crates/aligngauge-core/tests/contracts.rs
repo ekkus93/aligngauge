@@ -87,6 +87,7 @@ fn sample_summary() -> Summary {
             uncovered_reference_bases: 900,
             mean_depth: String::from("0.100000"),
         }],
+        targeted: Availability::unavailable("target_bed_not_supplied"),
     };
 
     Summary::new(

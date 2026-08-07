@@ -38,6 +38,7 @@ name = "aligngauge-coverage"
 version = "0.0.0"
 dependencies = [
  "aligngauge-core",
+ "aligngauge-formats",
  "aligngauge-hts",
 ]
 

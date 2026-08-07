@@ -73,9 +73,7 @@ impl ToJson for PerTargetCoverageSummary {
             (String::from("mean_depth"), self.mean_depth.to_json()),
             (
                 String::from("name"),
-                self.name
-                    .as_ref()
-                    .map_or(JsonValue::Null, ToJson::to_json),
+                self.name.as_ref().map_or(JsonValue::Null, ToJson::to_json),
             ),
             (String::from("source_index"), self.source_index.to_json()),
             (String::from("start"), self.start.to_json()),
@@ -217,10 +215,7 @@ impl ToJson for TargetedCoverageSummary {
                 String::from("target_mean_depth"),
                 self.target_mean_depth.to_json(),
             ),
-            (
-                String::from("target_sha256"),
-                self.target_sha256.to_json(),
-            ),
+            (String::from("target_sha256"), self.target_sha256.to_json()),
             (
                 String::from("target_size_bytes"),
                 self.target_size_bytes.to_json(),

@@ -5,6 +5,7 @@ pub mod config;
 pub mod error;
 pub mod json;
 pub mod model;
+pub mod targeted;
 
 pub use atomic::{AtomicPublisher, OutputBundle, PublicationHook, PublicationStep};
 pub use config::{
@@ -18,3 +19,4 @@ pub use model::{
     MateOverlapPolicy, MetricDefinition, PerReferenceCounters, PerReferenceCoverageSummary,
     Provenance, RecordInclusion, Summary, SystemInfo, Warning,
 };
+pub use targeted::{PerTargetCoverageSummary, TargetedCoverageSummary, ZeroCoverageRunSummary};

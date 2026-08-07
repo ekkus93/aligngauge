@@ -1,58 +1,606 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://aligngauge.dev/schemas/summary-1.0.0.json",
-  "title": "AlignGauge summary.json",
-  "type": "object",
-  "additionalProperties": false,
-  "required": ["schema_version", "application", "metric_definitions", "alignment_counters", "per_reference_counters", "coverage", "warnings"],
-  "properties": {
-    "schema_version": {"const": "1.0.0"},
-    "application": {"type": "object"},
-    "metric_definitions": {"type": "object"},
-    "alignment_counters": {"$ref": "#/$defs/availability"},
-    "per_reference_counters": {"$ref": "#/$defs/availability"},
-    "coverage": {"oneOf": [
-      {"$ref": "#/$defs/unavailable"},
-      {"type": "object", "additionalProperties": false, "required": ["status", "value"], "properties": {
-        "status": {"const": "available"},
-        "value": {"$ref": "#/$defs/coverage"}
-      }}
-    ]},
-    "warnings": {"type": "array", "items": {"type": "object"}}
-  },
   "$defs": {
-    "availability": {"oneOf": [
-      {"$ref": "#/$defs/unavailable"},
-      {"type": "object", "required": ["status", "value"], "properties": {"status": {"const": "available"}, "value": true}}
-    ]},
-    "unavailable": {"type": "object", "additionalProperties": false, "required": ["status", "reason"], "properties": {"status": {"const": "unavailable"}, "reason": {"type": "string", "minLength": 1}}},
+    "availability": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/unavailable"
+        },
+        {
+          "properties": {
+            "status": {
+              "const": "available"
+            },
+            "value": true
+          },
+          "required": [
+            "status",
+            "value"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "coverage": {
-      "type": "object",
       "additionalProperties": false,
-      "required": ["policy", "total_accepted_aligned_bases", "depth_histogram", "threshold_bases", "threshold_percentages", "covered_reference_bases", "uncovered_reference_bases", "per_reference"],
       "properties": {
-        "policy": {"type": "object"},
-        "total_accepted_aligned_bases": {"type": "integer", "minimum": 0},
-        "depth_histogram": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
-        "threshold_bases": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
-        "threshold_percentages": {"type": "object", "additionalProperties": {"type": "string", "pattern": "^[0-9]+\\.[0-9]{6}$"}},
-        "covered_reference_bases": {"type": "integer", "minimum": 0},
-        "uncovered_reference_bases": {"type": "integer", "minimum": 0},
-        "per_reference": {"type": "array", "items": {"$ref": "#/$defs/per_reference_coverage"}}
-      }
+        "covered_reference_bases": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "depth_histogram": {
+          "additionalProperties": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": "object"
+        },
+        "per_reference": {
+          "items": {
+            "$ref": "#/$defs/per_reference_coverage"
+          },
+          "type": "array"
+        },
+        "policy": {
+          "type": "object"
+        },
+        "targeted": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/unavailable"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "status": {
+                  "const": "available"
+                },
+                "value": {
+                  "$ref": "#/$defs/targeted_coverage"
+                }
+              },
+              "required": [
+                "status",
+                "value"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "threshold_bases": {
+          "additionalProperties": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": "object"
+        },
+        "threshold_percentages": {
+          "additionalProperties": {
+            "pattern": "^[0-9]+\\.[0-9]{6}$",
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "total_accepted_aligned_bases": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "uncovered_reference_bases": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "policy",
+        "total_accepted_aligned_bases",
+        "depth_histogram",
+        "threshold_bases",
+        "threshold_percentages",
+        "covered_reference_bases",
+        "uncovered_reference_bases",
+        "per_reference",
+        "targeted"
+      ],
+      "type": "object"
     },
     "per_reference_coverage": {
-      "type": "object",
       "additionalProperties": false,
-      "required": ["name", "length", "accepted_aligned_bases", "covered_reference_bases", "uncovered_reference_bases", "mean_depth"],
       "properties": {
-        "name": {"type": "string"},
-        "length": {"type": "integer", "minimum": 0},
-        "accepted_aligned_bases": {"type": "integer", "minimum": 0},
-        "covered_reference_bases": {"type": "integer", "minimum": 0},
-        "uncovered_reference_bases": {"type": "integer", "minimum": 0},
-        "mean_depth": {"type": "string", "pattern": "^[0-9]+\\.[0-9]{6}$"}
-      }
+        "accepted_aligned_bases": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "covered_reference_bases": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "length": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "mean_depth": {
+          "pattern": "^[0-9]+\\.[0-9]{6}$",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "uncovered_reference_bases": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "length",
+        "accepted_aligned_bases",
+        "covered_reference_bases",
+        "uncovered_reference_bases",
+        "mean_depth"
+      ],
+      "type": "object"
+    },
+    "per_target_coverage": {
+      "additionalProperties": false,
+      "properties": {
+        "contig": {
+          "type": "string"
+        },
+        "covered_bases": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "depth_sum": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "end": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "length": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "line_number": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "longest_zero_coverage_run_bases": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "mean_depth": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/unavailable"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "status": {
+                  "const": "available"
+                },
+                "value": {
+                  "pattern": "^[0-9]+\\.[0-9]{6}$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "status",
+                "value"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_index": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "start": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "threshold_bases": {
+          "additionalProperties": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": "object"
+        },
+        "threshold_percentages": {
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/unavailable"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "status": {
+                    "const": "available"
+                  },
+                  "value": {
+                    "pattern": "^[0-9]+\\.[0-9]{6}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "status",
+                  "value"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "type": "object"
+        },
+        "uncovered_bases": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "zero_coverage_runs": {
+          "items": {
+            "$ref": "#/$defs/zero_coverage_run"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "source_index",
+        "line_number",
+        "contig",
+        "start",
+        "end",
+        "name",
+        "length",
+        "depth_sum",
+        "mean_depth",
+        "covered_bases",
+        "uncovered_bases",
+        "threshold_bases",
+        "threshold_percentages",
+        "zero_coverage_runs",
+        "longest_zero_coverage_run_bases"
+      ],
+      "type": "object"
+    },
+    "targeted_coverage": {
+      "additionalProperties": false,
+      "properties": {
+        "coverage_profile": {
+          "type": "string"
+        },
+        "dropout_target_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "duplicate_adjusted": {
+          "type": "boolean"
+        },
+        "genome_territory_bases": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "near_distance_bases": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "near_target_bases": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "near_target_territory_bases": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "off_target_bases": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "on_target_bases": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "per_target": {
+          "items": {
+            "$ref": "#/$defs/per_target_coverage"
+          },
+          "type": "array"
+        },
+        "profile": {
+          "const": "aligngauge-targeted-v0.3"
+        },
+        "source_interval_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "target_covered_bases": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "target_depth_20th_percentile": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/unavailable"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "status": {
+                  "const": "available"
+                },
+                "value": {
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "status",
+                "value"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "target_depth_histogram": {
+          "additionalProperties": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": "object"
+        },
+        "target_enrichment": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/unavailable"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "status": {
+                  "const": "available"
+                },
+                "value": {
+                  "pattern": "^[0-9]+\\.[0-9]{6}$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "status",
+                "value"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "target_mean_depth": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/unavailable"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "status": {
+                  "const": "available"
+                },
+                "value": {
+                  "pattern": "^[0-9]+\\.[0-9]{6}$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "status",
+                "value"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "target_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "target_size_bytes": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "target_territory_bases": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "target_uncovered_bases": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "target_uniformity_penalty_80": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/unavailable"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "status": {
+                  "const": "available"
+                },
+                "value": {
+                  "pattern": "^[0-9]+\\.[0-9]{6}$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "status",
+                "value"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "threshold_bases": {
+          "additionalProperties": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": "object"
+        },
+        "threshold_percentages": {
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/unavailable"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "status": {
+                    "const": "available"
+                  },
+                  "value": {
+                    "pattern": "^[0-9]+\\.[0-9]{6}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "status",
+                  "value"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "type": "object"
+        }
+      },
+      "required": [
+        "profile",
+        "coverage_profile",
+        "duplicate_adjusted",
+        "target_sha256",
+        "target_size_bytes",
+        "source_interval_count",
+        "near_distance_bases",
+        "genome_territory_bases",
+        "target_territory_bases",
+        "near_target_territory_bases",
+        "on_target_bases",
+        "near_target_bases",
+        "off_target_bases",
+        "target_depth_histogram",
+        "target_mean_depth",
+        "target_covered_bases",
+        "target_uncovered_bases",
+        "threshold_bases",
+        "threshold_percentages",
+        "dropout_target_count",
+        "target_enrichment",
+        "target_depth_20th_percentile",
+        "target_uniformity_penalty_80",
+        "per_target"
+      ],
+      "type": "object"
+    },
+    "unavailable": {
+      "additionalProperties": false,
+      "properties": {
+        "reason": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "status": {
+          "const": "unavailable"
+        }
+      },
+      "required": [
+        "status",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "zero_coverage_run": {
+      "additionalProperties": false,
+      "properties": {
+        "end": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "start": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ],
+      "type": "object"
     }
-  }
+  },
+  "$id": "https://aligngauge.dev/schemas/summary-1.1.0.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "alignment_counters": {
+      "$ref": "#/$defs/availability"
+    },
+    "application": {
+      "type": "object"
+    },
+    "coverage": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/unavailable"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "status": {
+              "const": "available"
+            },
+            "value": {
+              "$ref": "#/$defs/coverage"
+            }
+          },
+          "required": [
+            "status",
+            "value"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "metric_definitions": {
+      "type": "object"
+    },
+    "per_reference_counters": {
+      "$ref": "#/$defs/availability"
+    },
+    "schema_version": {
+      "const": "1.1.0"
+    },
+    "warnings": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "application",
+    "metric_definitions",
+    "alignment_counters",
+    "per_reference_counters",
+    "coverage",
+    "warnings"
+  ],
+  "title": "AlignGauge summary.json",
+  "type": "object"
 }

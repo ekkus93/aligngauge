@@ -4,9 +4,10 @@ use std::collections::BTreeMap;
 
 use crate::config::ResolvedConfig;
 use crate::json::{JsonValue, ToJson};
+use crate::targeted::TargetedCoverageSummary;
 
 /// Canonical summary schema version.
-pub const SUMMARY_SCHEMA_VERSION: &str = "1.0.0";
+pub const SUMMARY_SCHEMA_VERSION: &str = "1.1.0";
 /// Canonical provenance schema version.
 pub const PROVENANCE_SCHEMA_VERSION: &str = "1.0.0";
 
@@ -310,6 +311,8 @@ pub struct CoverageSummary {
     pub uncovered_reference_bases: u64,
     /// Per-reference reductions in BAM header order.
     pub per_reference: Vec<PerReferenceCoverageSummary>,
+    /// Native targeted-sequencing reductions, or an explicit unavailable reason.
+    pub targeted: Availability<TargetedCoverageSummary>,
 }
 
 impl ToJson for CoverageSummary {
@@ -325,6 +328,7 @@ impl ToJson for CoverageSummary {
             ),
             (String::from("per_reference"), self.per_reference.to_json()),
             (String::from("policy"), self.policy.to_json()),
+            (String::from("targeted"), self.targeted.to_json()),
             (
                 String::from("threshold_bases"),
                 self.threshold_bases.to_json(),

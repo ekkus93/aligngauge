@@ -231,6 +231,33 @@ impl CoverageMemoryPlan {
             ),
         ])))
     }
+
+    /// Reserve additional exact reduction state before traversal.
+    ///
+    /// # Errors
+    /// Returns `resource_limit` if the additional state would exceed the hard memory limit.
+    pub fn with_additional_reduction_bytes(
+        mut self,
+        additional_bytes: u64,
+    ) -> Result<Self, AlignGaugeError> {
+        self.reduction_state_bytes = self
+            .reduction_state_bytes
+            .checked_add(additional_bytes)
+            .ok_or_else(|| resource_error("coverage reduction-state budget overflowed"))?;
+        self.planned_peak_bytes = self
+            .planned_peak_bytes
+            .checked_add(additional_bytes)
+            .ok_or_else(|| resource_error("coverage planned peak overflowed"))?;
+        if self.planned_peak_bytes > self.memory_limit_bytes {
+            return Err(resource_error(
+                "targeted reduction state exceeds the coverage memory limit",
+            )
+            .with_detail("memory_limit_bytes", self.memory_limit_bytes)
+            .with_detail("planned_peak_bytes", self.planned_peak_bytes)
+            .with_detail("targeted_reduction_bytes", additional_bytes));
+        }
+        Ok(self)
+    }
 }
 
 fn validate_plan_inputs(
