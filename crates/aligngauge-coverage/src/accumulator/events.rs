@@ -58,11 +58,7 @@ impl CoverageCollector {
         Ok(true)
     }
 
-    pub(super) fn add_event(
-        &mut self,
-        position: u64,
-        change: i128,
-    ) -> Result<(), AlignGaugeError> {
+    pub(super) fn add_event(&mut self, position: u64, change: i128) -> Result<(), AlignGaugeError> {
         if position < self.chunk_start {
             return Err(internal_error(
                 "coverage event falls before the active chunk",
