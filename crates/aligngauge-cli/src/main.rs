@@ -8,7 +8,7 @@ use aligngauge_cli::{analyze_bam, analyze_release};
 use aligngauge_core::config::{parse_coverage_thresholds, parse_memory_limit};
 use aligngauge_core::{
     AlignGaugeError, AtomicPublisher, ConfigOverrides, ErrorCategory, LogFormat,
-    ProcessEnvironment, resolve_config,
+    ProcessEnvironment, ToJson, resolve_config,
 };
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]

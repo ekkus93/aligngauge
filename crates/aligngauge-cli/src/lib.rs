@@ -7,7 +7,8 @@ use std::time::Instant;
 
 use aligngauge_core::{
     AlignGaugeError, Availability, BuildInfo, ErrorCategory, InputIdentity, JsonValue,
-    MetricDefinition, OutputBundle, Provenance, ResolvedConfig, Summary, SystemInfo, Warning,
+    MetricDefinition, OutputBundle, Provenance, ResolvedConfig, Summary, SystemInfo, ToJson,
+    Warning,
 };
 use aligngauge_coverage::{CoverageCollector, CoverageMemoryPlan, CoverageOptions, CoverageReport};
 use aligngauge_hts::{BamReader, FieldPlan, ReaderOptions};
