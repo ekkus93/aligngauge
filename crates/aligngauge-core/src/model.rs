@@ -252,6 +252,45 @@ impl ToJson for CoveragePolicy {
     }
 }
 
+/// Per-reference canonical coverage reduction.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct PerReferenceCoverageSummary {
+    /// Reference name in BAM header order.
+    pub name: String,
+    /// Declared reference length.
+    pub length: u64,
+    /// Accepted aligned M/=/X bases assigned to this reference.
+    pub accepted_aligned_bases: u64,
+    /// Reference positions with depth greater than zero.
+    pub covered_reference_bases: u64,
+    /// Reference positions with zero depth.
+    pub uncovered_reference_bases: u64,
+    /// Deterministically rounded six-decimal mean depth.
+    pub mean_depth: String,
+}
+
+impl ToJson for PerReferenceCoverageSummary {
+    fn to_json(&self) -> JsonValue {
+        JsonValue::Object(BTreeMap::from([
+            (
+                String::from("accepted_aligned_bases"),
+                self.accepted_aligned_bases.to_json(),
+            ),
+            (
+                String::from("covered_reference_bases"),
+                self.covered_reference_bases.to_json(),
+            ),
+            (String::from("length"), self.length.to_json()),
+            (String::from("mean_depth"), self.mean_depth.to_json()),
+            (String::from("name"), self.name.to_json()),
+            (
+                String::from("uncovered_reference_bases"),
+                self.uncovered_reference_bases.to_json(),
+            ),
+        ]))
+    }
+}
+
 /// Exact canonical coverage results.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct CoverageSummary {
@@ -263,10 +302,14 @@ pub struct CoverageSummary {
     pub depth_histogram: BTreeMap<String, u64>,
     /// Reference bases meeting each configured threshold.
     pub threshold_bases: BTreeMap<String, u64>,
+    /// Cumulative threshold percentages with deterministic decimal rendering.
+    pub threshold_percentages: BTreeMap<String, String>,
     /// Covered reference bases.
     pub covered_reference_bases: u64,
     /// Uncovered reference bases.
     pub uncovered_reference_bases: u64,
+    /// Per-reference reductions in BAM header order.
+    pub per_reference: Vec<PerReferenceCoverageSummary>,
 }
 
 impl ToJson for CoverageSummary {
@@ -280,10 +323,15 @@ impl ToJson for CoverageSummary {
                 String::from("depth_histogram"),
                 self.depth_histogram.to_json(),
             ),
+            (String::from("per_reference"), self.per_reference.to_json()),
             (String::from("policy"), self.policy.to_json()),
             (
                 String::from("threshold_bases"),
                 self.threshold_bases.to_json(),
+            ),
+            (
+                String::from("threshold_percentages"),
+                self.threshold_percentages.to_json(),
             ),
             (
                 String::from("total_accepted_aligned_bases"),

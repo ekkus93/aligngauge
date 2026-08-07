@@ -35,6 +35,16 @@
         "0": 900,
         "1": 100
       },
+      "per_reference": [
+        {
+          "accepted_aligned_bases": 100,
+          "covered_reference_bases": 100,
+          "length": 1000,
+          "mean_depth": "0.100000",
+          "name": "chr1",
+          "uncovered_reference_bases": 900
+        }
+      ],
       "policy": {
         "include_duplicates": false,
         "include_qc_fail": false,
@@ -46,6 +56,9 @@
       },
       "threshold_bases": {
         "1": 100
+      },
+      "threshold_percentages": {
+        "1": "10.000000"
       },
       "total_accepted_aligned_bases": 100,
       "uncovered_reference_bases": 900

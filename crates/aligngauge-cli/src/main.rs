@@ -101,7 +101,10 @@ fn run_compatibility(input: &Path, format: CompatibilityFormat) -> ExitCode {
                     })
                     .to_json_pretty(),
                 CompatibilityFormat::SamtoolsFlagstat => report.render_samtools_flagstat(),
-                CompatibilityFormat::SamtoolsIdxstats => report.render_samtools_idxstats(),
+                CompatibilityFormat::SamtoolsIdxstats => match report.render_samtools_idxstats() {
+                    Ok(output) => output,
+                    Err(error) => return exit_with_error(&error, LogFormat::Human),
+                },
             };
             print!("{output}");
             ExitCode::SUCCESS

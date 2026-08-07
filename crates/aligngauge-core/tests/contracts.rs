@@ -4,8 +4,8 @@ use std::path::PathBuf;
 use aligngauge_core::{
     AlignmentCounters, Availability, BuildInfo, ConfigOverrides, CoveragePolicy, CoverageSummary,
     InputIdentity, JsonValue, MapEnvironment, MateOverlapPolicy, MetricDefinition,
-    PerReferenceCounters, Provenance, RecordInclusion, Summary, SystemInfo, ToJson, Warning,
-    resolve_config,
+    PerReferenceCounters, PerReferenceCoverageSummary, Provenance, RecordInclusion, Summary,
+    SystemInfo, ToJson, Warning, resolve_config,
 };
 
 #[test]
@@ -76,8 +76,17 @@ fn sample_summary() -> Summary {
         total_accepted_aligned_bases: 100,
         depth_histogram: BTreeMap::from([(String::from("0"), 900), (String::from("1"), 100)]),
         threshold_bases: BTreeMap::from([(String::from("1"), 100)]),
+        threshold_percentages: BTreeMap::from([(String::from("1"), String::from("10.000000"))]),
         covered_reference_bases: 100,
         uncovered_reference_bases: 900,
+        per_reference: vec![PerReferenceCoverageSummary {
+            name: String::from("chr1"),
+            length: 1_000,
+            accepted_aligned_bases: 100,
+            covered_reference_bases: 100,
+            uncovered_reference_bases: 900,
+            mean_depth: String::from("0.100000"),
+        }],
     };
 
     Summary::new(

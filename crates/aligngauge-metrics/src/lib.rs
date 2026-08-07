@@ -321,14 +321,14 @@ impl CounterReport {
     }
 
     /// Render exact Samtools 1.24 idxstats-compatible text.
-    #[must_use]
-    pub fn render_samtools_idxstats(&self) -> String {
+    ///
+    /// # Errors
+    /// Returns `compatibility_unavailable` instead of inventing zero when a required
+    /// per-reference unmapped value is unavailable.
+    pub fn render_samtools_idxstats(&self) -> Result<String, AlignGaugeError> {
         let mut output = String::new();
         for reference in &self.per_reference {
-            let unmapped = match reference.unmapped {
-                Availability::Available(value) => value,
-                Availability::Unavailable { .. } => 0,
-            };
+            let unmapped = compatibility_unmapped(reference)?;
             writeln!(
                 output,
                 "{}\t{}\t{}\t{}",
@@ -342,7 +342,19 @@ impl CounterReport {
             self.no_coordinate_mapped, self.no_coordinate_unmapped
         )
         .expect("writing to String cannot fail");
-        output
+        Ok(output)
+    }
+}
+
+fn compatibility_unmapped(reference: &PerReferenceCounters) -> Result<u64, AlignGaugeError> {
+    match &reference.unmapped {
+        Availability::Available(value) => Ok(*value),
+        Availability::Unavailable { reason } => Err(AlignGaugeError::new(
+            ErrorCategory::CompatibilityUnavailable,
+            "Samtools idxstats export requires a per-reference unmapped count",
+        )
+        .with_detail("reference", reference.name.clone())
+        .with_detail("unavailable_reason", reason.clone())),
     }
 }
 
@@ -702,4 +714,23 @@ fn metric_definitions() -> BTreeMap<String, MetricDefinition> {
         )
     })
     .collect()
+}
+
+#[cfg(test)]
+mod compatibility_export_tests {
+    use aligngauge_core::{Availability, ErrorCategory, PerReferenceCounters};
+
+    use super::compatibility_unmapped;
+
+    #[test]
+    fn unavailable_idxstats_source_metric_is_never_rendered_as_zero() {
+        let reference = PerReferenceCounters {
+            name: String::from("chr1"),
+            length: 100,
+            mapped: 1,
+            unmapped: Availability::unavailable("collector_not_enabled"),
+        };
+        let error = compatibility_unmapped(&reference).expect_err("must fail closed");
+        assert_eq!(error.category(), ErrorCategory::CompatibilityUnavailable);
+    }
 }

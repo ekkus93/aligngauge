@@ -4,51 +4,21 @@
   "title": "AlignGauge provenance.json",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "schema_version",
-    "application",
-    "resolved_config",
-    "input",
-    "header_identity",
-    "backend_versions",
-    "analysis_plan",
-    "resource_limits",
-    "stage_timings_ns",
-    "normalization_actions",
-    "compatibility_profiles",
-    "warnings",
-    "errors",
-    "system"
-  ],
+  "required": ["schema_version", "application", "resolved_config", "input", "header_identity", "backend_versions", "analysis_plan", "resource_limits", "stage_timings_ns", "normalization_actions", "compatibility_profiles", "warnings", "errors", "system"],
   "properties": {
-    "schema_version": { "const": "1.0.0" },
-    "application": { "type": "object" },
-    "resolved_config": { "type": "object" },
-    "input": { "type": "object" },
-    "header_identity": { "type": "object" },
-    "backend_versions": {
-      "type": "object",
-      "additionalProperties": { "type": "string" }
-    },
-    "analysis_plan": { "type": "object" },
-    "resource_limits": {
-      "type": "object",
-      "additionalProperties": { "type": "integer", "minimum": 0 }
-    },
-    "stage_timings_ns": {
-      "type": "object",
-      "additionalProperties": { "type": "integer", "minimum": 0 }
-    },
-    "normalization_actions": {
-      "type": "array",
-      "items": { "type": "string" }
-    },
-    "compatibility_profiles": {
-      "type": "array",
-      "items": { "type": "string" }
-    },
-    "warnings": { "type": "array" },
-    "errors": { "type": "array" },
-    "system": { "type": "object" }
+    "schema_version": {"const": "1.0.0"},
+    "application": {"type": "object"},
+    "resolved_config": {"type": "object", "required": ["schema_version", "input", "outdir", "threads", "io_threads", "memory_limit_bytes", "coverage_thresholds", "log_format", "quiet", "verbose", "preserve_failed_staging"]},
+    "input": {"type": "object", "required": ["path", "size_bytes", "checksum"]},
+    "header_identity": {"type": "object"},
+    "backend_versions": {"type": "object", "additionalProperties": {"type": "string"}},
+    "analysis_plan": {"type": "object", "required": ["bam_traversals", "field_plan", "coverage_profile", "coverage_strategy", "coverage_chunk_size_bases", "coverage_memory_plan", "counter_profile"]},
+    "resource_limits": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
+    "stage_timings_ns": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
+    "normalization_actions": {"type": "array", "items": {"type": "string"}},
+    "compatibility_profiles": {"type": "array", "items": {"type": "string"}},
+    "warnings": {"type": "array", "items": {"type": "object"}},
+    "errors": {"type": "array"},
+    "system": {"type": "object", "required": ["os", "architecture", "logical_cpus"]}
   }
 }

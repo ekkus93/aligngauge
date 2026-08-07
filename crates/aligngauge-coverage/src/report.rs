@@ -3,8 +3,8 @@
 use std::collections::BTreeMap;
 
 use aligngauge_core::{
-    AlignGaugeError, CoveragePolicy, CoverageSummary, JsonValue, MateOverlapPolicy, Provenance,
-    RecordInclusion, ToJson,
+    AlignGaugeError, CoveragePolicy, CoverageSummary, JsonValue, MateOverlapPolicy,
+    PerReferenceCoverageSummary, Provenance, RecordInclusion, ToJson,
 };
 
 use crate::plan::CoverageMemoryPlan;
@@ -126,8 +126,25 @@ impl CoverageReport {
                 .iter()
                 .map(|(threshold, bases)| (threshold.to_string(), *bases))
                 .collect(),
+            threshold_percentages: self
+                .threshold_percentages
+                .iter()
+                .map(|(threshold, percentage)| (threshold.to_string(), percentage.clone()))
+                .collect(),
             covered_reference_bases: self.covered_reference_bases,
             uncovered_reference_bases: self.uncovered_reference_bases,
+            per_reference: self
+                .per_reference
+                .iter()
+                .map(|reference| PerReferenceCoverageSummary {
+                    name: reference.name.clone(),
+                    length: reference.length,
+                    accepted_aligned_bases: reference.accepted_aligned_bases,
+                    covered_reference_bases: reference.covered_reference_bases,
+                    uncovered_reference_bases: reference.uncovered_reference_bases,
+                    mean_depth: reference.mean_depth.clone(),
+                })
+                .collect(),
         }
     }
 

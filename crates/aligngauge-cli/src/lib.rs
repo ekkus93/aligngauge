@@ -27,6 +27,35 @@ pub struct BamCounts {
     pub unmapped: u64,
 }
 
+/// Deterministic release-pipeline checkpoints exposed for fault-injection tests.
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum ReleaseCheckpoint {
+    /// Immediately before the counter collector observes a validated record.
+    BeforeCounterCollector,
+    /// After counters observe a record but before coverage observes it.
+    BeforeCoverageCollector,
+    /// Immediately before canonical output serialization.
+    BeforeSerialization,
+}
+
+/// Hook used to inject deterministic release-pipeline failures.
+pub trait ReleaseHook {
+    /// Observe one checkpoint.
+    ///
+    /// # Errors
+    /// Returning an error aborts the release operation immediately.
+    fn checkpoint(&mut self, checkpoint: ReleaseCheckpoint) -> Result<(), AlignGaugeError>;
+}
+
+#[derive(Default)]
+struct NoopReleaseHook;
+
+impl ReleaseHook for NoopReleaseHook {
+    fn checkpoint(&mut self, _checkpoint: ReleaseCheckpoint) -> Result<(), AlignGaugeError> {
+        Ok(())
+    }
+}
+
 /// Final in-memory v0.1 analysis result produced by one BAM traversal.
 #[derive(Debug)]
 pub struct ReleaseReport {
@@ -75,6 +104,37 @@ impl ReleaseReport {
             self.summary.to_json_pretty().into_bytes(),
             self.provenance.to_json_pretty().into_bytes(),
         )
+    }
+
+    /// Build the canonical bundle after an injectable serialization checkpoint.
+    ///
+    /// # Errors
+    /// Returns the injected typed failure before any output bundle is exposed.
+    pub fn output_bundle_with_hook(
+        &self,
+        hook: &mut impl ReleaseHook,
+    ) -> Result<OutputBundle, AlignGaugeError> {
+        hook.checkpoint(ReleaseCheckpoint::BeforeSerialization)?;
+        Ok(self.output_bundle())
+    }
+
+    /// Build the canonical bundle plus pinned Samtools compatibility files.
+    ///
+    /// # Errors
+    /// Fails closed if a required compatibility source metric is unavailable.
+    pub fn output_bundle_with_samtools_compatibility(
+        &self,
+    ) -> Result<OutputBundle, AlignGaugeError> {
+        let mut bundle = self.output_bundle();
+        bundle.insert(
+            "samtools.flagstat.txt",
+            self.counters.render_samtools_flagstat().into_bytes(),
+        )?;
+        bundle.insert(
+            "samtools.idxstats.txt",
+            self.counters.render_samtools_idxstats()?.into_bytes(),
+        )?;
+        Ok(bundle)
     }
 
     /// Stable human-readable v0.1 completion summary.
@@ -151,6 +211,12 @@ pub fn analyze_bam(path: impl AsRef<Path>) -> Result<CounterReport, AlignGaugeEr
 /// # Errors
 /// Returns a typed configuration, resource, input-validation, collector, or provenance failure.
 pub fn analyze_release(config: &ResolvedConfig) -> Result<ReleaseReport, AlignGaugeError> {
+    analyze_release_with_hook(config, &mut NoopReleaseHook)
+}
+
+fn release_coverage_setup(
+    config: &ResolvedConfig,
+) -> Result<(CoverageOptions, CoverageMemoryPlan), AlignGaugeError> {
     let coverage_options = CoverageOptions::new(
         config.memory_limit_bytes,
         config.coverage_thresholds.clone(),
@@ -160,6 +226,18 @@ pub fn analyze_release(config: &ResolvedConfig) -> Result<ReleaseReport, AlignGa
         1,
         coverage_options.chunk_size_override,
     )?;
+    Ok((coverage_options, memory_plan))
+}
+
+/// Analyze one v0.1 run with deterministic fault-injection checkpoints.
+///
+/// # Errors
+/// Returns the first injected or production release failure.
+pub fn analyze_release_with_hook(
+    config: &ResolvedConfig,
+    hook: &mut impl ReleaseHook,
+) -> Result<ReleaseReport, AlignGaugeError> {
+    let (coverage_options, memory_plan) = release_coverage_setup(config)?;
     let input_identity = input_identity(&config.input)?;
     let field_plan = FieldPlan::counters().union(&FieldPlan::coverage());
     let effective_io_threads = effective_io_threads(config.io_threads);
@@ -178,7 +256,9 @@ pub fn analyze_release(config: &ResolvedConfig) -> Result<ReleaseReport, AlignGa
         CoverageCollector::new(reader.header(), coverage_options.thresholds, memory_plan)?;
 
     while let Some(record) = reader.next_record()? {
+        hook.checkpoint(ReleaseCheckpoint::BeforeCounterCollector)?;
         counter_collector.observe(&record)?;
+        hook.checkpoint(ReleaseCheckpoint::BeforeCoverageCollector)?;
         coverage_collector.observe(&record)?;
     }
     let traversal_ns = elapsed_ns(traversal_started, "BAM traversal")?;

@@ -56,7 +56,7 @@ fn per_reference_and_no_coordinate_counts_preserve_header_order() {
     assert_eq!(references[1].mapped, 1);
     assert_eq!(basic.no_coordinate_unmapped(), 1);
     assert_eq!(
-        basic.render_samtools_idxstats(),
+        basic.render_samtools_idxstats().expect("render idxstats"),
         "chr1\t1000000\t1\t0\nchr2\t1000000\t1\t0\n*\t0\t0\t1\n"
     );
 }
