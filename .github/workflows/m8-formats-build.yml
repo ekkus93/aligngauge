@@ -29,6 +29,56 @@ jobs:
           rustc --version --verbose
           cargo --version
 
+      - name: Apply exact lint corrections
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              file = Path(path)
+              text = file.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one match, found {count}")
+              file.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              "crates/aligngauge-formats/src/lib.rs",
+              "//! Validated text formats and deterministic target normalization for AlignGauge.",
+              "//! Validated text formats and deterministic target normalization for `AlignGauge`.",
+          )
+          replace_once(
+              "crates/aligngauge-formats/src/bed.rs",
+              '''        if let Some(last) = merged.last_mut() {
+              if last.contig_index == interval.contig_index && interval.start <= last.end {
+                  if interval.start == last.end {
+                      bump(&mut adjacency_merges)?;
+                  } else {
+                      bump(&mut overlap_merges)?;
+                  }
+                  last.end = last.end.max(interval.end);
+                  last.source_interval_indices.push(interval.source_index);
+                  continue;
+              }
+          }''',
+              '''        if let Some(last) = merged.last_mut()
+              && last.contig_index == interval.contig_index
+              && interval.start <= last.end
+          {
+              if interval.start == last.end {
+                  bump(&mut adjacency_merges)?;
+              } else {
+                  bump(&mut overlap_merges)?;
+              }
+              last.end = last.end.max(interval.end);
+              last.source_interval_indices.push(interval.source_index);
+              continue;
+          }''',
+          )
+          PY
+
       - name: Refresh lockfile and formatting
         run: |
           cargo update --workspace
