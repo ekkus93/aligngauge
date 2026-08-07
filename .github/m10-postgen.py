@@ -162,3 +162,29 @@ if text.count(marker) != 1:
     raise SystemExit(f"format helper marker count={text.count(marker)}")
 text = text.replace(marker, helpers + marker, 1)
 p.write_text(text)
+
+reader = Path("crates/aligngauge-hts/src/reader.rs")
+reader_text = reader.read_text()
+old_plan = '''fn validate_plan(plan: &FieldPlan) -> Result<(), AlignGaugeError> {
+    for unsupported in [RequiredField::Sequence, RequiredField::Qualities] {
+        if plan.requires(unsupported) {
+            return Err(AlignGaugeError::new(
+                ErrorCategory::UnsupportedRecord,
+                "v0.1 reader plan cannot materialize sequence or quality fields",
+            )
+            .with_detail("field", unsupported.as_str()));
+        }
+    }
+'''
+new_plan = '''fn validate_plan(plan: &FieldPlan) -> Result<(), AlignGaugeError> {
+    if plan.requires(RequiredField::Sequence) {
+        return Err(AlignGaugeError::new(
+            ErrorCategory::UnsupportedRecord,
+            "reader plan cannot materialize packed sequence bases",
+        )
+        .with_detail("field", RequiredField::Sequence.as_str()));
+    }
+'''
+if reader_text.count(old_plan) != 1:
+    raise SystemExit(f"validate_plan guard count={reader_text.count(old_plan)}")
+reader.write_text(reader_text.replace(old_plan, new_plan, 1))
