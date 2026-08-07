@@ -3,7 +3,7 @@
 **Repository:** `ekkus93/aligngauge`
 
 **Companion specification:** `docs/DNA_QC_ENGINE_SPEC.md`  
-**Status:** Ralph Loop active — `v0.2.0` released; Milestone 8 complete; Milestone 9 active
+**Status:** Ralph Loop active — `v0.2.0` released; Milestone 9 implementation/evidence complete; v0.3 exact release gate pending
 **Last updated:** 2026-08-07  
 **Supersedes:** Initial `DNA_QC_ENGINE_TODO.md` dated 2026-08-05
 
@@ -635,25 +635,27 @@ Implement SPEC §9.
 
 ## Milestone 9 — Targeted metrics
 
-- [ ] Reuse the canonical chunked coverage engine.
-- [ ] Target territory.
-- [ ] On-target bases.
-- [ ] Near-target bases.
-- [ ] Off-target bases.
-- [ ] Per-target mean depth.
-- [ ] Threshold percentages.
-- [ ] Zero-coverage target runs.
-- [ ] Per-target dropout report.
-- [ ] Duplicate-adjusted profile where defined.
-- [ ] Fold enrichment with explicit denominator.
-- [ ] Fold-80 or ADR-approved named equivalent.
-- [ ] HG002 exome/target differential report.
-- [ ] Create `docs/evidence/V0_3_TARGETED_VALIDATION.md`.
+**Status:** Implementation and evidence complete — pre-evidence validated head `04ba604c120256b55c51a8a5e7871e4f9850181d`; Permanent CI run `31203909778`, job `92950210259`; Full Runtime Validation run `31203909861`, job `92950210705`; Reference Validation run `31203909785`, job `92950210420`; Targeted Validation run `31203909781`, job `92950210864`; all successful. Evidence: `docs/evidence/V0_3_TARGETED_VALIDATION.md`. Final `v0.3.0` publication remains gated on exact evidence/release-candidate validation.
+
+- [x] Reuse the canonical chunked coverage engine.
+- [x] Target territory.
+- [x] On-target bases.
+- [x] Near-target bases.
+- [x] Off-target bases.
+- [x] Per-target mean depth.
+- [x] Threshold percentages.
+- [x] Zero-coverage target runs.
+- [x] Per-target dropout report.
+- [x] Duplicate-adjusted profile where defined.
+- [x] Fold enrichment with explicit denominator.
+- [x] Fold-80 or ADR-approved named equivalent.
+- [x] HG002 exome/target differential report.
+- [x] Create `docs/evidence/V0_3_TARGETED_VALIDATION.md`.
 
 ### v0.3 release gate
 
-- [ ] Every target metric has a specification definition and fixture.
-- [ ] No compatibility label is used without differential evidence.
+- [x] Every target metric has a specification definition and fixture.
+- [x] No compatibility label is used without differential evidence.
 - [ ] Permanent CI succeeds on the exact release commit.
 
 ---
