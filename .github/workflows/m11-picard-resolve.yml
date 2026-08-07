@@ -1,0 +1,24 @@
+name: M11 Picard Resolve
+
+on:
+  push:
+    branches:
+      - milestone-11-picard-profiles
+    paths:
+      - .github/workflows/m11-picard-resolve.yml
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pull Picard 3.4.0 and report immutable identity
+        run: |
+          set -euo pipefail
+          image='broadinstitute/picard:3.4.0'
+          docker pull "$image"
+          docker image inspect "$image" --format '{{json .RepoDigests}}'
+          docker run --rm "$image" --version
+          docker run --rm --entrypoint /bin/sh "$image" -c 'command -v java; java -version; command -v R || true; command -v Rscript || true; ls -l /usr/picard /usr/local/bin 2>/dev/null | head -80'
