@@ -25,6 +25,6 @@ Standalone `inspect` and `validate-reference` commands remain deferred until the
 
 Permanent runtime and release E2E validation exercise compatibility and release paths independently so compatibility behavior cannot silently acquire release-mode requirements. v0.2 CRAM/reference evidence is recorded in `docs/evidence/V0_2_CRAM_VALIDATION.md`; v0.3 targeted evidence is recorded in `docs/evidence/V0_3_TARGETED_VALIDATION.md`.
 
-`v0.2.0` remains the latest published release until the exact v0.3 release-candidate documentation commit passes Permanent CI, Full Runtime Validation, Reference Validation, Targeted Validation, and HG002 Preparation Validation and is then published as `v0.3.0` without moving the validated target SHA.
+`v0.3.0` is published from exact release SHA `eccd45157d34ada00a3403a2b24d606956878b62`. Before publication that exact SHA passed Permanent CI, Full Runtime Validation, Reference Validation, Targeted Validation, and HG002 Preparation Validation; the release tag remains policy-pinned to that validated commit while `master` may advance with post-release documentation.
 
 This release-surface document is intentionally part of all five v0.3 release-validation trigger sets so a release-candidate documentation change cannot bypass runtime, reference, targeted, or HG002 qualification.

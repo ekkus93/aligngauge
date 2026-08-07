@@ -3,7 +3,7 @@
 **Repository:** `ekkus93/aligngauge`
 
 **Companion specification:** `docs/DNA_QC_ENGINE_SPEC.md`  
-**Status:** Ralph Loop active — `v0.2.0` released; Milestone 9 implementation/evidence complete; v0.3 exact release gate pending
+**Status:** Ralph Loop active — `v0.3.0` released; Milestone 9 complete; Milestone 10 next
 **Last updated:** 2026-08-07  
 **Supersedes:** Initial `DNA_QC_ENGINE_TODO.md` dated 2026-08-05
 
@@ -635,7 +635,7 @@ Implement SPEC §9.
 
 ## Milestone 9 — Targeted metrics
 
-**Status:** Implementation and evidence complete — pre-evidence validated head `04ba604c120256b55c51a8a5e7871e4f9850181d`; Permanent CI run `31203909778`, job `92950210259`; Full Runtime Validation run `31203909861`, job `92950210705`; Reference Validation run `31203909785`, job `92950210420`; Targeted Validation run `31203909781`, job `92950210864`; all successful. Evidence: `docs/evidence/V0_3_TARGETED_VALIDATION.md`. Final `v0.3.0` publication remains gated on exact evidence/release-candidate validation.
+**Status:** Complete — `v0.3.0` published from exact release SHA `eccd45157d34ada00a3403a2b24d606956878b62`; Permanent CI run `31205398918`, job `92955023998`; Full Runtime Validation run `31205397896`, job `92955018188`; Reference Validation run `31205397729`, job `92955080287`; Targeted Validation run `31205397861`, job `92955082757`; HG002 Preparation Validation run `31205397734`, job `92955018025`; all successful. Evidence: `docs/evidence/V0_3_TARGETED_VALIDATION.md`.
 
 - [x] Reuse the canonical chunked coverage engine.
 - [x] Target territory.
@@ -656,7 +656,7 @@ Implement SPEC §9.
 
 - [x] Every target metric has a specification definition and fixture.
 - [x] No compatibility label is used without differential evidence.
-- [ ] Permanent CI succeeds on the exact release commit.
+- [x] Permanent CI succeeds on the exact release commit.
 
 ---
 

@@ -8,13 +8,11 @@ AlignGauge analyzes existing aligned sequencing data. It is not software for con
 
 ## Status
 
-AlignGauge `v0.2.0` is the latest published release. The v0.2 tag is pinned by release policy to exact release/evidence SHA `ce3aa273da40c679c292e588584781ab1df241de`. The earlier v0.1 tag remains pinned by release policy to validated evidence SHA `9423a9d3496459fdbceb2e7bc5178b4b3100357c` (product implementation SHA `f93001cf22a2315f01e6b857c295720d99e392ca`).
-
-The v0.3 targeted-sequencing implementation and evidence are merged to `master` at `ffa0994369eb9981821249207f2abc2c6202ef2f`. That exact merge SHA passed Permanent CI, Full Runtime Validation, Reference Validation, Targeted Validation, and HG002 Preparation Validation. `v0.3.0` is not published until this release-candidate documentation commit independently passes the same release-relevant gates.
+AlignGauge `v0.3.0` is the latest published release. The v0.3 tag is pinned by release policy to exact release SHA `eccd45157d34ada00a3403a2b24d606956878b62` (GitHub release ID `367127246`). That exact release SHA passed Permanent CI, Full Runtime Validation, Reference Validation, Targeted Validation, and HG002 Preparation Validation before publication. The v0.2 tag remains pinned by release policy to exact release/evidence SHA `ce3aa273da40c679c292e588584781ab1df241de`; the earlier v0.1 tag remains pinned to validated evidence SHA `9423a9d3496459fdbceb2e7bc5178b4b3100357c` (product implementation SHA `f93001cf22a2315f01e6b857c295720d99e392ca`).
 
 - v0.1: local coordinate-sorted BAM, CPU counters, exact canonical coverage, JSON/provenance, and atomic output publication.
 - v0.2: adds CRAM analysis with an explicit local FASTA, fail-closed SN/LN/M5 validation, actual local-reference provenance, BAM/CRAM canonical equivalence, and production HTSlib builds with remote reference transports excluded.
-- v0.3 candidate: adds fail-closed BED3–BED12 target parsing, deterministic target normalization, `--targets <BED>`, `--near-distance <N>` (default 250), exact on/near/off-target partitioning, per-source target depth/dropout reporting, native target enrichment, and `target_uniformity_penalty_80`.
+- v0.3: adds fail-closed BED3–BED12 target parsing, deterministic target normalization, `--targets <BED>`, `--near-distance <N>` (default 250), exact on/near/off-target partitioning, per-source target depth/dropout reporting, native target enrichment, and `target_uniformity_penalty_80`.
 - Targeted analysis reuses the exact canonical chunked coverage sweep; counters, whole-genome coverage, and targeted reductions remain one alignment traversal.
 - v0.3 makes no Picard `CollectHsMetrics`, `FOLD_ENRICHMENT`, or `FOLD_80_BASE_PENALTY` compatibility claim. Comparable target-depth primitives are instead validated exactly against pinned Samtools 1.24 under network isolation.
 - CRAM reference mismatch or absence is fatal; AlignGauge does not silently fall back to inherited local or remote providers.
@@ -37,6 +35,7 @@ RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features --no-deps
 
 ## Planning and evidence
 
+- [v0.3.0 release](https://github.com/ekkus93/aligngauge/releases/tag/v0.3.0)
 - [v0.2.0 release](https://github.com/ekkus93/aligngauge/releases/tag/v0.2.0)
 - [v0.1.0 release](https://github.com/ekkus93/aligngauge/releases/tag/v0.1.0)
 - [Product and architecture specification](docs/DNA_QC_ENGINE_SPEC.md)

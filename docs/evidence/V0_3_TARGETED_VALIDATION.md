@@ -6,7 +6,7 @@
 **Native metric profile:** `aligngauge-targeted-v0.3`  
 **Underlying coverage profile:** `aligngauge-v0.1`  
 **Summary schema:** `1.1.0`  
-**Disposition:** Implementation and required differential validation are complete. Final v0.3 release acceptance remains gated on Permanent CI for the exact evidence/release candidate.
+**Disposition:** Complete — `v0.3.0` was published from exact validated release SHA `eccd45157d34ada00a3403a2b24d606956878b62` after all five release-relevant gates succeeded.
 
 ## Scope
 
@@ -362,14 +362,20 @@ Permanent CI includes strict Clippy, the complete workspace test suite, JSON sch
 
 Reference Validation explicitly projects schema 1.1 non-targeted coverage onto the historical v0.1 differential contract only after requiring `targeted = unavailable("target_bed_not_supplied")`; it does not silently ignore available target data.
 
-## Remaining release gate
+## v0.3.0 release closure
 
-Milestone 9 implementation and differential evidence are complete. The remaining v0.3 release operation is procedural:
+Milestone 9 was merged by PR #3. The merged product/evidence commit was `ffa0994369eb9981821249207f2abc2c6202ef2f`, which passed Permanent CI, Full Runtime Validation, Reference Validation, Targeted Validation, and HG002 Preparation Validation before release-candidate preparation.
 
-1. commit this evidence and the corresponding TODO state;
-2. require Permanent CI and the standing Runtime/Reference/Targeted gates on the exact evidence/release candidate;
-3. merge only the exact green PR head;
-4. validate the exact merged `master` SHA;
-5. publish `v0.3.0` only from the exact validated release SHA.
+The final release candidate was `eccd45157d34ada00a3403a2b24d606956878b62`. All five release-relevant gates succeeded on that exact SHA:
 
-Until those exact-SHA gates complete, this document does not claim that `v0.3.0` has been released.
+| Gate | Run | Job | Result |
+| --- | --- | --- | --- |
+| Permanent CI | `31205398918` | `92955023998` | success |
+| Full Runtime Validation | `31205397896` | `92955018188` | success |
+| Reference Validation | `31205397729` | `92955080287` | success |
+| Targeted Validation | `31205397861` | `92955082757` | success |
+| HG002 Preparation Validation | `31205397734` | `92955018025` | success |
+
+GitHub release `v0.3.0` (release ID `367127246`) was published on 2026-08-07 with tag target exactly `eccd45157d34ada00a3403a2b24d606956878b62`. The release is neither a draft nor a prerelease. One-time publisher run `31205792390`, job `92956442182`, succeeded and verified the tag target and release metadata before its temporary publisher branch was removed by cleanup run `31205917061`, job `92956811061`.
+
+The release tag remains policy-pinned to the validated release SHA. Post-release documentation may advance `master` without moving the `v0.3.0` tag.
