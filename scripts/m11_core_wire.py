@@ -7,7 +7,7 @@ def replace_once(path: str, old: str, new: str, *, allowed_count: int = 1) -> No
     count = text.count(old)
     if count != allowed_count:
         raise SystemExit(f"{path}: expected {allowed_count} match(es), found {count}: {old[:80]!r}")
-    p.write_text(text.replace(old, new, 1))
+    p.write_text(text.replace(old, new, allowed_count))
 
 # Field plan: expose sequence/noise only for the explicit Picard alignment profile,
 # and CIGAR/mate/TLEN only for the Picard insert profile.
@@ -26,7 +26,6 @@ replace_once(path,
 "    /// Add optional tags used by diagnostic and later metric collectors.\n",
 "    /// Build the Picard 3.4.0 reference-independent alignment-summary plan.\n    #[must_use]\n    pub fn picard_alignment_summary() -> Self {\n        Self::from_fields([\n            RequiredField::Flags,\n            RequiredField::Coordinates,\n            RequiredField::MappingQuality,\n            RequiredField::Sequence,\n            RequiredField::NoiseTag,\n        ])\n    }\n\n    /// Build the Picard 3.4.0 default ALL_READS insert-size plan.\n    #[must_use]\n    pub fn picard_insert_size() -> Self {\n        Self::from_fields([\n            RequiredField::Flags,\n            RequiredField::Coordinates,\n            RequiredField::MateCoordinates,\n            RequiredField::Cigar,\n            RequiredField::TemplateLength,\n        ])\n    }\n\n    /// Add optional tags used by diagnostic and later metric collectors.\n")
 
-# Reader: materialize sequence only on request and expose requested XN state.
 path = "crates/aligngauge-hts/src/reader.rs"
 replace_once(path,
 "    query_length: u64,\n    qualities_requested: bool,\n    template_length: FieldValue<i32>,\n",
@@ -63,14 +62,12 @@ replace_once(path,
 "fn validate_plan(plan: &FieldPlan) -> Result<(), AlignGaugeError> {\n    if plan.requires(RequiredField::Sequence) {\n        return Err(AlignGaugeError::new(\n            ErrorCategory::UnsupportedRecord,\n            \"reader plan cannot materialize packed sequence bases\",\n        )\n        .with_detail(\"field\", RequiredField::Sequence.as_str()));\n    }\n    if !plan.requires(RequiredField::Flags) || !plan.requires(RequiredField::Coordinates) {\n",
 "fn validate_plan(plan: &FieldPlan) -> Result<(), AlignGaugeError> {\n    if !plan.requires(RequiredField::Flags) || !plan.requires(RequiredField::Coordinates) {\n")
 
-# Metrics public module/export.
 path = "crates/aligngauge-metrics/src/lib.rs"
 replace_once(path, "mod samtools_stats;\n", "pub mod picard;\nmod samtools_stats;\n")
 replace_once(path,
 "pub use samtools_stats::{\n",
 "pub use picard::{\n    PICARD_ALIGNMENT_SUMMARY_PROFILE, PICARD_INSERT_SIZE_PROFILE, PICARD_VERSION,\n    PicardAlignmentCategory, PicardAlignmentSummaryCollector, PicardAlignmentSummaryReport,\n    PicardAlignmentSummaryRow, PicardInsertSizeCollector, PicardInsertSizeReport,\n    PicardInsertSizeRow, PicardPairOrientation, analyze_picard_alignment_summary_bam,\n    analyze_picard_insert_size_bam,\n};\npub use samtools_stats::{\n")
 
-# CLI format options.
 path = "crates/aligngauge-cli/src/main.rs"
 replace_once(path,
 "use aligngauge_metrics::analyze_samtools_stats_bam;\n",
