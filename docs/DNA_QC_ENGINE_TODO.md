@@ -3,7 +3,7 @@
 **Repository:** `ekkus93/aligngauge`
 
 **Companion specification:** `docs/DNA_QC_ENGINE_SPEC.md`  
-**Status:** Ralph Loop active — `v0.3.0` released; Milestone 9 complete; Milestone 10 next
+**Status:** Ralph Loop active — `v0.3.0` released; Milestone 9 complete; Milestone 10 active
 **Last updated:** 2026-08-07  
 **Supersedes:** Initial `DNA_QC_ENGINE_TODO.md` dated 2026-08-05
 
@@ -664,9 +664,11 @@ Implement SPEC §9.
 
 ## Milestone 10 — Samtools stats subsets
 
-- [ ] Select exact sections consumed by target MultiQC versions.
-- [ ] Pin Samtools.
-- [ ] Define every metric and filter.
+**Status:** Active — profile frozen by ADR-0007: Samtools 1.24 + MultiQC 1.35; exact ordinary `SN` + `IS` only.
+
+- [x] Select exact sections consumed by target MultiQC versions.
+- [x] Pin Samtools 1.24 and MultiQC 1.35.
+- [x] Define every supported metric/filter and the unsupported-section boundary in SPEC §12.8 and ADR-0007.
 - [ ] Implement canonical accumulators.
 - [ ] Derive compatibility text.
 - [ ] Differential fixtures.
