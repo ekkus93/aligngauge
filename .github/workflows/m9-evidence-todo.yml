@@ -1,0 +1,102 @@
+name: One-time Milestone 9 evidence closer
+
+on:
+  push:
+    branches:
+      - milestone-9-targeted-metrics
+    paths:
+      - .github/workflows/m9-evidence-todo.yml
+
+permissions:
+  contents: write
+
+jobs:
+  close:
+    name: docs/m9-evidence-state
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: true
+
+      - name: Update exact Milestone 9 TODO state
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('docs/DNA_QC_ENGINE_TODO.md')
+          text = path.read_text()
+          old_status = '**Status:** Ralph Loop active — `v0.2.0` released; Milestone 8 complete; Milestone 9 active'
+          new_status = '**Status:** Ralph Loop active — `v0.2.0` released; Milestone 9 implementation/evidence complete; v0.3 exact release gate pending'
+          if text.count(old_status) != 1:
+              raise SystemExit(f'expected one top status, found {text.count(old_status)}')
+          text = text.replace(old_status, new_status, 1)
+
+          old = '''## Milestone 9 — Targeted metrics
+
+- [ ] Reuse the canonical chunked coverage engine.
+- [ ] Target territory.
+- [ ] On-target bases.
+- [ ] Near-target bases.
+- [ ] Off-target bases.
+- [ ] Per-target mean depth.
+- [ ] Threshold percentages.
+- [ ] Zero-coverage target runs.
+- [ ] Per-target dropout report.
+- [ ] Duplicate-adjusted profile where defined.
+- [ ] Fold enrichment with explicit denominator.
+- [ ] Fold-80 or ADR-approved named equivalent.
+- [ ] HG002 exome/target differential report.
+- [ ] Create `docs/evidence/V0_3_TARGETED_VALIDATION.md`.
+
+### v0.3 release gate
+
+- [ ] Every target metric has a specification definition and fixture.
+- [ ] No compatibility label is used without differential evidence.
+- [ ] Permanent CI succeeds on the exact release commit.
+'''
+          new = '''## Milestone 9 — Targeted metrics
+
+**Status:** Implementation and evidence complete — pre-evidence validated head `04ba604c120256b55c51a8a5e7871e4f9850181d`; Permanent CI run `31203909778`, job `92950210259`; Full Runtime Validation run `31203909861`, job `92950210705`; Reference Validation run `31203909785`, job `92950210420`; Targeted Validation run `31203909781`, job `92950210864`; all successful. Evidence: `docs/evidence/V0_3_TARGETED_VALIDATION.md`. Final `v0.3.0` publication remains gated on exact evidence/release-candidate validation.
+
+- [x] Reuse the canonical chunked coverage engine.
+- [x] Target territory.
+- [x] On-target bases.
+- [x] Near-target bases.
+- [x] Off-target bases.
+- [x] Per-target mean depth.
+- [x] Threshold percentages.
+- [x] Zero-coverage target runs.
+- [x] Per-target dropout report.
+- [x] Duplicate-adjusted profile where defined.
+- [x] Fold enrichment with explicit denominator.
+- [x] Fold-80 or ADR-approved named equivalent.
+- [x] HG002 exome/target differential report.
+- [x] Create `docs/evidence/V0_3_TARGETED_VALIDATION.md`.
+
+### v0.3 release gate
+
+- [x] Every target metric has a specification definition and fixture.
+- [x] No compatibility label is used without differential evidence.
+- [ ] Permanent CI succeeds on the exact release commit.
+'''
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one Milestone 9 block, found {text.count(old)}')
+          path.write_text(text.replace(old, new, 1))
+          PY
+          git diff --check
+          changed="$(git status --short | awk '{print $2}' | sort)"
+          [[ "${changed}" == "docs/DNA_QC_ENGINE_TODO.md" ]] || { git status --short; exit 1; }
+
+      - name: Commit evidence-state TODO
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/DNA_QC_ENGINE_TODO.md
+          git commit -m 'docs: record Milestone 9 evidence state'
+          git push origin HEAD:milestone-9-targeted-metrics
