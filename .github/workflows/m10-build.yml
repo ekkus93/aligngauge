@@ -41,8 +41,14 @@ jobs:
               '        Self::from_fields([\\n            RequiredField::Flags,\\n            RequiredField::Coordinates,\\n            RequiredField::Cigar,\\n        ])\\n    }',
           )
           text = text.replace('        Self::from_fields(&[\\n', '        Self::from_fields([\\n')
-          marker = '    if count != 1:\\n'
-          injected = '    if count == 2 and path == "crates/aligngauge-hts/src/reader.rs" and old == "    mapping_quality: FieldValue<u8>,\\\\n    cigar: FieldValue<CigarFacts>,":\\n        p.write_text(text.replace(old, new, 1))\\n        return\\n    if count != 1:\\n'
+          marker = '    if count != 1:' + chr(10)
+          lines = [
+              '    if count == 2 and path == "crates/aligngauge-hts/src/reader.rs" and old == "    mapping_quality: FieldValue<u8>,\\n    cigar: FieldValue<CigarFacts>,":',
+              '        p.write_text(text.replace(old, new, 1))',
+              '        return',
+              '    if count != 1:',
+          ]
+          injected = chr(10).join(lines) + chr(10)
           if text.count(marker) != 1:
               raise SystemExit(f'replace_once marker count={text.count(marker)}')
           text = text.replace(marker, injected, 1)
