@@ -32,6 +32,14 @@ name = "aligngauge-core"
 version = "0.1.0"
 
 [[package]]
+name = "aligngauge-coverage"
+version = "0.0.0"
+dependencies = [
+ "aligngauge-core",
+ "aligngauge-hts",
+]
+
+[[package]]
 name = "aligngauge-hts"
 version = "0.0.0"
 dependencies = [

@@ -48,7 +48,9 @@ impl CoverageOptions {
     /// Returns `configuration` for zero memory, zero thresholds, or an empty threshold set.
     pub fn new(memory_limit_bytes: u64, mut thresholds: Vec<u32>) -> Result<Self, AlignGaugeError> {
         if memory_limit_bytes == 0 {
-            return Err(configuration_error("coverage memory limit must be greater than zero"));
+            return Err(configuration_error(
+                "coverage memory limit must be greater than zero",
+            ));
         }
         if thresholds.is_empty() {
             return Err(configuration_error(
@@ -123,10 +125,14 @@ impl CoverageMemoryPlan {
         chunk_size_override: Option<usize>,
     ) -> Result<Self, AlignGaugeError> {
         if active_tracks == 0 {
-            return Err(resource_error("coverage requires at least one active track"));
+            return Err(resource_error(
+                "coverage requires at least one active track",
+            ));
         }
         if memory_limit_bytes == 0 {
-            return Err(resource_error("coverage memory limit must be greater than zero"));
+            return Err(resource_error(
+                "coverage memory limit must be greater than zero",
+            ));
         }
 
         let tracks = u64_from_usize(active_tracks, "active coverage tracks")?;
@@ -177,7 +183,9 @@ impl CoverageMemoryPlan {
         let planner_chunk = maximum_by_memory.clamp(MIN_CHUNK_BASES, MAX_CHUNK_BASES);
         let chunk_size_bases = match chunk_size_override {
             Some(0) => {
-                return Err(resource_error("coverage chunk size must be greater than zero"));
+                return Err(resource_error(
+                    "coverage chunk size must be greater than zero",
+                ));
             }
             Some(requested) if requested > maximum_by_memory => {
                 return Err(resource_error(

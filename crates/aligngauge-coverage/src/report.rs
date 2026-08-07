@@ -3,7 +3,8 @@
 use std::collections::BTreeMap;
 
 use aligngauge_core::{
-    CoveragePolicy, CoverageSummary, JsonValue, MateOverlapPolicy, Provenance, RecordInclusion, ToJson,
+    CoveragePolicy, CoverageSummary, JsonValue, MateOverlapPolicy, Provenance, RecordInclusion,
+    ToJson,
 };
 
 use crate::plan::CoverageMemoryPlan;
@@ -147,9 +148,10 @@ impl CoverageReport {
                     .expect("validated chunk size fits u64"),
             ),
         );
-        provenance
-            .analysis_plan
-            .insert(String::from("coverage_memory_plan"), self.memory_plan.to_json());
+        provenance.analysis_plan.insert(
+            String::from("coverage_memory_plan"),
+            self.memory_plan.to_json(),
+        );
         provenance.resource_limits.insert(
             String::from("coverage_memory_limit_bytes"),
             self.memory_plan.memory_limit_bytes,
@@ -177,10 +179,7 @@ impl ToJson for CoverageReport {
                         .collect(),
                 ),
             ),
-            (
-                String::from("per_reference"),
-                self.per_reference.to_json(),
-            ),
+            (String::from("per_reference"), self.per_reference.to_json()),
             (String::from("policy"), self.policy.to_json()),
             (
                 String::from("schema"),

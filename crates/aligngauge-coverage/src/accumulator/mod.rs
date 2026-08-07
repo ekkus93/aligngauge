@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use aligngauge_core::{AlignGaugeError};
+use aligngauge_core::AlignGaugeError;
 use aligngauge_hts::{ValidatedHeader, ValidatedRecord};
 
 use crate::cigar::{for_each_coverage_block, record_is_accepted};
@@ -149,7 +149,9 @@ impl CoverageCollector {
     ) -> Result<(), AlignGaugeError> {
         match self.current_reference_index {
             Some(current) if reference_index < current => {
-                return Err(internal_error("coverage reference order regressed after reader validation"));
+                return Err(internal_error(
+                    "coverage reference order regressed after reader validation",
+                ));
             }
             Some(current) if reference_index > current => {
                 self.finish_current_reference()?;
@@ -171,13 +173,17 @@ impl CoverageCollector {
 
     fn start_reference(&mut self, reference_index: usize) -> Result<(), AlignGaugeError> {
         if reference_index != self.next_reference_index {
-            return Err(internal_error("coverage reference-finalization cursor is inconsistent"));
+            return Err(internal_error(
+                "coverage reference-finalization cursor is inconsistent",
+            ));
         }
         if self.active_delta_positions != 0
             || !self.pending_events.is_empty()
             || self.current_depth != 0
         {
-            return Err(internal_error("coverage state leaked across reference transition"));
+            return Err(internal_error(
+                "coverage state leaked across reference transition",
+            ));
         }
         let length = self
             .references

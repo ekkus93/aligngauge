@@ -3,7 +3,10 @@
 use aligngauge_core::AlignGaugeError;
 
 use super::CoverageCollector;
-use crate::util::{apply_depth_change, chunk_size_u64, coverage_overflow, internal_error, resource_error, u64_from_usize};
+use crate::util::{
+    apply_depth_change, chunk_size_u64, coverage_overflow, internal_error, resource_error,
+    u64_from_usize,
+};
 
 impl CoverageCollector {
     pub(super) fn flush_until(&mut self, record_start: u64) -> Result<(), AlignGaugeError> {
@@ -57,7 +60,9 @@ impl CoverageCollector {
 
     fn add_event(&mut self, position: u64, change: i128) -> Result<(), AlignGaugeError> {
         if position < self.chunk_start {
-            return Err(internal_error("coverage event falls before the active chunk"));
+            return Err(internal_error(
+                "coverage event falls before the active chunk",
+            ));
         }
         if position <= self.chunk_end {
             self.add_local_event(position, change)
@@ -208,11 +213,14 @@ impl CoverageCollector {
             self.flush_chunk()?;
         }
         if self.current_depth != 0 {
-            return Err(internal_error(
-                "coverage depth did not return to zero at reference end",
-            )
-            .with_detail("reference_index", u64_from_usize(reference_index, "reference index")?)
-            .with_detail("remaining_depth", self.current_depth));
+            return Err(
+                internal_error("coverage depth did not return to zero at reference end")
+                    .with_detail(
+                        "reference_index",
+                        u64_from_usize(reference_index, "reference index")?,
+                    )
+                    .with_detail("remaining_depth", self.current_depth),
+            );
         }
         if !self.pending_events.is_empty() || self.active_delta_positions != 0 {
             return Err(internal_error(

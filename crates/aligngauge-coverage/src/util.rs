@@ -9,13 +9,18 @@ pub(crate) fn apply_depth_change(depth: u64, change: i128) -> Result<u64, AlignG
         .checked_add(change)
         .ok_or_else(|| coverage_overflow("coverage depth"))?;
     if next < 0 || next > i128::from(u64::MAX) {
-        return Err(internal_error("coverage depth event would leave the u64 range"));
+        return Err(internal_error(
+            "coverage depth event would leave the u64 range",
+        ));
     }
     u64::try_from(next)
         .map_err(|source| internal_error("coverage depth conversion failed").with_source(source))
 }
 
-pub(crate) fn format_ratio_six(numerator: u64, denominator: u64) -> Result<String, AlignGaugeError> {
+pub(crate) fn format_ratio_six(
+    numerator: u64,
+    denominator: u64,
+) -> Result<String, AlignGaugeError> {
     if denominator == 0 {
         return Ok(String::from("0.000000"));
     }
@@ -32,7 +37,10 @@ pub(crate) fn format_ratio_six(numerator: u64, denominator: u64) -> Result<Strin
     Ok(format!("{whole}.{fraction:06}"))
 }
 
-pub(crate) fn format_percentage_six(numerator: u64, denominator: u64) -> Result<String, AlignGaugeError> {
+pub(crate) fn format_percentage_six(
+    numerator: u64,
+    denominator: u64,
+) -> Result<String, AlignGaugeError> {
     if denominator == 0 {
         return Ok(String::from("0.000000"));
     }
@@ -49,7 +57,10 @@ pub(crate) fn format_percentage_six(numerator: u64, denominator: u64) -> Result<
     Ok(format!("{whole}.{fraction:06}"))
 }
 
-pub(crate) fn delta_bytes(chunk_size: usize, bytes_per_chunk_base: u64) -> Result<u64, AlignGaugeError> {
+pub(crate) fn delta_bytes(
+    chunk_size: usize,
+    bytes_per_chunk_base: u64,
+) -> Result<u64, AlignGaugeError> {
     let entries = chunk_size
         .checked_add(1)
         .ok_or_else(|| resource_error("coverage chunk entry count overflowed"))?;
@@ -63,9 +74,8 @@ pub(crate) fn chunk_size_u64(plan: &CoverageMemoryPlan) -> Result<u64, AlignGaug
 }
 
 pub(crate) fn u64_from_usize(value: usize, label: &'static str) -> Result<u64, AlignGaugeError> {
-    u64::try_from(value).map_err(|source| {
-        internal_error(format!("{label} does not fit u64")).with_source(source)
-    })
+    u64::try_from(value)
+        .map_err(|source| internal_error(format!("{label} does not fit u64")).with_source(source))
 }
 
 pub(crate) fn configuration_error(message: impl Into<String>) -> AlignGaugeError {
@@ -85,6 +95,8 @@ pub(crate) fn internal_error(message: impl Into<String>) -> AlignGaugeError {
 }
 
 pub(crate) fn coverage_overflow(label: &'static str) -> AlignGaugeError {
-    internal_error(format!("coverage arithmetic overflowed while updating {label}"))
-        .with_detail("operation", label)
+    internal_error(format!(
+        "coverage arithmetic overflowed while updating {label}"
+    ))
+    .with_detail("operation", label)
 }

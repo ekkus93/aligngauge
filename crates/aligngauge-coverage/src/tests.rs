@@ -2,9 +2,9 @@ use std::path::PathBuf;
 
 use aligngauge_core::{ErrorCategory, ToJson};
 
-use crate::{CoverageMemoryPlan, CoverageOptions, analyze_bam, cigar_to_coverage_blocks};
 use crate::cigar::record_is_accepted;
 use crate::util::{format_percentage_six, format_ratio_six};
+use crate::{CoverageMemoryPlan, CoverageOptions, analyze_bam, cigar_to_coverage_blocks};
 
 fn fixture(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -130,11 +130,8 @@ fn empty_contigs_and_reference_transitions_reduce_exactly() {
     assert_eq!(basic.per_reference()[1].name, "chr2");
     assert_eq!(basic.per_reference()[1].accepted_aligned_bases, 9);
 
-    let empty = analyze_bam(
-        fixture("zero_length_reference"),
-        CoverageOptions::default(),
-    )
-    .expect("zero-length coverage");
+    let empty = analyze_bam(fixture("zero_length_reference"), CoverageOptions::default())
+        .expect("zero-length coverage");
     assert_eq!(empty.per_reference().len(), 1);
     assert_eq!(empty.per_reference()[0].length, 0);
     assert_eq!(empty.per_reference()[0].mean_depth, "0.000000");
@@ -143,13 +140,9 @@ fn empty_contigs_and_reference_transitions_reduce_exactly() {
 
 #[test]
 fn histogram_properties_hold_on_overlapping_fixture() {
-    let report = analyze_bam(fixture("chunk_boundary"), CoverageOptions::default())
-        .expect("coverage");
-    let territory = report
-        .depth_histogram()
-        .values()
-        .copied()
-        .sum::<u64>();
+    let report =
+        analyze_bam(fixture("chunk_boundary"), CoverageOptions::default()).expect("coverage");
+    let territory = report.depth_histogram().values().copied().sum::<u64>();
     assert_eq!(territory, 2_000_000);
     let weighted = report
         .depth_histogram()
@@ -161,8 +154,7 @@ fn histogram_properties_hold_on_overlapping_fixture() {
 
 #[test]
 fn excluded_records_do_not_change_canonical_coverage() {
-    let report = analyze_bam(fixture("multi_track"), CoverageOptions::default())
-        .expect("coverage");
+    let report = analyze_bam(fixture("multi_track"), CoverageOptions::default()).expect("coverage");
     assert_eq!(report.total_accepted_aligned_bases(), 10);
     assert_eq!(report.depth_histogram().get(&1), Some(&10));
     assert_eq!(report.depth_histogram().get(&0), Some(&1_999_990));
@@ -193,12 +185,9 @@ fn deterministic_cigar_fuzz_matches_per_base_oracle() {
                 _ => {}
             }
         }
-        let blocks = cigar_to_coverage_blocks(
-            &raw,
-            0,
-            u64::try_from(cursor + 1).expect("cursor fits u64"),
-        )
-        .expect("fuzz CIGAR must convert");
+        let blocks =
+            cigar_to_coverage_blocks(&raw, 0, u64::try_from(cursor + 1).expect("cursor fits u64"))
+                .expect("fuzz CIGAR must convert");
         let observed = blocks
             .iter()
             .flat_map(|block| block.start..block.end)

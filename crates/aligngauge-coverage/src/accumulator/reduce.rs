@@ -5,8 +5,11 @@ use std::collections::BTreeMap;
 use aligngauge_core::AlignGaugeError;
 
 use super::CoverageCollector;
-use crate::report::{canonical_policy, CoverageReport, PerReferenceCoverage};
-use crate::util::{coverage_overflow, format_percentage_six, format_ratio_six, internal_error, resource_error, u64_from_usize};
+use crate::report::{CoverageReport, PerReferenceCoverage, canonical_policy};
+use crate::util::{
+    coverage_overflow, format_percentage_six, format_ratio_six, internal_error, resource_error,
+    u64_from_usize,
+};
 
 impl CoverageCollector {
     pub(super) fn finalize_unvisited_reference(
@@ -44,13 +47,13 @@ impl CoverageCollector {
         }
         let existing = self.depth_histogram.get(&depth).copied();
         if existing.is_none() && self.depth_histogram.len() >= self.plan.max_histogram_bins {
-            return Err(resource_error(
-                "coverage histogram budget was exhausted during traversal",
-            )
-            .with_detail(
-                "maximum_histogram_bins",
-                u64_from_usize(self.plan.max_histogram_bins, "histogram bins")?,
-            ));
+            return Err(
+                resource_error("coverage histogram budget was exhausted during traversal")
+                    .with_detail(
+                        "maximum_histogram_bins",
+                        u64_from_usize(self.plan.max_histogram_bins, "histogram bins")?,
+                    ),
+            );
         }
         let total = existing
             .unwrap_or(0)
@@ -83,29 +86,36 @@ impl CoverageCollector {
         Ok(())
     }
 
-    pub(super) fn finalize_reference(&mut self, reference_index: usize) -> Result<(), AlignGaugeError> {
+    pub(super) fn finalize_reference(
+        &mut self,
+        reference_index: usize,
+    ) -> Result<(), AlignGaugeError> {
         let reference = self
             .references
             .get_mut(reference_index)
             .ok_or_else(|| internal_error("coverage finalization reference disappeared"))?;
         if reference.finalized {
-            return Err(internal_error("coverage reference was finalized more than once"));
+            return Err(internal_error(
+                "coverage reference was finalized more than once",
+            ));
         }
         let territory = reference
             .covered_reference_bases
             .checked_add(reference.uncovered_reference_bases)
             .ok_or_else(|| coverage_overflow("per-reference territory"))?;
         if territory != reference.length {
-            return Err(internal_error("coverage reference territory does not match header length")
-                .with_detail("reference_length", reference.length)
-                .with_detail("evaluated_bases", territory));
+            return Err(internal_error(
+                "coverage reference territory does not match header length",
+            )
+            .with_detail("reference_length", reference.length)
+            .with_detail("evaluated_bases", territory));
         }
         if reference.depth_sum != reference.accepted_aligned_bases {
-            return Err(internal_error(
-                "coverage depth sum does not equal accepted aligned bases",
-            )
-            .with_detail("depth_sum", reference.depth_sum)
-            .with_detail("accepted_aligned_bases", reference.accepted_aligned_bases));
+            return Err(
+                internal_error("coverage depth sum does not equal accepted aligned bases")
+                    .with_detail("depth_sum", reference.depth_sum)
+                    .with_detail("accepted_aligned_bases", reference.accepted_aligned_bases),
+            );
         }
         reference.finalized = true;
         Ok(())
@@ -122,14 +132,14 @@ impl CoverageCollector {
                 .checked_add(reference.length)
                 .ok_or_else(|| coverage_overflow("whole-run reference territory"))
         })?;
-        let histogram_territory = self.depth_histogram.values().try_fold(
-            0_u64,
-            |total, bases| {
-                total
-                    .checked_add(*bases)
-                    .ok_or_else(|| coverage_overflow("histogram territory"))
-            },
-        )?;
+        let histogram_territory =
+            self.depth_histogram
+                .values()
+                .try_fold(0_u64, |total, bases| {
+                    total
+                        .checked_add(*bases)
+                        .ok_or_else(|| coverage_overflow("histogram territory"))
+                })?;
         if histogram_territory != territory {
             return Err(internal_error(
                 "coverage histogram does not equal evaluated reference territory",
@@ -138,25 +148,22 @@ impl CoverageCollector {
             .with_detail("reference_bases", territory));
         }
 
-        let weighted_depth = self.depth_histogram.iter().try_fold(
-            0_u128,
-            |total, (depth, bases)| {
-                let product = u128::from(*depth)
-                    .checked_mul(u128::from(*bases))
-                    .ok_or_else(|| coverage_overflow("weighted histogram depth"))?;
-                total
-                    .checked_add(product)
-                    .ok_or_else(|| coverage_overflow("weighted histogram total"))
-            },
-        )?;
+        let weighted_depth =
+            self.depth_histogram
+                .iter()
+                .try_fold(0_u128, |total, (depth, bases)| {
+                    let product = u128::from(*depth)
+                        .checked_mul(u128::from(*bases))
+                        .ok_or_else(|| coverage_overflow("weighted histogram depth"))?;
+                    total
+                        .checked_add(product)
+                        .ok_or_else(|| coverage_overflow("weighted histogram total"))
+                })?;
         if weighted_depth != u128::from(self.total_accepted_aligned_bases) {
             return Err(internal_error(
                 "weighted coverage histogram does not equal accepted aligned bases",
             )
-            .with_detail(
-                "accepted_aligned_bases",
-                self.total_accepted_aligned_bases,
-            ));
+            .with_detail("accepted_aligned_bases", self.total_accepted_aligned_bases));
         }
 
         let mut threshold_bases = BTreeMap::new();
@@ -174,22 +181,18 @@ impl CoverageCollector {
             threshold_percentages.insert(*threshold, format_percentage_six(bases, territory)?);
         }
 
-        let covered_reference_bases = self.references.iter().try_fold(
-            0_u64,
-            |total, reference| {
+        let covered_reference_bases =
+            self.references.iter().try_fold(0_u64, |total, reference| {
                 total
                     .checked_add(reference.covered_reference_bases)
                     .ok_or_else(|| coverage_overflow("whole-run covered bases"))
-            },
-        )?;
-        let uncovered_reference_bases = self.references.iter().try_fold(
-            0_u64,
-            |total, reference| {
+            })?;
+        let uncovered_reference_bases =
+            self.references.iter().try_fold(0_u64, |total, reference| {
                 total
                     .checked_add(reference.uncovered_reference_bases)
                     .ok_or_else(|| coverage_overflow("whole-run uncovered bases"))
-            },
-        )?;
+            })?;
         let per_reference = self
             .references
             .into_iter()

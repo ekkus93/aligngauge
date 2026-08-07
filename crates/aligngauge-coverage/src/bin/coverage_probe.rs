@@ -95,9 +95,9 @@ fn parse_u64(value: OsString, option: &'static str) -> Result<u64, AlignGaugeErr
     let text = value
         .into_string()
         .map_err(|_| usage_error(format!("{option} must be valid UTF-8")))?;
-    let parsed = text
-        .parse::<u64>()
-        .map_err(|source| usage_error(format!("{option} must be an integer")).with_source(source))?;
+    let parsed = text.parse::<u64>().map_err(|source| {
+        usage_error(format!("{option} must be an integer")).with_source(source)
+    })?;
     if parsed == 0 {
         return Err(usage_error(format!("{option} must be greater than zero")));
     }

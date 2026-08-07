@@ -31,13 +31,11 @@ pub fn analyze_bam(
     path: impl AsRef<Path>,
     options: CoverageOptions,
 ) -> Result<CoverageReport, AlignGaugeError> {
-    let plan = CoverageMemoryPlan::plan(
-        options.memory_limit_bytes,
-        1,
-        options.chunk_size_override,
-    )?;
+    let plan =
+        CoverageMemoryPlan::plan(options.memory_limit_bytes, 1, options.chunk_size_override)?;
     let mut reader = BamReader::open(path, FieldPlan::coverage(), ReaderOptions::default())?;
-    let mut collector = accumulator::CoverageCollector::new(reader.header(), options.thresholds, plan)?;
+    let mut collector =
+        accumulator::CoverageCollector::new(reader.header(), options.thresholds, plan)?;
     while let Some(record) = reader.next_record()? {
         collector.observe(&record)?;
     }

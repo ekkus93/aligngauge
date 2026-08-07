@@ -50,13 +50,17 @@ pub(crate) fn for_each_coverage_block(
 ) -> Result<(), AlignGaugeError> {
     let mut cursor = start;
     if cursor > reference_length {
-        return Err(input_error("coverage CIGAR begins outside the declared reference"));
+        return Err(input_error(
+            "coverage CIGAR begins outside the declared reference",
+        ));
     }
     for encoded in raw_cigar {
         let length = u64::from(encoded >> 4);
         let operation = encoded & 0x0f;
         if length == 0 {
-            return Err(input_error("coverage CIGAR contains a zero-length operation"));
+            return Err(input_error(
+                "coverage CIGAR contains a zero-length operation",
+            ));
         }
         match operation {
             0 | 7 | 8 => {
@@ -69,8 +73,10 @@ pub(crate) fn for_each_coverage_block(
             }
             1 | 4 | 5 | 6 => {}
             _ => {
-                return Err(input_error("coverage CIGAR contains an unknown operation code")
-                    .with_detail("cigar_operation_code", u64::from(operation)));
+                return Err(
+                    input_error("coverage CIGAR contains an unknown operation code")
+                        .with_detail("cigar_operation_code", u64::from(operation)),
+                );
             }
         }
     }
@@ -86,11 +92,11 @@ fn checked_reference_advance(
         .checked_add(length)
         .ok_or_else(|| input_error("coverage CIGAR reference coordinate overflowed"))?;
     if end > reference_length {
-        return Err(input_error(
-            "coverage CIGAR operation extends beyond the declared reference",
-        )
-        .with_detail("operation_end", end)
-        .with_detail("reference_length", reference_length));
+        return Err(
+            input_error("coverage CIGAR operation extends beyond the declared reference")
+                .with_detail("operation_end", end)
+                .with_detail("reference_length", reference_length),
+        );
     }
     Ok(end)
 }
