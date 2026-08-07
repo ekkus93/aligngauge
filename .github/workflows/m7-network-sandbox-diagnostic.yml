@@ -24,8 +24,18 @@ jobs:
             id
             uname -a
             echo
+            echo '=== strace availability ==='
+            command -v strace
+            echo "rc=$?"
+            dpkg-query -W -f='${Status} ${Version}\n' strace 2>&1
+            echo "dpkg_rc=$?"
+            echo
             echo '=== sudo unshare --net true ==='
             sudo unshare --net true
+            echo "rc=$?"
+            echo
+            echo '=== unshare with strace ==='
+            sudo unshare --net /usr/bin/strace -qq -e trace=network /usr/bin/true
             echo "rc=$?"
             echo
             echo '=== systemd PrivateNetwork ==='
@@ -34,10 +44,6 @@ jobs:
             echo
             echo '=== docker info ==='
             docker info >/dev/null
-            echo "rc=$?"
-            echo
-            echo '=== docker network-none smoke ==='
-            docker run --rm --network none alpine:3.20 /bin/true
             echo "rc=$?"
           } >> network-sandbox-probe.txt 2>&1
           cat network-sandbox-probe.txt
