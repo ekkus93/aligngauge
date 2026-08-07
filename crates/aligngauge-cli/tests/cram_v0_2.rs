@@ -220,6 +220,20 @@ fn truncated_cram_is_typed_corrupt() {
 }
 
 #[test]
+fn malformed_cram_version_is_typed_corrupt() {
+    let fixtures = make_pair();
+    let mut bytes = fs::read(&fixtures.cram).expect("read CRAM");
+    assert!(bytes.len() > 5, "generated CRAM must contain a version field");
+    assert_eq!(&bytes[..4], b"CRAM");
+    bytes[4] = 0xff;
+    let corrupted = fixtures.root.join("corrupted-version.cram");
+    fs::write(&corrupted, bytes).expect("write corrupted CRAM");
+    let error = analyze_release_with_reference(&config(&corrupted), Some(&fixtures.reference))
+        .expect_err("malformed CRAM version must fail");
+    assert_eq!(error.category(), ErrorCategory::InputCorrupt);
+}
+
+#[test]
 fn hostile_reference_environment_cannot_replace_explicit_local_policy() {
     let fixtures = make_pair();
     let outdir = fixtures.root.join("cli-output");
