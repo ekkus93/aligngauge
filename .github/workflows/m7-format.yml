@@ -1,0 +1,41 @@
+name: M7 candidate formatter
+
+on:
+  push:
+    branches: [milestone-7-cram]
+    paths:
+      - .github/workflows/m7-format.yml
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Apply rustfmt and verify only intended source files change
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all
+          changed="$(git diff --name-only)"
+          printf '%s\n' "$changed"
+          unexpected="$(printf '%s\n' "$changed" | grep -Ev '^(crates/aligngauge-cli/src/main.rs|crates/aligngauge-cli/tests/cram_v0_2.rs)$' || true)"
+          if [[ -n "$unexpected" ]]; then
+            echo "rustfmt changed unexpected files:" >&2
+            printf '%s\n' "$unexpected" >&2
+            exit 1
+          fi
+          cargo fmt --all --check
+          git diff --check
+      - name: Commit formatted product source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add crates/aligngauge-cli/src/main.rs crates/aligngauge-cli/tests/cram_v0_2.rs
+          git diff --cached --quiet && exit 0
+          git commit -m 'style: format Milestone 7 candidate'
+          git push origin HEAD:milestone-7-cram
