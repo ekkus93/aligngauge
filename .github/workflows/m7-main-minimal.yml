@@ -85,6 +85,29 @@ jobs:
               raise SystemExit('expected v0.1 usage block missing')
           text = text.replace(old_usage, new_usage, 1)
           path.write_text(text)
+
+          test_path = Path('crates/aligngauge-cli/tests/release_cli_options.rs')
+          tests = test_path.read_text()
+          tests = tests.replace(
+              'fn future_release_options_are_rejected_explicitly() {',
+              'fn deferred_release_options_are_rejected_explicitly() {',
+              1,
+          )
+          reference_case = '        ("--reference", "v0.2"),\n'
+          if reference_case not in tests:
+              raise SystemExit('expected legacy --reference rejection case missing')
+          tests = tests.replace(reference_case, '', 1)
+          tests = tests.replace(
+              '("--backend", "not a released v0.1 feature"),',
+              '("--backend", "not released"),',
+              1,
+          )
+          tests = tests.replace(
+              '("--cuda-device", "not a released v0.1 feature"),',
+              '("--cuda-device", "not released"),',
+              1,
+          )
+          test_path.write_text(tests)
           PY
           cargo fmt --all
           cargo fmt --all --check
@@ -120,12 +143,12 @@ jobs:
           if-no-files-found: warn
           retention-days: 1
 
-      - name: Commit only the minimized CLI file
+      - name: Commit only the minimized CLI surface
         shell: bash
         run: |
           set -euo pipefail
           changed="$(git diff --name-only)"
-          unexpected="$(printf '%s\n' "$changed" | grep -Ev '^crates/aligngauge-cli/src/main.rs$' || true)"
+          unexpected="$(printf '%s\n' "$changed" | grep -Ev '^(crates/aligngauge-cli/src/main.rs|crates/aligngauge-cli/tests/release_cli_options.rs)$' || true)"
           if [[ -n "$unexpected" ]]; then
             echo "unexpected product changes:" >&2
             printf '%s\n' "$unexpected" >&2
@@ -133,6 +156,6 @@ jobs:
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add crates/aligngauge-cli/src/main.rs
+          git add crates/aligngauge-cli/src/main.rs crates/aligngauge-cli/tests/release_cli_options.rs
           git commit -m 'refactor: preserve v0.1 CLI while adding CRAM reference'
           git push origin HEAD:milestone-7-cram
