@@ -83,7 +83,9 @@ fn parse_memory_limit(value: &std::ffi::OsStr) -> Result<u64, Box<dyn Error>> {
         .ok_or_else(|| invalid_input("memory-limit bytes must be valid UTF-8"))?;
     let parsed = value.parse::<u64>()?;
     if parsed == 0 {
-        return Err(invalid_input("memory-limit bytes must be greater than zero"));
+        return Err(invalid_input(
+            "memory-limit bytes must be greater than zero",
+        ));
     }
     Ok(parsed)
 }
