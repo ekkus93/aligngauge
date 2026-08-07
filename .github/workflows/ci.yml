@@ -101,6 +101,14 @@ jobs:
       - name: Run tests
         run: cargo test --workspace --all-features --locked
 
+      - name: Install syscall tracer
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends strace
+          /usr/bin/strace --version
+
       - name: Prove CRAM reference isolation with no network access
         shell: bash
         run: |
