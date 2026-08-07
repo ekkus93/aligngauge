@@ -1,0 +1,51 @@
+name: M7 network sandbox diagnostic
+
+on:
+  push:
+    branches: [milestone-7-cram]
+    paths:
+      - .github/workflows/m7-network-sandbox-diagnostic.yml
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Probe network-isolation mechanisms
+        shell: bash
+        run: |
+          set +e
+          : > network-sandbox-probe.txt
+          {
+            echo '=== identity ==='
+            id
+            uname -a
+            echo
+            echo '=== sudo unshare --net true ==='
+            sudo unshare --net true
+            echo "rc=$?"
+            echo
+            echo '=== systemd PrivateNetwork ==='
+            sudo systemd-run --wait --pipe --collect -p PrivateNetwork=yes /usr/bin/true
+            echo "rc=$?"
+            echo
+            echo '=== docker info ==='
+            docker info >/dev/null
+            echo "rc=$?"
+            echo
+            echo '=== docker network-none smoke ==='
+            docker run --rm --network none alpine:3.20 /bin/true
+            echo "rc=$?"
+          } >> network-sandbox-probe.txt 2>&1
+          cat network-sandbox-probe.txt
+
+      - name: Upload probe
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: m7-network-sandbox-probe-${{ github.sha }}
+          path: network-sandbox-probe.txt
+          if-no-files-found: error
+          retention-days: 1
