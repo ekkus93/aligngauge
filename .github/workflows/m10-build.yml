@@ -1,0 +1,71 @@
+name: M10 core builder
+
+on:
+  push:
+    branches:
+      - milestone-10-samtools-stats
+    paths:
+      - .github/m10-build.py
+      - .github/workflows/m10-build.yml
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Generate core implementation
+        run: |
+          set -euo pipefail
+          python .github/m10-build.py
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('crates/aligngauge-metrics/src/samtools_stats.rs')
+          text = p.read_text()
+          text = text.replace('\\pub struct SamtoolsStatsReport', 'pub struct SamtoolsStatsReport')
+          text = text.replace('proper_numerator as f32 as f64 / sequences as f32 as f64', '(proper_numerator as f32 / sequences as f32) as f64')
+          p.write_text(text)
+          PY
+          cargo fmt --all
+          git diff --check
+      - name: Check workspace
+        run: cargo check --workspace --all-targets --all-features
+      - name: Run strict Clippy
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - name: Run complete workspace tests
+        run: cargo test --workspace --all-features
+      - name: Exercise Samtools stats compatibility probe
+        run: |
+          set -euo pipefail
+          cargo run -q -p aligngauge-cli -- qc --input testdata/fixtures/basic.bam --format samtools-stats > /tmp/aligngauge.stats
+          grep -F 'This file was produced by samtools stats (1.24+htslib-1.24)' /tmp/aligngauge.stats
+          grep -F $'SN\tfiltered sequences:\t0' /tmp/aligngauge.stats
+          grep -F 'samtools-stats-1.24-multiqc-1.35' /tmp/aligngauge.stats
+      - name: Verify and commit restricted source diff
+        run: |
+          set -euo pipefail
+          git rm .github/m10-build.py .github/workflows/m10-build.yml .github/workflows/m10-stats-probe.yml
+          git diff --check
+          changed="$(git status --short | awk '{print $2}' | sort)"
+          expected="$(printf '%s\n' \
+            .github/m10-build.py \
+            .github/workflows/m10-build.yml \
+            .github/workflows/m10-stats-probe.yml \
+            crates/aligngauge-cli/src/main.rs \
+            crates/aligngauge-hts/src/plan.rs \
+            crates/aligngauge-hts/src/reader.rs \
+            crates/aligngauge-metrics/src/lib.rs \
+            crates/aligngauge-metrics/src/samtools_stats.rs \
+            crates/aligngauge-metrics/tests/samtools_stats.rs | sort)"
+          [[ "$changed" == "$expected" ]] || { git status --short; exit 1; }
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'feat: implement Samtools stats SN and IS collector'
+          git push origin HEAD:milestone-10-samtools-stats
