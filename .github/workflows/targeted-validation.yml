@@ -114,8 +114,19 @@ jobs:
             target/hg002-m9/reference-target-depth
           test -f target/hg002-m9/reference-target-depth/_SUCCESS
           grep -F 'samtools 1.24' target/hg002-m9/reference-target-depth/version.txt
-          grep -F -- '-G UNMAP,SECONDARY,QCFAIL,DUP,SUPPLEMENTARY' \
-            target/hg002-m9/reference-target-depth/invocation.txt
+          python - <<'PY'
+          import shlex
+          from pathlib import Path
+
+          invocation = Path('target/hg002-m9/reference-target-depth/invocation.txt')
+          tokens = shlex.split(invocation.read_text())
+          assert tokens[0] == 'samtools'
+          assert tokens[1] == 'depth'
+          index = tokens.index('-G')
+          assert tokens[index + 1] == 'UNMAP,SECONDARY,QCFAIL,DUP,SUPPLEMENTARY'
+          assert '-a' in tokens
+          assert '-b' in tokens
+          PY
 
       - name: Compare HG002 targeted primitives exactly
         run: |
