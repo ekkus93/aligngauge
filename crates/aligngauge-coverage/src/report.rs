@@ -3,8 +3,8 @@
 use std::collections::BTreeMap;
 
 use aligngauge_core::{
-    CoveragePolicy, CoverageSummary, JsonValue, MateOverlapPolicy, Provenance, RecordInclusion,
-    ToJson,
+    AlignGaugeError, CoveragePolicy, CoverageSummary, JsonValue, MateOverlapPolicy, Provenance,
+    RecordInclusion, ToJson,
 };
 
 use crate::plan::CoverageMemoryPlan;
@@ -132,7 +132,11 @@ impl CoverageReport {
     }
 
     /// Add coverage strategy and resource planning to canonical provenance.
-    pub fn apply_provenance(&self, provenance: &mut Provenance) {
+    ///
+    /// # Errors
+    /// Returns `internal_invariant` if a platform-sized planned value cannot be represented in
+    /// canonical provenance.
+    pub fn apply_provenance(&self, provenance: &mut Provenance) -> Result<(), AlignGaugeError> {
         provenance.analysis_plan.insert(
             String::from("coverage_profile"),
             JsonValue::String(COVERAGE_PROFILE.to_owned()),
@@ -143,14 +147,14 @@ impl CoverageReport {
         );
         provenance.analysis_plan.insert(
             String::from("coverage_chunk_size_bases"),
-            JsonValue::Unsigned(
-                u64_from_usize(self.memory_plan.chunk_size_bases, "chunk size")
-                    .expect("validated chunk size fits u64"),
-            ),
+            JsonValue::Unsigned(u64_from_usize(
+                self.memory_plan.chunk_size_bases,
+                "chunk size",
+            )?),
         );
         provenance.analysis_plan.insert(
             String::from("coverage_memory_plan"),
-            self.memory_plan.to_json(),
+            self.memory_plan.to_json()?,
         );
         provenance.resource_limits.insert(
             String::from("coverage_memory_limit_bytes"),
@@ -160,6 +164,7 @@ impl CoverageReport {
             String::from("coverage_planned_peak_bytes"),
             self.memory_plan.planned_peak_bytes,
         );
+        Ok(())
     }
 }
 
