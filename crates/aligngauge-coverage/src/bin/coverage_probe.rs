@@ -73,7 +73,7 @@ fn run() -> Result<String, AlignGaugeError> {
     let report = analyze_bam(&input, options)?;
     Ok(JsonValue::Object(std::collections::BTreeMap::from([
         (String::from("coverage"), report.to_json()),
-        (String::from("memory_plan"), report.memory_plan().to_json()),
+        (String::from("memory_plan"), report.memory_plan().to_json()?),
         (
             String::from("strategy"),
             JsonValue::String(COVERAGE_STRATEGY.to_owned()),
