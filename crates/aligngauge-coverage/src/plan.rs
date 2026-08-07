@@ -233,7 +233,10 @@ impl CoverageMemoryPlan {
     }
 }
 
-fn validate_plan_inputs(memory_limit_bytes: u64, active_tracks: usize) -> Result<(), AlignGaugeError> {
+fn validate_plan_inputs(
+    memory_limit_bytes: u64,
+    active_tracks: usize,
+) -> Result<(), AlignGaugeError> {
     if active_tracks == 0 {
         return Err(resource_error(
             "coverage requires at least one active track",
@@ -290,11 +293,11 @@ fn maximum_chunk_by_memory(
         .checked_add(minimum_delta_bytes)
         .ok_or_else(|| resource_error("coverage minimum-memory plan overflowed"))?;
     if minimum_planned > memory_limit_bytes {
-        return Err(resource_error(
-            "memory limit cannot support the minimum exact coverage plan",
-        )
-        .with_detail("memory_limit_bytes", memory_limit_bytes)
-        .with_detail("minimum_required_bytes", minimum_planned));
+        return Err(
+            resource_error("memory limit cannot support the minimum exact coverage plan")
+                .with_detail("memory_limit_bytes", memory_limit_bytes)
+                .with_detail("minimum_required_bytes", minimum_planned),
+        );
     }
     let available_for_delta = memory_limit_bytes - fixed.fixed_bytes;
     let maximum = available_for_delta
@@ -330,7 +333,11 @@ fn select_chunk_size(
     }
 }
 
-fn capacity(budget_bytes: u64, entry_bytes: u64, label: &'static str) -> Result<usize, AlignGaugeError> {
+fn capacity(
+    budget_bytes: u64,
+    entry_bytes: u64,
+    label: &'static str,
+) -> Result<usize, AlignGaugeError> {
     usize::try_from(budget_bytes / entry_bytes).map_err(|source| {
         resource_error(format!("{label} capacity does not fit usize")).with_source(source)
     })
