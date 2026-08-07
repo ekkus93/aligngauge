@@ -223,7 +223,10 @@ fn truncated_cram_is_typed_corrupt() {
 fn malformed_cram_version_is_typed_corrupt() {
     let fixtures = make_pair();
     let mut bytes = fs::read(&fixtures.cram).expect("read CRAM");
-    assert!(bytes.len() > 5, "generated CRAM must contain a version field");
+    assert!(
+        bytes.len() > 5,
+        "generated CRAM must contain a version field"
+    );
     assert_eq!(&bytes[..4], b"CRAM");
     bytes[4] = 0xff;
     let corrupted = fixtures.root.join("corrupted-version.cram");
