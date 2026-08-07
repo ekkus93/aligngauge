@@ -156,6 +156,39 @@ jobs:
           PY
           python /tmp/m6_candidate.py
 
+      - name: Refactor release hook path for strict Clippy
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('crates/aligngauge-cli/src/lib.rs')
+          text = path.read_text(encoding='utf-8')
+          function = text.index('pub fn analyze_release_with_hook(\n')
+          setup_start = text.index('    let coverage_options = CoverageOptions::new(\n', function)
+          setup_end = text.index('    let input_identity = input_identity(&config.input)?;\n', setup_start)
+          replacement = '    let (coverage_options, memory_plan) = release_coverage_setup(config)?;\n'
+          text = text[:setup_start] + replacement + text[setup_end:]
+          marker = '/// Analyze one v0.1 run with deterministic fault-injection checkpoints.\n'
+          if text.count(marker) != 1:
+              raise SystemExit('release hook doc marker is not unique')
+          helper = '''fn release_coverage_setup(
+              config: &ResolvedConfig,
+          ) -> Result<(CoverageOptions, CoverageMemoryPlan), AlignGaugeError> {
+              let coverage_options = CoverageOptions::new(
+                  config.memory_limit_bytes,
+                  config.coverage_thresholds.clone(),
+              )?;
+              let memory_plan = CoverageMemoryPlan::plan(
+                  coverage_options.memory_limit_bytes,
+                  1,
+                  coverage_options.chunk_size_override,
+              )?;
+              Ok((coverage_options, memory_plan))
+          }
+
+          '''
+          path.write_text(text.replace(marker, helper + marker, 1), encoding='utf-8')
+          PY
+
       - name: Format candidate
         run: cargo fmt --all
 
