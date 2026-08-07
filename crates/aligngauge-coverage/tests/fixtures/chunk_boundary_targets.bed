@@ -1,0 +1,4 @@
+chr1	65534	65542	targetA
+chr1	65540	65544	targetB
+chr1	65550	65562	targetC
+chr1	70000	70000	targetEmpty
