@@ -8,12 +8,13 @@ AlignGauge analyzes existing aligned sequencing data. It is not software for con
 
 ## Status
 
-Implementation is beginning from the staged roadmap in `docs/DNA_QC_ENGINE_TODO.md`.
+The v0.1 BAM/CPU release candidate is implemented and has passed its product-SHA validation gates. Release evidence is being validated before the `v0.1.0` tag is created.
 
-- v0.1: coordinate-sorted BAM, CPU counters, exact canonical coverage, JSON, and provenance.
-- v0.2: CRAM with strictly local reference resolution.
-- v0.3+: targeted metrics, compatibility expansion, and full-scale qualification.
-- GPU work is research-only until an end-to-end benchmark proves value.
+- v0.1: local coordinate-sorted BAM, CPU counters, exact canonical coverage, JSON/provenance, and atomic output publication.
+- v0.2: CRAM with strictly local reference resolution; not released in v0.1.
+- v0.3+: targeted metrics, compatibility expansion, and full-scale qualification; not released in v0.1.
+- GPU/backend selection is not a released v0.1 feature and remains research-only until end-to-end benchmarks justify it.
+- v0.1 collector execution is deterministic and serial; `--threads >1` is accepted for configuration/provenance compatibility but emits an explicit warning rather than silently implying parallel collectors.
 
 ## Development
 
@@ -26,10 +27,13 @@ cargo test --workspace --all-features
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features --no-deps
 ```
 
-## Planning documents
+## Planning and evidence
 
 - [Product and architecture specification](docs/DNA_QC_ENGINE_SPEC.md)
 - [Implementation TODO](docs/DNA_QC_ENGINE_TODO.md)
+- [v0.1 validation report](docs/evidence/V0_1_VALIDATION_REPORT.md)
+- [v0.1 performance report](docs/evidence/V0_1_PERFORMANCE_REPORT.md)
+- [v0.1 release checklist](docs/evidence/V0_1_RELEASE_CHECKLIST.md)
 - [Claude.ai specification review](docs/SPEC_REVIEW_2026-08-06.md)
 - [AlignGauge naming decision](docs/ALIGNGAUGE_NAME_DECISION.md)
 
