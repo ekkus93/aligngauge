@@ -1,4 +1,5 @@
 name: M11 Core Builder
+# rerun after strict-Clippy mechanical repairs
 
 on:
   push:
