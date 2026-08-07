@@ -28,7 +28,6 @@ jobs:
 
           path = Path('crates/aligngauge-cli/src/main.rs')
           text = path.read_text()
-
           text = text.replace(
               'use aligngauge_cli::{analyze_bam, analyze_release};',
               'use aligngauge_cli::{analyze_bam, analyze_release_with_reference};',
@@ -40,7 +39,7 @@ jobs:
           )
           text = text.replace(
               '''        Ok(CliAction::Release {\n            config_path,\n            overrides,''',
-              '''        Ok(CliAction::Release {\n            config_path,\n            reference,\n            overrides:'''.replace('overrides:', 'overrides,'),
+              '''        Ok(CliAction::Release {\n            config_path,\n            reference,\n            overrides,''',
               1,
           )
           text = text.replace(
@@ -48,7 +47,6 @@ jobs:
               'let report = match analyze_release_with_reference(&config, reference.as_deref()) {',
               1,
           )
-
           text = text.replace(
               '''    config_path: Option<PathBuf>,\n    compatibility_format: Option<CompatibilityFormat>,''',
               '''    config_path: Option<PathBuf>,\n    reference: Option<PathBuf>,\n    compatibility_format: Option<CompatibilityFormat>,''',
@@ -64,13 +62,11 @@ jobs:
               '''        Ok(CliAction::Release {\n            config_path: self.config_path,\n            reference: self.reference,\n            overrides: self.overrides,''',
               1,
           )
-
           old_reference = '''        Some("--reference") => Err(unsupported_option(\n            "--reference",\n            "CRAM reference resolution is a v0.2 feature",\n            program,\n        )),'''
           new_reference = '''        Some("--reference") => {\n            state.release_option_seen = true;\n            set_path_option(\n                &mut state.reference,\n                next_value(arguments, "--reference", program)?,\n                "--reference",\n                program,\n            )\n        }'''
           if old_reference not in text:
               raise SystemExit('expected --reference parser arm missing')
           text = text.replace(old_reference, new_reference, 1)
-
           text = text.replace(
               '"--format is a compatibility probe and cannot be combined with v0.1 release options"',
               '"--format is a compatibility probe and cannot be combined with release output options"',
@@ -83,7 +79,6 @@ jobs:
               'format!("{option} is not supported in v0.1: {reason}"),',
               'format!("{option} is not supported by this release: {reason}"),',
           )
-
           old_usage = '''        "Usage:\\n  {0} qc --input <BAM> --outdir <DIR> [OPTIONS]\\n\\nRequired v0.1 values:\\n  --input <PATH>                  Local BAM input (may also come from --config)\\n  --outdir <PATH>                 New output directory (may also come from --config)\\n\\nOptional v0.1 values:\\n  --threads <N>                   Collector/reduction thread limit (v0.1 collector is deterministic serial)\\n  --io-threads <N>                HTSlib I/O workers; 0 or 1 selects serial decoding\\n  --memory-limit <SIZE>           B, KiB, MiB, GiB, or TiB (default 4GiB)\\n  --coverage-thresholds <LIST>    Comma-separated positive depths (default 1,10,20,30)\\n  --config <PATH>                 Strict schema_version=1 config file\\n  --log-format <human|json>       Diagnostic error format\\n  --quiet                         Suppress routine completion summary\\n  --verbose                       Enable verbose mode in resolved provenance\\n  --preserve-failed-staging       Preserve clearly incomplete staging on publication failure\\n  -h, --help                      Show this help\\n\\nConfiguration precedence:\\n  built-ins < config file < documented ALIGNGAUGE_* environment < CLI\\n\\nNot released in v0.1:\\n  --reference (v0.2 CRAM), --targets/--profile targeted (v0.3), --backend, --cuda-device\\n\\nLegacy three-counter compatibility probe:\\n  {0} qc --input <BAM>\\n\\nCompatibility projections retained for differential validation:\\n  {0} qc --input <BAM> --format <human|json|samtools-flagstat|samtools-idxstats>",'''
           new_usage = '''        "Usage:\\n  {0} qc --input <BAM|CRAM> --outdir <DIR> [OPTIONS]\\n\\nRequired release values:\\n  --input <PATH>                  Local BAM or CRAM input (may also come from --config)\\n  --outdir <PATH>                 New output directory (may also come from --config)\\n\\nCRAM reference integrity:\\n  --reference <FASTA>             Explicit local FASTA required for CRAM; remote lookup is disabled\\n\\nOptional values:\\n  --threads <N>                   Collector/reduction thread limit (collector is deterministic serial)\\n  --io-threads <N>                HTSlib I/O workers; 0 or 1 selects serial decoding\\n  --memory-limit <SIZE>           B, KiB, MiB, GiB, or TiB (default 4GiB)\\n  --coverage-thresholds <LIST>    Comma-separated positive depths (default 1,10,20,30)\\n  --config <PATH>                 Strict schema_version=1 config file\\n  --log-format <human|json>       Diagnostic error format\\n  --quiet                         Suppress routine completion summary\\n  --verbose                       Enable verbose mode in resolved provenance\\n  --preserve-failed-staging       Preserve clearly incomplete staging on publication failure\\n  -h, --help                      Show this help\\n\\nConfiguration precedence:\\n  built-ins < config file < documented ALIGNGAUGE_* environment < CLI\\n\\nDeferred beyond v0.2:\\n  --targets/--profile targeted (v0.3), --backend, --cuda-device\\n\\nLegacy BAM three-counter compatibility probe:\\n  {0} qc --input <BAM>\\n\\nBAM compatibility projections retained for differential validation:\\n  {0} qc --input <BAM> --format <human|json|samtools-flagstat|samtools-idxstats>",'''
           if old_usage not in text:
@@ -95,11 +90,35 @@ jobs:
           cargo fmt --all --check
           git diff --check
 
-      - name: Validate minimal CLI against the complete workspace
+      - name: Cargo check
+        shell: bash
         run: |
-          cargo check --workspace --all-features --locked
-          cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
-          cargo test --workspace --all-features --locked
+          set -o pipefail
+          cargo check --workspace --all-features --locked 2>&1 | tee cargo-check.log
+
+      - name: Strict Clippy
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo clippy --workspace --all-targets --all-features --locked -- -D warnings 2>&1 | tee cargo-clippy.log
+
+      - name: Full workspace tests
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test --workspace --all-features --locked 2>&1 | tee cargo-test.log
+
+      - name: Upload validation diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: m7-minimal-cli-validation-${{ github.sha }}
+          path: |
+            cargo-check.log
+            cargo-clippy.log
+            cargo-test.log
+          if-no-files-found: warn
+          retention-days: 1
 
       - name: Commit only the minimized CLI file
         shell: bash
