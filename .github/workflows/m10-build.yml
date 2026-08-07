@@ -41,13 +41,11 @@ jobs:
               '        Self::from_fields([\\n            RequiredField::Flags,\\n            RequiredField::Coordinates,\\n            RequiredField::Cigar,\\n        ])\\n    }',
           )
           text = text.replace('        Self::from_fields(&[\\n', '        Self::from_fields([\\n')
-          old = '''    "    mapping_quality: FieldValue<u8>,\\n    cigar: FieldValue<CigarFacts>,",
-    "    mapping_quality: FieldValue<u8>,\\n    query_length: u64,\\n    qualities_requested: bool,\\n    template_length: FieldValue<i32>,\\n    cigar: FieldValue<CigarFacts>,",'''
-          new = '''    "pub struct ValidatedRecord<'a> {\\n    record: &'a Record,\\n    index: u64,\\n    flags: u16,\\n    coordinate: Option<RecordCoordinate>,\\n    mate_coordinate: FieldValue<Option<RecordCoordinate>>,\\n    mapping_quality: FieldValue<u8>,\\n    cigar: FieldValue<CigarFacts>,",
-    "pub struct ValidatedRecord<'a> {\\n    record: &'a Record,\\n    index: u64,\\n    flags: u16,\\n    coordinate: Option<RecordCoordinate>,\\n    mate_coordinate: FieldValue<Option<RecordCoordinate>>,\\n    mapping_quality: FieldValue<u8>,\\n    query_length: u64,\\n    qualities_requested: bool,\\n    template_length: FieldValue<i32>,\\n    cigar: FieldValue<CigarFacts>,",'''
-          if text.count(old) != 1:
-              raise SystemExit(f'validated-record builder rewrite count={text.count(old)}')
-          text = text.replace(old, new, 1)
+          marker = '    if count != 1:\\n'
+          injected = '    if count == 2 and path == "crates/aligngauge-hts/src/reader.rs" and old == "    mapping_quality: FieldValue<u8>,\\\\n    cigar: FieldValue<CigarFacts>,":\\n        p.write_text(text.replace(old, new, 1))\\n        return\\n    if count != 1:\\n'
+          if text.count(marker) != 1:
+              raise SystemExit(f'replace_once marker count={text.count(marker)}')
+          text = text.replace(marker, injected, 1)
           p.write_text(text)
           PY
           python .github/m10-build.py
