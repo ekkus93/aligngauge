@@ -32,11 +32,24 @@ jobs:
           git checkout --detach FETCH_HEAD
           test "$(git rev-parse HEAD)" = "${REVISION}"
 
-      - name: Apply checksum-pinned Milestone 5 implementation
+      - name: Recover and apply checksum-pinned Milestone 5 implementation
         working-directory: source
         run: |
           set -euo pipefail
-          base64 --decode tools/m5_apply.py.gz.b64 \
+          payload=$(tr -d '\r\n\t ' < tools/m5_apply.py.gz.b64)
+          remainder=$(( ${#payload} % 4 ))
+          if [[ $remainder -eq 1 ]]; then
+            echo "base64 payload length cannot be repaired by padding" >&2
+            exit 1
+          fi
+          if [[ $remainder -ne 0 ]]; then
+            padding=$(( 4 - remainder ))
+            printf -v suffix '%*s' "$padding" ''
+            suffix=${suffix// /=}
+            payload="${payload}${suffix}"
+          fi
+          printf '%s' "$payload" \
+            | base64 --decode \
             | gzip --decompress \
             > /tmp/m5_apply.py
           echo 'f8ef4cd20d1a46e43617e26871120378db741dd1d4faa64afafc07bed02652a9  /tmp/m5_apply.py' \
