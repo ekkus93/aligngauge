@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use aligngauge_core::Availability;
+use aligngauge_core::{Availability, TargetedCoverageSummary};
 use aligngauge_coverage::{CoverageOptions, analyze_bam_with_targets};
 
 fn repository_root() -> PathBuf {
@@ -16,18 +16,7 @@ fn target_fixture() -> PathBuf {
         .join("tests/fixtures/chunk_boundary_targets.bed")
 }
 
-#[test]
-fn exact_target_partition_and_per_source_metrics_match_oracle() {
-    let report = analyze_bam_with_targets(
-        alignment_fixture(),
-        target_fixture(),
-        5,
-        CoverageOptions::new(4_u64 << 30, vec![1, 2]).expect("coverage options"),
-    )
-    .expect("targeted coverage");
-    let targeted = report.targeted().expect("targeted report").summary();
-
-    assert_eq!(report.total_accepted_aligned_bases(), 28);
+fn assert_aggregate_oracle(targeted: &TargetedCoverageSummary, total_aligned_bases: u64) {
     assert_eq!(targeted.profile, "aligngauge-targeted-v0.3");
     assert_eq!(targeted.coverage_profile, "aligngauge-v0.1");
     assert!(targeted.duplicate_adjusted);
@@ -41,7 +30,7 @@ fn exact_target_partition_and_per_source_metrics_match_oracle() {
     assert_eq!(targeted.off_target_bases, 0);
     assert_eq!(
         targeted.on_target_bases + targeted.near_target_bases + targeted.off_target_bases,
-        report.total_accepted_aligned_bases()
+        total_aligned_bases
     );
     assert_eq!(
         targeted.target_depth_histogram,
@@ -53,8 +42,7 @@ fn exact_target_partition_and_per_source_metrics_match_oracle() {
         targeted.target_mean_depth,
         Availability::Available(String::from("0.727273"))
     );
-    assert_eq!(targeted.target_covered_bases, 12);
-    assert_eq!(targeted.target_uncovered_bases, 10);
+    assert_eq!((targeted.target_covered_bases, targeted.target_uncovered_bases), (12, 10));
     assert_eq!(targeted.threshold_bases.get("1"), Some(&12));
     assert_eq!(targeted.threshold_bases.get("2"), Some(&4));
     assert_eq!(
@@ -70,15 +58,14 @@ fn exact_target_partition_and_per_source_metrics_match_oracle() {
         targeted.target_enrichment,
         Availability::Available(String::from("51948.051948"))
     );
-    assert_eq!(
-        targeted.target_depth_20th_percentile,
-        Availability::Available(0)
-    );
+    assert_eq!(targeted.target_depth_20th_percentile, Availability::Available(0));
     assert_eq!(
         targeted.target_uniformity_penalty_80,
         Availability::unavailable("target_depth_20th_percentile_is_zero")
     );
+}
 
+fn assert_per_target_oracle(targeted: &TargetedCoverageSummary) {
     assert_eq!(targeted.per_target.len(), 4);
     let a = &targeted.per_target[0];
     assert_eq!((a.source_index, a.line_number, a.start, a.end), (0, 1, 65_534, 65_542));
@@ -109,8 +96,7 @@ fn exact_target_partition_and_per_source_metrics_match_oracle() {
 
     let empty = &targeted.per_target[3];
     assert_eq!(empty.name.as_deref(), Some("targetEmpty"));
-    assert_eq!(empty.length, 0);
-    assert_eq!(empty.depth_sum, 0);
+    assert_eq!((empty.length, empty.depth_sum), (0, 0));
     assert_eq!(empty.mean_depth, Availability::unavailable("zero_length_target"));
     assert_eq!(
         empty.threshold_percentages.get("1"),
@@ -120,19 +106,31 @@ fn exact_target_partition_and_per_source_metrics_match_oracle() {
 }
 
 #[test]
+fn exact_target_partition_and_per_source_metrics_match_oracle() {
+    let report = analyze_bam_with_targets(
+        alignment_fixture(),
+        target_fixture(),
+        5,
+        CoverageOptions::new(4_u64 << 30, vec![1, 2]).expect("coverage options"),
+    )
+    .expect("targeted coverage");
+    let total_aligned_bases = report.total_accepted_aligned_bases();
+    let targeted = report.targeted().expect("targeted report").summary();
+
+    assert_eq!(total_aligned_bases, 28);
+    assert_aggregate_oracle(targeted, total_aligned_bases);
+    assert_per_target_oracle(targeted);
+}
+
+#[test]
 fn targeted_reduction_is_independent_of_chunk_size() {
     let mut baseline = None;
     for chunk_size in [1, 7, 1_024, 65_536] {
         let options = CoverageOptions::new(4_u64 << 30, vec![1, 2])
             .expect("coverage options")
             .with_chunk_size_override(chunk_size);
-        let report = analyze_bam_with_targets(
-            alignment_fixture(),
-            target_fixture(),
-            5,
-            options,
-        )
-        .expect("targeted coverage");
+        let report = analyze_bam_with_targets(alignment_fixture(), target_fixture(), 5, options)
+            .expect("targeted coverage");
         let targeted = report.targeted().expect("targeted report").summary().clone();
         if let Some(expected) = &baseline {
             assert_eq!(&targeted, expected, "chunk size {chunk_size}");
