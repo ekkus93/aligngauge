@@ -4,6 +4,9 @@ use aligngauge_core::{AlignGaugeError, ErrorCategory};
 
 use crate::plan::CoverageMemoryPlan;
 
+const RATIO_SCALE: u128 = 1_000_000;
+const PERCENTAGE_SCALE: u128 = 100_000_000;
+
 pub(crate) fn apply_depth_change(depth: u64, change: i128) -> Result<u64, AlignGaugeError> {
     let next = i128::from(depth)
         .checked_add(change)
@@ -24,16 +27,15 @@ pub(crate) fn format_ratio_six(
     if denominator == 0 {
         return Ok(String::from("0.000000"));
     }
-    const SCALE: u128 = 1_000_000;
     let scaled = u128::from(numerator)
-        .checked_mul(SCALE)
+        .checked_mul(RATIO_SCALE)
         .ok_or_else(|| coverage_overflow("decimal ratio numerator"))?;
     let rounded = scaled
         .checked_add(u128::from(denominator) / 2)
         .ok_or_else(|| coverage_overflow("decimal ratio rounding"))?
         / u128::from(denominator);
-    let whole = rounded / SCALE;
-    let fraction = rounded % SCALE;
+    let whole = rounded / RATIO_SCALE;
+    let fraction = rounded % RATIO_SCALE;
     Ok(format!("{whole}.{fraction:06}"))
 }
 
@@ -44,16 +46,15 @@ pub(crate) fn format_percentage_six(
     if denominator == 0 {
         return Ok(String::from("0.000000"));
     }
-    const SCALE: u128 = 100_000_000;
     let scaled = u128::from(numerator)
-        .checked_mul(SCALE)
+        .checked_mul(PERCENTAGE_SCALE)
         .ok_or_else(|| coverage_overflow("percentage numerator"))?;
     let rounded = scaled
         .checked_add(u128::from(denominator) / 2)
         .ok_or_else(|| coverage_overflow("percentage rounding"))?
         / u128::from(denominator);
-    let whole = rounded / 1_000_000;
-    let fraction = rounded % 1_000_000;
+    let whole = rounded / RATIO_SCALE;
+    let fraction = rounded % RATIO_SCALE;
     Ok(format!("{whole}.{fraction:06}"))
 }
 
