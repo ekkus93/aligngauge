@@ -115,16 +115,38 @@ jobs:
           set -euo pipefail
           command -v strace
           command -v unshare
-          cargo test -p aligngauge-cli --test cram_v0_2 --no-run --locked
-          test_bin="$(find target/debug/deps -maxdepth 1 -type f -executable \
-            -name 'cram_v0_2-*' -print -quit)"
-          if [[ -z "${test_bin}" ]]; then
-            echo 'CRAM integration-test binary was not found' >&2
-            exit 1
-          fi
 
+          build_json="$(mktemp)"
           trace="$(mktemp)"
-          trap 'rm -f "$trace"' EXIT
+          trap 'rm -f "$build_json" "$trace"' EXIT
+          cargo test -p aligngauge-cli --test cram_v0_2 --no-run --locked \
+            --message-format=json > "$build_json"
+          test_bin="$(python - "$build_json" <<'PY'
+          import json
+          import os
+          import sys
+
+          executables = []
+          with open(sys.argv[1], encoding='utf-8') as handle:
+              for line in handle:
+                  message = json.loads(line)
+                  if message.get('reason') != 'compiler-artifact':
+                      continue
+                  target = message.get('target', {})
+                  executable = message.get('executable')
+                  if target.get('name') == 'cram_v0_2' and executable:
+                      executables.append(os.path.realpath(executable))
+
+          unique = sorted(set(executables))
+          if len(unique) != 1:
+              raise SystemExit(
+                  f'expected exactly one cram_v0_2 executable from Cargo metadata, got {unique}'
+              )
+          print(unique[0])
+          PY
+          )"
+          test -x "$test_bin"
+
           sudo unshare --net /usr/bin/strace -f -qq -e trace=network -o "$trace" \
             "$test_bin" --exact hostile_reference_environment_cannot_replace_explicit_local_policy
           if grep -E 'AF_INET|AF_INET6' "$trace"; then
