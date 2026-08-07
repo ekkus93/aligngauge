@@ -3,7 +3,7 @@
 **Repository:** `ekkus93/aligngauge`
 
 **Companion specification:** `docs/DNA_QC_ENGINE_SPEC.md`  
-**Status:** Ralph Loop active — `v0.1.0` released; Milestone 7 implementation/evidence complete; v0.2 release gate remains open
+**Status:** Ralph Loop active — `v0.2.0` released; Milestone 7 complete; Milestone 8 next
 **Last updated:** 2026-08-07  
 **Supersedes:** Initial `DNA_QC_ENGINE_TODO.md` dated 2026-08-05
 
@@ -550,7 +550,7 @@ Verify every criterion in SPEC §19.1.
 
 ## Milestone 7 — CRAM local-reference design
 
-**Status:** Implementation complete — validated implementation SHA `cf288efe8ffdc3542abedc95404bc6602515da4a`; Permanent CI run `31184689945`, job `92886187241`; Full Runtime Validation run `31184688346`, job `92886217801`; Reference Validation run `31184688367`, job `92886248460`; all successful. v0.2 release remains open pending the release-scope reconciliation below.
+**Status:** Complete — `v0.2.0` released at exact release/evidence SHA `ce3aa273da40c679c292e588584781ab1df241de`; validated implementation SHA `cf288efe8ffdc3542abedc95404bc6602515da4a`; final PR/spec SHA `2e1aa87906868da2c0d198ac634997b5ce4d029e`; merge SHA `72dc4ca1fb64c5f49be984ed9c2fac99e0cb64b0`. Exact release-SHA gates: Permanent CI run `31193332229`, job `92915384822`; Full Runtime Validation run `31193331338`, job `92915383627`; Reference Validation run `31193332153`, job `92915384352`; M2 HG002 Preparation Validation run `31193331148`, job `92915380902`; all successful. Release publisher run `31193684743`, job `92916563597`, success.
 
 ### 7.1 Pin and inspect backend behavior
 
@@ -594,7 +594,7 @@ Verify SPEC §19.2.
 - [x] Create `docs/evidence/V0_2_CRAM_VALIDATION.md`.
 - [x] Reconcile SPEC §4.2: standalone `inspect` / `validate-reference` workflows are deferred beyond v0.2 until separately specified.
 - [x] Reconcile SPEC §8 with ADR-0004: use scoped provider neutralization rather than process-global environment mutation.
-- [ ] Permanent CI succeeds on the exact release commit.
+- [x] Permanent CI succeeds on the exact release commit.
 
 ---
 

@@ -8,12 +8,12 @@ AlignGauge analyzes existing aligned sequencing data. It is not software for con
 
 ## Status
 
-AlignGauge `v0.1.0` is released and remains the latest published tag while the `v0.2.0` release candidate completes exact-SHA validation. The v0.1 tag is pinned by release policy to validated evidence SHA `9423a9d3496459fdbceb2e7bc5178b4b3100357c` (product implementation SHA `f93001cf22a2315f01e6b857c295720d99e392ca`).
+AlignGauge `v0.2.0` is released. The v0.2 tag is pinned by release policy to exact release/evidence SHA `ce3aa273da40c679c292e588584781ab1df241de`. The earlier v0.1 tag remains pinned by release policy to validated evidence SHA `9423a9d3496459fdbceb2e7bc5178b4b3100357c` (product implementation SHA `f93001cf22a2315f01e6b857c295720d99e392ca`).
 
-The v0.2 CRAM/reference-integrity implementation and its specification reconciliation were merged to `master` at `72dc4ca1fb64c5f49be984ed9c2fac99e0cb64b0`. The `v0.2.0` tag is intentionally pending until the release-candidate commit containing this status and the committed v0.2 evidence passes the permanent exact-SHA release gates.
+The v0.2 CRAM/reference-integrity implementation and specification reconciliation were merged to `master` at `72dc4ca1fb64c5f49be984ed9c2fac99e0cb64b0`. The exact release target `ce3aa273da40c679c292e588584781ab1df241de` passed Permanent CI, Full Runtime Validation, Reference Validation, and HG002 Preparation Validation before `v0.2.0` was published.
 
 - v0.1: local coordinate-sorted BAM, CPU counters, exact canonical coverage, JSON/provenance, and atomic output publication.
-- v0.2 release candidate: adds CRAM analysis with an explicit local FASTA, fail-closed SN/LN/M5 validation, actual local-reference provenance, BAM/CRAM canonical equivalence, and production HTSlib builds with remote reference transports excluded.
+- v0.2: adds CRAM analysis with an explicit local FASTA, fail-closed SN/LN/M5 validation, actual local-reference provenance, BAM/CRAM canonical equivalence, and production HTSlib builds with remote reference transports excluded.
 - CRAM reference mismatch or absence is fatal; AlignGauge does not silently fall back to inherited local or remote providers.
 - Standalone `inspect` and `validate-reference` commands are deferred beyond v0.2 until separately specified; the v0.2 integrity surface is the released `qc --reference <FASTA>` path and shared validation API.
 - v0.3+: targeted metrics, compatibility expansion, and full-scale qualification are not part of v0.2.
@@ -33,6 +33,7 @@ RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features --no-deps
 
 ## Planning and evidence
 
+- [v0.2.0 release](https://github.com/ekkus93/aligngauge/releases/tag/v0.2.0)
 - [v0.1.0 release](https://github.com/ekkus93/aligngauge/releases/tag/v0.1.0)
 - [Product and architecture specification](docs/DNA_QC_ENGINE_SPEC.md)
 - [Implementation TODO](docs/DNA_QC_ENGINE_TODO.md)

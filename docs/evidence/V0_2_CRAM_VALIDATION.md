@@ -3,7 +3,7 @@
 **Milestone:** 7 — CRAM local-reference design  
 **Evidence date:** 2026-08-07  
 **Validated implementation SHA:** `cf288efe8ffdc3542abedc95404bc6602515da4a`  
-**Disposition:** Milestone 7 implementation tasks 7.1–7.4 are complete. This document does **not** declare the v0.2 release gate closed.
+**Disposition:** Complete — `v0.2.0` is released and pinned by release policy to exact release/evidence SHA `ce3aa273da40c679c292e588584781ab1df241de`.
 
 ## 1. Validation summary
 
@@ -61,7 +61,7 @@ The implemented scoped policy makes inherited provider state non-authoritative i
 5. Any mismatch is terminal.
 6. Tests inject hostile `REF_PATH`, `REF_CACHE`, and `HTS_PATH` values and require the explicit local reference to remain authoritative.
 
-This satisfies the security intent without mutating process-global state. The literal wording difference from SPEC §8 is recorded as an open release-scope reconciliation item rather than hidden.
+This satisfies the security intent without mutating process-global state. SPEC §8 was subsequently reconciled with ADR-0004 so the normative contract now explicitly requires scoped provider neutralization rather than race-prone process-global environment mutation.
 
 ## 5. Reference provenance
 
@@ -134,4 +134,21 @@ The two specification discrepancies identified during Milestone 7 evidence revie
 1. SPEC §4.2 now states that standalone `inspect` and `validate-reference` commands are not v0.2 release requirements. The released v0.2 reference-integrity surface is `qc --reference <FASTA>` plus the shared validation API. Dedicated commands are deferred until their CLI, schema, and error contracts are independently specified and tested.
 2. SPEC §8 now matches ADR-0004's scoped-neutralization design. The production build removes remote HTSlib transports; CRAM requires an explicit local FASTA; AlignGauge validates SN/LN/M5 before reference-dependent traversal; mismatch is terminal; and hostile inherited provider state is proven non-authoritative under network isolation. Process-global environment mutation is neither required nor desired.
 
-These reconciliations do not themselves declare v0.2 released. The remaining release gate is Permanent CI on the eventual exact release commit, followed by the repository's normal merge/tag/release discipline. No tag or v0.2 release claim is made by this evidence document.
+These reconciliations were completed and validated before release. The exact release target then passed the permanent release gates and was published without moving the validated target.
+
+## 11. v0.2.0 release closure
+
+`v0.2.0` was published on 2026-08-07 as GitHub release ID `366847969`. The tag is pinned by release policy to exact release/evidence SHA `ce3aa273da40c679c292e588584781ab1df241de`. Independent post-publication verification confirmed that both `refs/tags/v0.2.0` and the GitHub release `target_commitish` identify that exact commit.
+
+Exact release-SHA validation:
+
+| Gate | Run | Job | Result |
+| --- | --- | --- | --- |
+| Permanent CI | `31193332229` | `92915384822` | success |
+| Full Runtime Validation | `31193331338` | `92915383627` | success |
+| Reference Validation | `31193332153` | `92915384352` | success |
+| M2 HG002 Preparation Validation | `31193331148` | `92915380902` | success |
+
+The one-time publisher revalidated those exact-SHA workflows, refused any pre-existing tag or release, created the release at the pinned SHA, and verified the resulting tag and release target in run `31193684743`, job `92916563597` (success). The publisher was removed after publication.
+
+Milestone 7 and the v0.2 release gate are therefore complete. Later commits on `master` may update documentation and begin Milestone 8; they do not move or redefine the `v0.2.0` tag.

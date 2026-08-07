@@ -15,4 +15,4 @@ Correctness warnings are always emitted to stderr, including under `--quiet`; qu
 
 Standalone `inspect` and `validate-reference` commands are deferred beyond v0.2 until their CLI, output-schema, and error contracts are independently specified and tested. The v0.2 reference-integrity surface is `qc --reference <FASTA>` plus the shared validation API.
 
-Permanent runtime and release E2E validation exercise the compatibility and release paths independently so compatibility behavior cannot silently acquire release-mode requirements. v0.2 CRAM/reference evidence is recorded in `docs/evidence/V0_2_CRAM_VALIDATION.md`; the `v0.2.0` tag is created only after the exact release-candidate commit passes the permanent validation gates.
+Permanent runtime and release E2E validation exercise the compatibility and release paths independently so compatibility behavior cannot silently acquire release-mode requirements. v0.2 CRAM/reference evidence is recorded in `docs/evidence/V0_2_CRAM_VALIDATION.md`. `v0.2.0` is released and pinned by release policy to exact validated release/evidence SHA `ce3aa273da40c679c292e588584781ab1df241de`.
