@@ -1,0 +1,25 @@
+name: M10 oracle line diagnostic
+
+on:
+  push:
+    branches:
+      - milestone-10-samtools-stats
+    paths:
+      - .github/workflows/m10-oracle-line-diagnostic.yml
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Show generated oracle line mapping
+        run: |
+          set -euo pipefail
+          python .github/m10-oracle-tests.py
+          nl -ba crates/aligngauge-metrics/tests/samtools_stats.rs | sed -n '72,84p'
