@@ -133,6 +133,25 @@ jobs:
           '''
           lib = lib[:bundle_start] + bundle_methods + lib[bundle_end:]"""
           body = body[:start] + robust_bundle + body[end:]
+
+          loop_start = "old_loop = '''    while let Some(record) = reader.next_record()? {\n"
+          loop_next = "\n\ncli_main = Path('crates/aligngauge-cli/src/main.rs')"
+          if body.count(loop_start) != 1 or body.count(loop_next) != 1:
+              raise SystemExit('collector transform repair markers are not unique')
+          start = body.index(loop_start)
+          end = body.index(loop_next, start)
+          robust_loop = r"""analysis_start = lib.index("pub fn analyze_release_with_hook(\n")
+          loop_start = lib.index("    while let Some(record) = reader.next_record()? {\n", analysis_start)
+          loop_end = lib.index("    let traversal_ns = elapsed_ns", loop_start)
+          loop_body = r'''    while let Some(record) = reader.next_record()? {
+              hook.checkpoint(ReleaseCheckpoint::BeforeCounterCollector)?;
+              counter_collector.observe(&record)?;
+              hook.checkpoint(ReleaseCheckpoint::BeforeCoverageCollector)?;
+              coverage_collector.observe(&record)?;
+          }
+          '''
+          cli_lib.write_text(lib[:loop_start] + loop_body + lib[loop_end:], encoding='utf-8')"""
+          body = body[:start] + robust_loop + body[end:]
           Path('/tmp/m6_candidate.py').write_text(body, encoding='utf-8')
           PY
           python /tmp/m6_candidate.py
