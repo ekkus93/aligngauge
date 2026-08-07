@@ -1,0 +1,211 @@
+name: M6 CLI Repair
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - ".github/workflows/m6-cli-repair.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Apply fail-closed source repair
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected exactly one match, found {count}")
+              return text.replace(old, new, 1)
+
+          lib_path = Path("crates/aligngauge-cli/src/lib.rs")
+          lib = lib_path.read_text(encoding="utf-8")
+          lib = replace_once(
+              lib,
+              "    summary.warnings = warnings.clone();\n",
+              "    summary.warnings.clone_from(&warnings);\n",
+              "summary warning clone",
+          )
+          start = "    let mut normalization_actions = Vec::new();\n"
+          end = "    counters.apply_provenance(&mut provenance);\n"
+          if lib.count(start) != 1 or lib.count(end) != 1:
+              raise SystemExit("provenance block markers are not unique")
+          before, rest = lib.split(start, 1)
+          old_block, after = rest.split(end, 1)
+          replacement = '''    let mut provenance = build_release_provenance(\n        config,\n        application,\n        input_identity,\n        header_identity,\n        &field_plan,\n        effective_io_threads,\n        traversal_ns,\n        reduction_ns,\n        warnings,\n    )?;\n'''
+          lib = before + replacement + end + after
+          marker = "/// Validate a BAM and return the original three-counter projection.\n"
+          if lib.count(marker) != 1:
+              raise SystemExit("count_bam marker is not unique")
+          helpers = r'''fn build_release_provenance(
+              config: &ResolvedConfig,
+              application: BuildInfo,
+              input_identity: InputIdentity,
+              header_identity: String,
+              field_plan: &FieldPlan,
+              effective_io_threads: usize,
+              traversal_ns: u64,
+              reduction_ns: u64,
+              warnings: Vec<Warning>,
+          ) -> Result<Provenance, AlignGaugeError> {
+              let mut normalization_actions = Vec::new();
+              if config.io_threads == 0 {
+                  normalization_actions.push(String::from(
+                      "io_threads=0 normalized to the serial HTSlib reader setting io_threads=1",
+                  ));
+              }
+
+              Ok(Provenance::new(
+                  application,
+                  config.clone(),
+                  input_identity,
+                  Availability::Available(header_identity),
+                  BTreeMap::from([(String::from("rust-htslib"), String::from("1.0.1"))]),
+                  release_analysis_plan(config, field_plan, effective_io_threads)?,
+                  release_resource_limits(config)?,
+                  BTreeMap::from([
+                      (String::from("bam_traversal"), traversal_ns),
+                      (String::from("collector_finalization"), reduction_ns),
+                  ]),
+                  normalization_actions,
+                  Vec::new(),
+                  warnings,
+                  Vec::new(),
+                  system_info(),
+              ))
+          }
+
+          fn release_analysis_plan(
+              config: &ResolvedConfig,
+              field_plan: &FieldPlan,
+              effective_io_threads: usize,
+          ) -> Result<BTreeMap<String, JsonValue>, AlignGaugeError> {
+              Ok(BTreeMap::from([
+                  (String::from("field_plan"), field_plan.to_json()),
+                  (String::from("bam_traversals"), JsonValue::Unsigned(1)),
+                  (
+                      String::from("configured_collector_threads"),
+                      JsonValue::Unsigned(usize_to_u64(config.threads, "configured threads")?),
+                  ),
+                  (String::from("collector_threads_used"), JsonValue::Unsigned(1)),
+                  (
+                      String::from("configured_io_threads"),
+                      JsonValue::Unsigned(usize_to_u64(config.io_threads, "configured I/O threads")?),
+                  ),
+                  (
+                      String::from("effective_reader_io_threads"),
+                      JsonValue::Unsigned(usize_to_u64(
+                          effective_io_threads,
+                          "effective I/O threads",
+                      )?),
+                  ),
+              ]))
+          }
+
+          fn release_resource_limits(
+              config: &ResolvedConfig,
+          ) -> Result<BTreeMap<String, u64>, AlignGaugeError> {
+              Ok(BTreeMap::from([
+                  (String::from("memory_limit_bytes"), config.memory_limit_bytes),
+                  (
+                      String::from("configured_threads"),
+                      usize_to_u64(config.threads, "configured threads")?,
+                  ),
+                  (
+                      String::from("configured_io_threads"),
+                      usize_to_u64(config.io_threads, "configured I/O threads")?,
+                  ),
+              ]))
+          }
+
+          '''
+          lib = lib.replace(marker, helpers + marker, 1)
+          lib_path.write_text(lib, encoding="utf-8")
+
+          main_path = Path("crates/aligngauge-cli/src/main.rs")
+          main = main_path.read_text(encoding="utf-8")
+          main = replace_once(
+              main,
+              "enum CliAction {\n    Help(String),\n    Compatibility {\n",
+              "enum CliAction {\n    Help(String),\n    Legacy {\n        input: PathBuf,\n    },\n    Compatibility {\n",
+              "legacy action enum",
+          )
+          main = replace_once(
+              main,
+              "        Ok(CliAction::Compatibility { input, format }) => run_compatibility(&input, format),\n",
+              "        Ok(CliAction::Legacy { input }) => run_legacy(&input),\n        Ok(CliAction::Compatibility { input, format }) => run_compatibility(&input, format),\n",
+              "legacy main dispatch",
+          )
+          run_marker = "fn run_compatibility(input: &Path, format: CompatibilityFormat) -> ExitCode {\n"
+          legacy_fn = '''fn run_legacy(input: &Path) -> ExitCode {
+              match analyze_bam(input) {
+                  Ok(report) => {
+                      let counters = report.alignment_counters();
+                      print!(
+                          "total\\t{}\\nmapped\\t{}\\nunmapped\\t{}\\n",
+                          counters.total, counters.mapped, counters.unmapped
+                      );
+                      ExitCode::SUCCESS
+                  }
+                  Err(error) => exit_with_error(&error, LogFormat::Human),
+              }
+          }
+
+          '''
+          main = replace_once(main, run_marker, legacy_fn + run_marker, "legacy runner")
+          release_marker = '''    Ok(CliAction::Release {
+              config_path,
+              overrides,
+              diagnostic_hint,
+          })
+          '''
+          legacy_route = '''    if !release_option_seen {
+              let input = overrides
+                  .input
+                  .ok_or_else(|| usage_error("qc requires --input <BAM>", &program))?;
+              return Ok(CliAction::Legacy { input });
+          }
+
+          '''
+          main = replace_once(main, release_marker, legacy_route + release_marker, "legacy parser route")
+          old_usage = '''Compatibility probe retained for differential validation:\\n  {0} qc --input <BAM> --format <human|json|samtools-flagstat|samtools-idxstats>'''
+          new_usage = '''Legacy three-counter compatibility probe:\\n  {0} qc --input <BAM>\\n\\nCompatibility projections retained for differential validation:\\n  {0} qc --input <BAM> --format <human|json|samtools-flagstat|samtools-idxstats>'''
+          main = replace_once(main, old_usage, new_usage, "usage compatibility section")
+          main_path.write_text(main, encoding="utf-8")
+          PY
+
+      - name: Format repaired sources
+        run: cargo fmt --all
+
+      - name: Run strict Clippy
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+      - name: Run full workspace tests
+        run: cargo test --workspace --all-features --locked
+
+      - name: Verify walking-skeleton CLI contract explicitly
+        run: cargo test -p aligngauge-cli --test walking_skeleton --locked
+
+      - name: Commit validated repair and remove this workflow
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          rm .github/workflows/m6-cli-repair.yml
+          git add crates/aligngauge-cli/src/lib.rs crates/aligngauge-cli/src/main.rs .github/workflows/m6-cli-repair.yml
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix: restore legacy CLI while integrating v0.1 release path'
+          git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:master
