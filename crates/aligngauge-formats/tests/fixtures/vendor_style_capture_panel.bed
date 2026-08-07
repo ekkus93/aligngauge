@@ -1,0 +1,7 @@
+track name="ExampleCapturePanel" description="Representative vendor-style BED6 capture panel"
+browser position chr1:1-120
+# representative hybrid-capture target names
+chr1	10	20	GENE1_exon1	0	+
+chr1	18	35	GENE1_exon2	0	+
+chr1	90	100	GENE2_exon1	0	-
+chr2	5	12	GENE3_exon1	0	+
