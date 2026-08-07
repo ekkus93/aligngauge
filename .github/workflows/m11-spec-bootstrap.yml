@@ -1,0 +1,97 @@
+name: M11 Spec Bootstrap
+
+on:
+  push:
+    branches: [milestone-11-picard-profiles]
+    paths:
+      - '.github/workflows/m11-spec-bootstrap.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch normative M11 spec and status
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          spec = Path('docs/DNA_QC_ENGINE_SPEC.md')
+          text = spec.read_text()
+          anchor = '\n## 13. Architecture\n'
+          if text.count(anchor) != 1:
+              raise SystemExit(f'expected one architecture anchor, found {text.count(anchor)}')
+          if '### 12.9 v0.4 Picard alignment-summary and insert-size profiles' not in text:
+              section = r'''
+
+### 12.9 v0.4 Picard alignment-summary and insert-size profiles
+
+Milestone 11 pins Picard 3.4.0 and defines two independent ALL_READS compatibility profiles:
+`picard-alignment-summary-3.4.0-all-reads-subset-v1` and
+`picard-insert-size-3.4.0-all-reads-v1`. The exact semantic boundary is normative in
+ADR-0008.
+
+The alignment-summary profile is intentionally a reference-independent subset. It
+claims exact Picard 3.4.0 behavior only for CATEGORY, TOTAL_READS, PF_READS,
+PCT_PF_READS, PF_NOISE_READS, PCT_ADAPTER, MEAN_READ_LENGTH, SD_READ_LENGTH,
+MEDIAN_READ_LENGTH, MAD_READ_LENGTH, MIN_READ_LENGTH, MAX_READ_LENGTH, and
+BAD_CYCLES. Reference-dependent mismatch, error, indel, chimera, strand, clipping,
+and pair-alignment metrics are not part of Milestone 11 and shall be absent rather
+than serialized as invented zeros. Sequence bases may be decoded only when this
+explicit profile is selected; existing QC and Samtools-stats plans shall not
+silently acquire sequence materialization cost.
+
+The insert-size profile matches Picard 3.4.0 CollectInsertSizeMetrics defaults at
+ALL_READS: DEVIATIONS=10.0, HISTOGRAM_WIDTH unset, MIN_HISTOGRAM_WIDTH unset,
+MINIMUM_PCT=0.05, INCLUDE_DUPLICATES=false. It accepts only mapped paired records
+with mapped mates, excludes first-of-pair records, secondary/supplementary records,
+duplicates, and zero TLEN, and classifies the remaining abs(TLEN) observations into
+Picard/HTSJDK FR, RF, and TANDEM orientations.
+
+For every emitted orientation the profile covers the complete InsertSizeMetrics
+row and trimmed histogram table. Automatic histogram width and mean/standard-
+deviation trimming use Picard's exact median + 10*MAD rule and Java integer
+conversion behavior. Median, mode, MAD, centered width thresholds, standard
+deviation, tie-breaking, and rendered decimal values are compatibility semantics;
+they shall be proven against the pinned executable rather than independently
+chosen.
+
+PDF chart generation is not part of the M11 claim. SAMPLE, LIBRARY, and READ_GROUP
+accumulation are deferred to the later v0.4 breakdown milestone. Compatibility
+text must be derived from typed completed reports. Differential acceptance requires
+edge-distribution fixtures and real-data comparison against pinned Picard 3.4.0,
+with every expected difference named and no blanket tolerance. MultiQC parser
+validation may supplement but never replace direct Picard differential evidence.
+'''
+              text = text.replace(anchor, section + anchor)
+              spec.write_text(text)
+
+          todo = Path('docs/DNA_QC_ENGINE_TODO.md')
+          t = todo.read_text()
+          old = '**Status:** Ralph Loop active — `v0.3.0` released; Milestone 10 complete; Milestone 11 next'
+          new = '**Status:** Ralph Loop active — `v0.3.0` released; Milestone 11 active'
+          if old in t:
+              t = t.replace(old, new, 1)
+          elif new not in t:
+              raise SystemExit('M11 status guard did not match')
+          todo.write_text(t)
+          PY
+          git diff --check
+          git diff -- docs/DNA_QC_ENGINE_SPEC.md docs/DNA_QC_ENGINE_TODO.md
+      - name: Commit normative bootstrap
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/DNA_QC_ENGINE_SPEC.md docs/DNA_QC_ENGINE_TODO.md
+          git diff --cached --quiet && exit 0
+          git commit -m 'docs: specify Milestone 11 Picard profiles'
+          git push origin HEAD:milestone-11-picard-profiles
