@@ -1,4 +1,11 @@
-//! Checked v0.1 alignment counters and Samtools 1.24 compatibility projections.
+//! Checked alignment metrics and pinned Samtools compatibility projections.
+
+mod samtools_stats;
+
+pub use samtools_stats::{
+    InsertSizeRow, MULTIQC_VERSION, SAMTOOLS_STATS_PROFILE, SamtoolsStatsCollector,
+    SamtoolsStatsReport, analyze_samtools_stats_bam,
+};
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;

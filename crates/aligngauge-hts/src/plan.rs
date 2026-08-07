@@ -25,13 +25,15 @@ pub enum RequiredField {
     MismatchDescriptor,
     /// Packed sequence bases. Reserved; not requested by v0.1 plans.
     Sequence,
-    /// Base qualities. Reserved; not requested by v0.1 plans.
+    /// Base qualities.
     Qualities,
+    /// Signed template length / TLEN.
+    TemplateLength,
 }
 
 impl RequiredField {
     /// All fields in stable provenance order.
-    pub const ALL: [Self; 10] = [
+    pub const ALL: [Self; 11] = [
         Self::Flags,
         Self::Coordinates,
         Self::MateCoordinates,
@@ -42,6 +44,7 @@ impl RequiredField {
         Self::MismatchDescriptor,
         Self::Sequence,
         Self::Qualities,
+        Self::TemplateLength,
     ];
 
     /// Stable machine-readable field name.
@@ -58,6 +61,7 @@ impl RequiredField {
             Self::MismatchDescriptor => "md",
             Self::Sequence => "sequence",
             Self::Qualities => "qualities",
+            Self::TemplateLength => "template_length",
         }
     }
 }
@@ -87,6 +91,21 @@ impl FieldPlan {
             RequiredField::Flags,
             RequiredField::Coordinates,
             RequiredField::Cigar,
+        ])
+    }
+
+    /// Build the exact Samtools 1.24 stats SN/IS compatibility plan.
+    #[must_use]
+    pub fn samtools_stats() -> Self {
+        Self::from_fields([
+            RequiredField::Flags,
+            RequiredField::Coordinates,
+            RequiredField::MateCoordinates,
+            RequiredField::MappingQuality,
+            RequiredField::Cigar,
+            RequiredField::EditDistance,
+            RequiredField::Qualities,
+            RequiredField::TemplateLength,
         ])
     }
 

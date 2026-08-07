@@ -1,7 +1,4 @@
-#!/usr/bin/env python3
-from pathlib import Path
-
-Path("crates/aligngauge-metrics/tests/samtools_stats.rs").write_text(r'''use std::path::{Path, PathBuf};
+use std::path::{Path, PathBuf};
 
 use aligngauge_metrics::{
     InsertSizeRow, MULTIQC_VERSION, SAMTOOLS_STATS_PROFILE, analyze_samtools_stats_bam,
@@ -71,7 +68,8 @@ fn basic_fixture_matches_pinned_samtools_1_24_sn_exactly() {
 
 #[test]
 fn flags_fixture_matches_pinned_samtools_1_24_sn_and_is_exactly() {
-    let report = analyze_samtools_stats_bam(fixture("flags_and_pairs.bam")).expect("stats analysis");
+    let report =
+        analyze_samtools_stats_bam(fixture("flags_and_pairs.bam")).expect("stats analysis");
 
     assert_eq!(report.raw_total_sequences, 6);
     assert_eq!(report.filtered_sequences, 0);
@@ -114,7 +112,10 @@ fn flags_fixture_matches_pinned_samtools_1_24_sn_and_is_exactly() {
     assert_eq!(report.percentage_properly_paired_reads, "33.3");
     assert_eq!(report.insert_sizes.len(), 71);
     for (expected_size, row) in report.insert_sizes.iter().take(70).enumerate() {
-        assert_eq!(row.insert_size, u32::try_from(expected_size).expect("size fits u32"));
+        assert_eq!(
+            row.insert_size,
+            u32::try_from(expected_size).expect("size fits u32")
+        );
         assert_eq!(row.pairs_total, 0);
         assert_eq!(row.inward, 0);
         assert_eq!(row.outward, 0);
@@ -137,4 +138,3 @@ fn flags_fixture_matches_pinned_samtools_1_24_sn_and_is_exactly() {
     assert!(!rendered.contains("\nID\t"));
     assert!(!rendered.contains("\nGCD\t"));
 }
-''')
