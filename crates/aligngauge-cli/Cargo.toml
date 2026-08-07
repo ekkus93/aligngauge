@@ -10,6 +10,7 @@ publish = false
 
 [dependencies]
 aligngauge-core = { path = "../aligngauge-core" }
+aligngauge-coverage = { path = "../aligngauge-coverage" }
 aligngauge-hts = { path = "../aligngauge-hts" }
 aligngauge-metrics = { path = "../aligngauge-metrics" }
 
