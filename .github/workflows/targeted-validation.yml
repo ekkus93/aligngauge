@@ -1,0 +1,183 @@
+name: Targeted Validation
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - ".github/workflows/targeted-validation.yml"
+      - "crates/aligngauge-cli/**"
+      - "crates/aligngauge-core/**"
+      - "crates/aligngauge-coverage/**"
+      - "crates/aligngauge-formats/**"
+      - "crates/aligngauge-hts/**"
+      - "schemas/summary.schema.json"
+      - "testdata/hg002/**"
+      - "tools/reference/samtools/**"
+      - "docs/DNA_QC_ENGINE_SPEC.md"
+      - "docs/DNA_QC_ENGINE_TODO.md"
+      - "docs/adr/ADR-0006-TARGETED_METRIC_SEMANTICS.md"
+      - "docs/evidence/V0_3_TARGETED_VALIDATION.md"
+  pull_request:
+    paths:
+      - ".github/workflows/targeted-validation.yml"
+      - "crates/aligngauge-cli/**"
+      - "crates/aligngauge-core/**"
+      - "crates/aligngauge-coverage/**"
+      - "crates/aligngauge-formats/**"
+      - "crates/aligngauge-hts/**"
+      - "schemas/summary.schema.json"
+      - "testdata/hg002/**"
+      - "tools/reference/samtools/**"
+      - "docs/DNA_QC_ENGINE_SPEC.md"
+      - "docs/DNA_QC_ENGINE_TODO.md"
+      - "docs/adr/ADR-0006-TARGETED_METRIC_SEMANTICS.md"
+      - "docs/evidence/V0_3_TARGETED_VALIDATION.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: targeted-validation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  targeted:
+    name: ci/targeted
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Verify deterministic target fixture identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s  %s\n' \
+            9eb4a3b4f9318521ac6f25ac3037d41a74133fdf215f9e281df3c6a801d408b4 \
+            testdata/hg002/targeted-v0.3.bed | sha256sum --check --strict
+          test "$(wc -c < testdata/hg002/targeted-v0.3.bed)" -eq 210
+          test "$(grep -c '^chr20' testdata/hg002/targeted-v0.3.bed)" -eq 6
+
+      - name: Validate targeted reference tools
+        run: |
+          bash -n tools/reference/samtools/run-target-depth.sh
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('tools/reference/samtools/compare-target-depth.py')
+          compile(path.read_text(encoding='utf-8'), str(path), 'exec')
+          PY
+
+      - name: Run synthetic targeted oracle
+        run: |
+          cargo test -p aligngauge-coverage --test targeted_contract --all-features --locked -- --nocapture
+
+      - name: Prove targeted BAM CRAM equivalence
+        run: |
+          cargo test -p aligngauge-cli --test cram_v0_2 --all-features --locked \
+            targeted_bam_and_cram_have_identical_canonical_results -- --nocapture
+
+      - name: Prepare deterministic HG002 coverage projection
+        run: |
+          testdata/hg002/prepare.sh "$GITHUB_WORKSPACE/target/hg002-source"
+          testdata/hg002/prepare-coverage-projection.sh \
+            target/hg002-source/subset.bam \
+            "$GITHUB_WORKSPACE/target/hg002-targeted-projection"
+          grep -F 'schema=aligngauge-hg002-coverage-projection-v1' \
+            target/hg002-targeted-projection/prepared.manifest
+          grep -F 'projected_reference_length=1100000' \
+            target/hg002-targeted-projection/prepared.manifest
+          test -s target/hg002-targeted-projection/subset.bam
+          test -s target/hg002-targeted-projection/subset.bam.bai
+
+      - name: Run complete v0.3 targeted release path
+        run: |
+          cargo build --release -p aligngauge-cli --bin aligngauge --locked
+          target/release/aligngauge qc \
+            --input target/hg002-targeted-projection/subset.bam \
+            --outdir target/hg002-m9/release \
+            --targets testdata/hg002/targeted-v0.3.bed \
+            --memory-limit 1GiB \
+            --quiet
+          test -f target/hg002-m9/release/summary.json
+          test -f target/hg002-m9/release/provenance.json
+          test -f target/hg002-m9/release/_SUCCESS
+
+      - name: Capture pinned Samtools target depth without network
+        run: |
+          bash tools/reference/samtools/run-target-depth.sh \
+            target/hg002-targeted-projection/subset.bam \
+            testdata/hg002/targeted-v0.3.bed \
+            target/hg002-m9/reference-target-depth
+          test -f target/hg002-m9/reference-target-depth/_SUCCESS
+          grep -F 'samtools 1.24' target/hg002-m9/reference-target-depth/version.txt
+          grep -F -- '-G UNMAP,SECONDARY,QCFAIL,DUP,SUPPLEMENTARY' \
+            target/hg002-m9/reference-target-depth/invocation.txt
+
+      - name: Compare HG002 targeted primitives exactly
+        run: |
+          python tools/reference/samtools/compare-target-depth.py \
+            target/hg002-m9/reference-target-depth/stdout.txt \
+            testdata/hg002/targeted-v0.3.bed \
+            target/hg002-m9/release/summary.json \
+            target/hg002-m9/targeted-differential-report.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          root = Path('target/hg002-m9')
+          summary = json.loads((root / 'release/summary.json').read_text())
+          provenance = json.loads((root / 'release/provenance.json').read_text())
+          report = json.loads((root / 'targeted-differential-report.json').read_text())
+          coverage = summary['coverage']['value']
+          targeted = coverage['targeted']['value']
+
+          assert summary['schema_version'] == '1.1.0'
+          assert targeted['profile'] == 'aligngauge-targeted-v0.3'
+          assert targeted['coverage_profile'] == 'aligngauge-v0.1'
+          assert targeted['near_distance_bases'] == 250
+          assert targeted['target_sha256'] == '9eb4a3b4f9318521ac6f25ac3037d41a74133fdf215f9e281df3c6a801d408b4'
+          assert targeted['target_size_bytes'] == 210
+          assert targeted['source_interval_count'] == 6
+          assert (
+              targeted['on_target_bases']
+              + targeted['near_target_bases']
+              + targeted['off_target_bases']
+              == coverage['total_accepted_aligned_bases']
+          )
+          assert provenance['analysis_plan']['alignment_traversals'] == 1
+          assert provenance['analysis_plan']['targeted_profile'] == 'aligngauge-targeted-v0.3'
+          assert provenance['analysis_plan']['near_distance_bases'] == 250
+          assert provenance['analysis_plan']['target_metric_compatibility'] == 'native-no-picard-compatibility-claim'
+          assert provenance['analysis_plan']['target_path'] == 'testdata/hg002/targeted-v0.3.bed'
+          assert report['schema'] == 'aligngauge-targeted-samtools-differential-v1'
+          assert report['status'] == 'exact'
+          assert report['compatibility_claim'] is None
+          assert report['checked_aggregate_fields']
+          assert report['checked_per_target_fields']
+          PY
+
+      - name: Upload targeted validation evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: targeted-validation-${{ github.sha }}
+          path: |
+            target/hg002-source/prepared.manifest
+            target/hg002-targeted-projection/prepared.manifest
+            target/hg002-m9/release/summary.json
+            target/hg002-m9/release/provenance.json
+            target/hg002-m9/release/_SUCCESS
+            target/hg002-m9/reference-target-depth/invocation.txt
+            target/hg002-m9/reference-target-depth/image.txt
+            target/hg002-m9/reference-target-depth/version.txt
+            target/hg002-m9/reference-target-depth/stdout.txt
+            target/hg002-m9/reference-target-depth/stderr.txt
+            target/hg002-m9/reference-target-depth/exit_status.txt
+            target/hg002-m9/reference-target-depth/wall_seconds.txt
+            target/hg002-m9/reference-target-depth/_SUCCESS
+            target/hg002-m9/targeted-differential-report.json
+          if-no-files-found: error
+          retention-days: 14
