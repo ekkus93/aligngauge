@@ -29,6 +29,7 @@ RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features --no-deps
 
 ## Planning and evidence
 
+- [v0.1.0 release](https://github.com/ekkus93/aligngauge/releases/tag/v0.1.0)
 - [Product and architecture specification](docs/DNA_QC_ENGINE_SPEC.md)
 - [Implementation TODO](docs/DNA_QC_ENGINE_TODO.md)
 - [v0.1 validation report](docs/evidence/V0_1_VALIDATION_REPORT.md)
