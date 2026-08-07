@@ -53,6 +53,7 @@ fn main() -> ExitCode {
                     Ok(config) => config,
                     Err(error) => return exit_with_error(&error, diagnostic_hint),
                 };
+            emit_verbose_config(&config);
             if let Err(error) = preflight_output_destination(&config.outdir) {
                 return exit_with_error(&error, config.log_format);
             }
@@ -60,6 +61,7 @@ fn main() -> ExitCode {
                 Ok(report) => report,
                 Err(error) => return exit_with_error(&error, config.log_format),
             };
+            emit_warnings(&report.summary().warnings, config.log_format);
             let publisher = AtomicPublisher::new(&config.outdir, config.preserve_failed_staging);
             if let Err(error) = publisher.publish(&report.output_bundle()) {
                 return exit_with_error(&error, config.log_format);
@@ -110,6 +112,28 @@ fn run_compatibility(input: &Path, format: CompatibilityFormat) -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(error) => exit_with_error(&error, LogFormat::Human),
+    }
+}
+
+fn emit_verbose_config(config: &aligngauge_core::ResolvedConfig) {
+    if !config.verbose {
+        return;
+    }
+    let rendered = config.to_json().to_compact_string();
+    match config.log_format {
+        LogFormat::Human => eprintln!("verbose: resolved_config={rendered}"),
+        LogFormat::Json => eprintln!("{rendered}"),
+    }
+}
+
+fn emit_warnings(warnings: &[aligngauge_core::Warning], format: LogFormat) {
+    for warning in warnings {
+        match format {
+            LogFormat::Human => {
+                eprintln!("warning[{}]: {}", warning.code, warning.message);
+            }
+            LogFormat::Json => eprintln!("{}", warning.to_json().to_compact_string()),
+        }
     }
 }
 
