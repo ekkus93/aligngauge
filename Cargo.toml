@@ -3,6 +3,7 @@ members = [
     "crates/aligngauge-cli",
     "crates/aligngauge-core",
     "crates/aligngauge-coverage",
+    "crates/aligngauge-formats",
     "crates/aligngauge-hts",
     "crates/aligngauge-metrics",
     "crates/aligngauge-testkit",
