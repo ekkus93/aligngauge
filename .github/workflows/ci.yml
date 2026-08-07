@@ -80,6 +80,7 @@ jobs:
           bash -n tools/reference/samtools/run-reference.sh
           bash -n tools/reference/samtools/run-baselines.sh
           bash -n tools/reference/samtools/compare-coverage.sh
+          bash -n tools/reference/samtools/run-target-depth.sh
           bash -n testdata/hg002/prepare.sh
           bash -n testdata/hg002/prepare-coverage-projection.sh
           python - <<'PY'
@@ -88,6 +89,7 @@ jobs:
           paths = [
               Path("tools/reference/samtools/summarize-depth.py"),
               Path("tools/reference/samtools/compare-coverage.py"),
+              Path("tools/reference/samtools/compare-target-depth.py"),
               Path("tools/ci/check_coverage_rss.py"),
               Path("testdata/hg002/project-coverage-sam.py"),
           ]
