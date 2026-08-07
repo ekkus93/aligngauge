@@ -10,6 +10,7 @@ on:
       - .github/m9-core-refactor.py
       - .github/m9-core-borrow-fix.py
       - .github/m9-core-lint-fix.py
+      - crates/aligngauge-coverage/tests/targeted_contract.rs
 
 concurrency:
   group: milestone-9-core-targeted-4-${{ github.ref }}
