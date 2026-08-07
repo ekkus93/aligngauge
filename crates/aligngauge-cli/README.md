@@ -19,6 +19,8 @@ The v0.3 native metrics include exact target territory, on-/near-/off-target ali
 
 Milestone 10 adds `--format samtools-stats` as the explicit BAM-only `samtools-stats-1.24-multiqc-1.35` compatibility probe. It derives the complete ordinary 39-row `SN` Summary Numbers section and the `IS` insert-size section from a checked typed canonical report. The profile is validated exactly against pinned Samtools 1.24 and by running pinned MultiQC 1.35 on both the Samtools reference text and AlignGauge text. Unsupported Samtools-stats sections are omitted rather than partially approximated. This compatibility collector is not silently enabled for ordinary v0.1-v0.3 QC runs.
 
+Milestone 10 acceptance is closed after exact validation of both the clean evidence candidate and the merged `master` commit. The Ralph loop proceeds to Milestone 11 — Picard alignment and insert-size profiles. This M10 closeout still does not publish or imply `v0.4.0`.
+
 The compatibility paths must not silently inherit release-mode requirements, and release-only options must not be combined with `--format`.
 
 Correctness warnings are always emitted to stderr, including under `--quiet`; quiet mode suppresses only routine completion output. `--verbose` emits the resolved configuration using the selected diagnostic format so accepted-but-serial settings such as `--threads >1` are visible rather than silently ignored.
