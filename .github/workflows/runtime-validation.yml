@@ -1,0 +1,71 @@
+name: Full Runtime Validation
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - ".github/workflows/runtime-validation.yml"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "crates/**"
+      - "testdata/**"
+      - "tools/ci/**"
+  pull_request:
+    paths:
+      - ".github/workflows/runtime-validation.yml"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "crates/**"
+      - "testdata/**"
+      - "tools/ci/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: full-runtime-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  runtime:
+    name: ci/full-runtime
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Show pinned toolchain
+        run: |
+          rustc --version --verbose
+          cargo --version
+
+      - name: Verify dependency lockfile
+        run: cargo update --workspace --locked --dry-run
+
+      - name: Build release workspace
+        run: cargo build --workspace --all-features --locked --release
+
+      - name: Run release-mode tests
+        run: cargo test --workspace --all-features --locked --release
+
+      - name: Exercise complete CLI runtime matrix
+        run: |
+          python tools/ci/full_runtime_validation.py \
+            target/release/aligngauge \
+            testdata/manifest.v1.tsv
+
+      - name: Verify repository remains clean
+        run: |
+          if [[ -n "$(git status --porcelain)" ]]; then
+            git status --short
+            git diff --check
+            exit 1
+          fi
+          git diff --check
