@@ -1,6 +1,6 @@
 # Milestone 13 exact overlap evidence
 
-**Evidence state:** implementation-candidate proof for Milestone 13. This document does not declare a `v0.4.0` release and does not promote the selected Picard WGS or HsMetrics surfaces to emitted compatibility profiles.
+**Evidence state:** validated Milestone 13 evidence. This document does not declare a `v0.4.0` release and does not promote the selected Picard WGS or HsMetrics surfaces to emitted compatibility profiles.
 
 ## Validated implementation candidate
 
@@ -20,6 +20,25 @@ Every pull-request workflow triggered by that exact SHA completed successfully:
 - Exact Overlap Validation run `31249073464`, job `93082408299` — success
 
 This separates overlap-specific proof from the existing permanent, runtime, reference, targeted, Samtools, Picard, and MultiQC compatibility gates. No existing gate was replaced or weakened.
+
+## Validated evidence SHA
+
+Evidence/report SHA:
+
+`8edc7563afe271357e3d0215c4d3a44c36646f68`
+
+After `M13_EXACT_OVERLAP.md` and the updated v0.4 compatibility report were committed, that exact SHA also passed every triggered pull-request workflow:
+
+- Permanent CI run `31249215972`, job `93082789859` — success
+- Full Runtime Validation run `31249215964` — success
+- Reference Validation run `31249216006` — success
+- Targeted Validation run `31249215965` — success
+- Samtools Stats Validation run `31249215993` — success
+- Picard Validation run `31249215960` — success
+- MultiQC Validation run `31249215985` — success
+- Exact Overlap Validation run `31249215961`, job `93082777275` — success
+
+The exact-overlap oracle therefore remained green after the evidence and compatibility-boundary text existed in the repository. The next repository-closure step is to update the milestone TODO and validate that closure SHA before merge.
 
 ## Frozen exact-overlap profiles
 
