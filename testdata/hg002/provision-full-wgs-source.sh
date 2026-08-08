@@ -70,8 +70,7 @@ content_length() {
   local url=$1
   local length
   length=$(curl --fail --silent --show-error --location --head "$url" \
-    | awk 'BEGIN { IGNORECASE = 1 }
-      /^content-length:/ {
+    | awk 'tolower($1) == "content-length:" {
         gsub("\\r", "", $2)
         if ($2 ~ /^[0-9]+$/) value = $2
       }
