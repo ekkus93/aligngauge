@@ -15,6 +15,10 @@ source "$repo_root/tools/reference/picard/image.lock"
   echo "unexpected pinned Picard version: $version" >&2
   exit 1
 }
+[[ "$image" == *@sha256:* ]] || {
+  echo "Picard image must be pinned by immutable digest: $image" >&2
+  exit 1
+}
 [[ -f "$input" ]] || {
   echo "input BAM does not exist: $input" >&2
   exit 66
@@ -83,11 +87,5 @@ if [[ -s "$outdir_abs/metrics.txt" ]]; then
     exit 1
   }
 fi
-grep -F 'Version:3.4.0' "$outdir_abs/stderr.txt" >/dev/null || \
-grep -F 'Version: 3.4.0' "$outdir_abs/stderr.txt" >/dev/null || {
-  echo "Picard stderr did not prove version 3.4.0" >&2
-  cat "$outdir_abs/stderr.txt" >&2
-  exit 1
-}
 
 touch "$outdir_abs/_SUCCESS"
