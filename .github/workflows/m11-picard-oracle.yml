@@ -1,5 +1,5 @@
 name: M11 Picard Oracle
-# rerun after empty insert-output contract fix
+# include deterministic M11 edge fixtures
 
 on:
   push:
@@ -25,15 +25,14 @@ jobs:
           python3 -m py_compile tools/reference/picard/compare-insert-size.py
       - name: Build AlignGauge compatibility probes
         run: cargo build --release -p aligngauge-cli --locked
-      - name: Run exact Picard oracle on committed fixtures
+      - name: Run exact Picard alignment-summary oracle
         run: |
           set -euo pipefail
           root="$RUNNER_TEMP/m11-oracle"
           mkdir -p "$root"
-          for id in basic flags_and_pairs empty; do
+          for id in basic flags_and_pairs empty picard_alignment_edge; do
             input="testdata/fixtures/$id.bam"
-            mkdir -p "$root/$id/alignment" "$root/$id/insert"
-
+            mkdir -p "$root/$id/alignment"
             bash tools/reference/picard/run-alignment-summary.sh "$input" "$root/$id/alignment/reference"
             target/release/aligngauge qc --input "$input" --format picard-alignment-summary \
               > "$root/$id/alignment/aligngauge.txt"
@@ -41,7 +40,14 @@ jobs:
               "$root/$id/alignment/reference/metrics.txt" \
               "$root/$id/alignment/aligngauge.txt" \
               "$root/$id/alignment/differential.json"
-
+          done
+      - name: Run exact Picard insert-size oracle
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/m11-oracle"
+          for id in basic flags_and_pairs empty picard_insert_edge; do
+            input="testdata/fixtures/$id.bam"
+            mkdir -p "$root/$id/insert"
             bash tools/reference/picard/run-insert-size.sh "$input" "$root/$id/insert/reference"
             target/release/aligngauge qc --input "$input" --format picard-insert-size \
               > "$root/$id/insert/aligngauge.txt"
