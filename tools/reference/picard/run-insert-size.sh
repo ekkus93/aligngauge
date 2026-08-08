@@ -32,6 +32,7 @@ outdir_abs="$(realpath "$outdir")"
 
 rm -f \
   "$outdir_abs/metrics.txt" \
+  "$outdir_abs/output_state.txt" \
   "$outdir_abs/histogram.pdf" \
   "$outdir_abs/stdout.txt" \
   "$outdir_abs/stderr.txt" \
@@ -76,11 +77,15 @@ if [[ $status -ne 0 ]]; then
   exit "$status"
 fi
 
-[[ -f "$outdir_abs/metrics.txt" ]] || {
-  echo "Picard insert-size metrics file is missing" >&2
-  exit 1
-}
-# Picard may legitimately emit no metrics rows for a fixture with no eligible pairs.
+if [[ -f "$outdir_abs/metrics.txt" ]]; then
+  printf 'present\n' > "$outdir_abs/output_state.txt"
+else
+  # Picard 3.4.0 succeeds without creating OUTPUT when no insert observations exist.
+  # Preserve that fact separately and create an empty capture file only so downstream
+  # exact comparators have a stable pathname.
+  printf 'absent\n' > "$outdir_abs/output_state.txt"
+  : > "$outdir_abs/metrics.txt"
+fi
 if [[ -s "$outdir_abs/metrics.txt" ]]; then
   grep -F $'## METRICS CLASS\tpicard.analysis.InsertSizeMetrics' "$outdir_abs/metrics.txt" >/dev/null || {
     echo "non-empty Picard insert-size output is missing the expected metrics class" >&2
