@@ -43,6 +43,20 @@ tools/v0.5/run-full-hg002-qualification.sh \
 
 The campaign must run from a clean exact AlignGauge commit and creates its result only after every required assertion succeeds.
 
+## Qualification machinery validation
+
+The full-scale preparation/campaign machinery and the independent v0.5 hardening program are now implemented in PR #9.
+
+Validated hardening evidence SHA:
+
+`0e14af01c2f218aaca371c414133403e8e88c96d`
+
+Every workflow triggered by that exact evidence state succeeded, including Permanent CI and V0.5 Hardening Validation run `31265637214`. The hardening gate includes full ASan/LeakSanitizer HTS coverage, both 20,000-run fuzz campaigns, dependency/license/source audit, deterministic SBOM/license inventories, and a byte-identical two-build release-artifact assessment.
+
+The implementation checklist was reconciled in bot bookkeeping commit `195bcb296c77b6aafdb92f56a39341ea1dc7a26f`. Milestone 15 now records all implemented hardening items complete except signed/attested release artifacts, which remain an exact-release-candidate/publication item. Milestone 14 remains entirely open.
+
+This section records readiness of the machinery only. It is not full-HG002 evidence and does not alter the `BLOCKED` state above.
+
 ## Evidence required to change this report to COMPLETE
 
 Copy from the successful campaign without reinterpretation:
@@ -81,5 +95,7 @@ Copy from the successful campaign without reinterpretation:
 ## Current blocker
 
 The repository and GitHub-hosted CI do not contain the complete 118 GB source BAM and intentionally do not download it. Full-scale qualification therefore requires a maintainer execution environment with the pinned source BAM/BAI and sufficient local storage.
+
+The active execution environment used for this implementation work has only about 38 GB free, below the preparation script's fail-closed 64 GiB minimum even before provisioning the 118 GB source. It cannot execute the real M14 campaign.
 
 This is a release blocker, not an allowed warning or waiver. `v0.5.0` must not be tagged until this report is populated from a successful full campaign and the remaining v0.5 release gate is green on the exact release commit.
