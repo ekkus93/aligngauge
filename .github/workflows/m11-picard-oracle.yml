@@ -1,5 +1,5 @@
 name: M11 Picard Oracle
-# include deterministic M11 edge fixtures
+# rerun after supplementary-exclusion semantic correction
 
 on:
   push:
