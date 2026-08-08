@@ -1,4 +1,5 @@
 name: M11 Picard Oracle
+# rerun after immutable-image identity correction
 
 on:
   push:
