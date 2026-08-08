@@ -1,8 +1,44 @@
 # AlignGauge v0.4 release validation evidence
 
-**State:** final v0.4 release-candidate evidence. No `v0.4.0` tag or GitHub release is assumed by this file; publication occurs only after the exact commit containing this evidence passes the permanent release gates.
+**State:** `v0.4.0` published and post-release closure complete. The release tag points to the exact pre-publication commit that passed the permanent release gates; later bookkeeping commits do not alter the tagged tree.
 
-## Release scope
+## Published release identity
+
+- Tag: `v0.4.0`
+- GitHub release ID: `367190259`
+- Exact release SHA: `5be4aa4e5df3e8feb17fdde46c408683ac08bb53`
+- PR #8 merge SHA: `c1ded07bad71b330aa712d65ec38850de009a218`
+- Release is non-draft and non-prerelease.
+
+The Git tag resolves directly to `5be4aa4e5df3e8feb17fdde46c408683ac08bb53`; it does not point to the temporary publisher commit or any later documentation commit.
+
+## Exact release-SHA validation
+
+The exact tag target `5be4aa4e5df3e8feb17fdde46c408683ac08bb53` passed every workflow triggered by the final release-evidence commit:
+
+- Permanent CI run `31255804251`, job `93098870269` — success
+- Reference Validation run `31255804281`, job `93098876451` — success
+- V0.4 Release Validation run `31255804250`, job `93098876838` — success
+
+The release tag was not created until all three were complete and successful.
+
+The final v0.4 gate on that exact SHA successfully completed all of these executable assertions:
+
+1. pinned tool identities are Samtools 1.24, Picard 3.4.0 / bundled HTSJDK 4.2.0, and MultiQC 1.35;
+2. the released CLI exposes only the proved v0.4 compatibility profiles and rejects unproved WGS/Hs format names;
+3. ordinary whole-input canonical `summary.json` is byte-identical between serial decoding and `--io-threads 2`;
+4. targeted canonical `summary.json` is byte-identical between serial decoding and `--io-threads 2`;
+5. `--threads 2` remains an explicitly serial collector configuration, reports `collector_threads_used = 1`, and emits `collector_threads_serial_v0_1`;
+6. generated Samtools Stats matches pinned Samtools 1.24 exactly with no blanket numerical tolerance;
+7. pinned MultiQC 1.35 independently parses generated Samtools reference and AlignGauge text and the parsed Samtools Stats / insert-size data are byte-identical;
+8. generated Picard AlignmentSummary and InsertSize projections match pinned Picard 3.4.0 exactly;
+9. pinned MultiQC 1.35 independently parses generated Picard InsertSize reference and AlignGauge text and parsed data are byte-identical;
+10. WGS/Hs discovery fixtures remain discovery-only with `compatibility_claim: false`;
+11. required evidence artifacts exist and the validation checkout remains clean.
+
+Parser success alone was not accepted as compatibility proof. Unsupported fields remain absent rather than being synthesized as zero. Reference-tool or parser failure is fatal.
+
+## Released compatibility scope
 
 ADR-0011 freezes these v0.4 compatibility profiles:
 
@@ -12,47 +48,64 @@ ADR-0011 freezes these v0.4 compatibility profiles:
 
 Existing `samtools-flagstat` and `samtools-idxstats` projections remain available from earlier releases without semantic widening.
 
-Picard WgsMetrics and HsMetrics are **not** v0.4 release profiles. The CLI rejects `picard-wgs` and `picard-hs-metrics`. ADR-0009 selected those as future candidate surfaces and Milestone 13 proved their exact overlap primitives, but complete WGS/Hs filtering, reductions, renderers, metric differentials, and generated-output MultiQC equivalence remain unproved.
+`docs/evidence/V0_4_COMPATIBILITY_REPORT.md` reconciles the complete claim boundary:
+
+- all 39 ordinary Samtools 1.24 `SN` rows plus the default released `IS` surface;
+- exactly the 13 reference-independent Picard AlignmentSummary fields from ADR-0008;
+- the complete released Picard InsertSize default `ALL_READS` metrics row plus trimmed histogram surface;
+- the exact MultiQC-generated-output claim boundary;
+- every explicit unsupported/deferred surface.
+
+Pinned MultiQC 1.35 compatibility is claimed only where generated output was independently parsed and compared to parsed reference output:
+
+- Samtools Stats: parsed `multiqc_samtools_stats.txt` and `samtools_insert_size.txt` are byte-identical reference versus AlignGauge;
+- Picard InsertSize: parsed Picard insert-size data are byte-identical reference versus AlignGauge.
+
+The 13-field Picard AlignmentSummary subset remains a direct Picard 3.4.0 compatibility claim, not a MultiQC claim, because the pinned parser requires reference-dependent columns outside the released subset.
+
+## WGS/Hs and fold-80 boundary
+
+Picard WgsMetrics and HsMetrics are **not** v0.4 release profiles. The CLI rejects `picard-wgs` and `picard-hs-metrics`.
+
+ADR-0009 selected those as future candidate surfaces, and Milestone 13 proved their exact overlap primitives against pinned Picard 3.4.0 / HTSJDK 4.2.0. Complete WGS/Hs filtering, denominators, coverage/target reductions, renderers, full metric differentials, and generated-output MultiQC equivalence remain outside v0.4.
 
 Native `target_uniformity_penalty_80` remains distinct from Picard `FOLD_80_BASE_PENALTY`; no value is copied, aliased, zero-filled, or relabeled.
 
-## Release-gate implementation candidate
+## Released execution-mode boundary
 
-Candidate SHA:
+Collector/reduction execution remains deterministic and serial. Released bounded concurrency is HTSlib reader/decompression concurrency through `--io-threads` while preserving one logical ordered record stream.
+
+- `--io-threads 0` normalizes to one effective reader thread.
+- `--io-threads 2` uses two effective reader I/O threads in the release-gate proof.
+- canonical summaries are byte-identical across those settings for whole-input and targeted paths.
+- provenance intentionally differs where it truthfully records configured/effective I/O threads and timing values.
+- indexed reference-partition execution remains unsupported by ADR-0010.
+
+## Validation chain before the release SHA
+
+### Release-gate implementation candidate
 
 `191fd927c506d037dad57b8209d132f78a36d025`
 
-Successful workflows on that exact SHA:
+- V0.4 Release Validation run `31254954734`, job `93096874003` — success
+- Permanent CI run `31254954580`, job `93096873958` — success
+- Reference Validation run `31254954662`, job `93096874325` — success
 
-- V0.4 Release Validation run `31254954734`, job `93096874003`
-- Permanent CI run `31254954580`, job `93096873958`
-- Reference Validation run `31254954662`, job `93096874325`
-
-This candidate established the permanent `ci/v0.4-release` workflow and ADR-0011.
-
-## Reconciled compatibility-report candidate
-
-Evidence SHA:
+### Reconciled compatibility-report candidate
 
 `39f464d7a54ed3b18fff0ea62e1fc47e71b7596f`
 
-Successful workflows on that exact SHA:
+- V0.4 Release Validation run `31255113725`, job `93097266573` — success
+- Permanent CI run `31255113745`, job `93097251861` — success
+- Reference Validation run `31255113727`, job `93097266292` — success
+- MultiQC Validation run `31255113729`, job `93097242866` — success
+- Exact Overlap Validation run `31255113726`, job `93097242950` — success
 
-- V0.4 Release Validation run `31255113725`, job `93097266573`
-- Permanent CI run `31255113745`, job `93097251861`
-- Reference Validation run `31255113727`, job `93097266292`
-- MultiQC Validation run `31255113729`, job `93097242866`
-- Exact Overlap Validation run `31255113726`, job `93097242950`
-
-`docs/evidence/V0_4_COMPATIBILITY_REPORT.md` on this state reconciles every v0.4 field claim: all 39 ordinary Samtools 1.24 `SN` rows plus the default `IS` surface, the exact 13 Picard AlignmentSummary fields, the complete released Picard InsertSize row/histogram surface, and all explicit unsupported/deferred boundaries.
-
-## Broad release-surface candidate
-
-Candidate SHA:
+### Broad release-surface candidate
 
 `ba53a4dca8e06a653a3ad23c1f6a8711628a096d`
 
-Every PR workflow triggered by that exact SHA succeeded:
+Every triggered PR workflow succeeded:
 
 - Permanent CI run `31255308013`, job `93097721487`
 - Full Runtime Validation run `31255308000`, job `93097699603`
@@ -64,33 +117,17 @@ Every PR workflow triggered by that exact SHA succeeded:
 - Exact Overlap Validation run `31255308010`, job `93097699391`
 - V0.4 Release Validation run `31255308018`, job `93097723581`
 
-This state also updated both public release-surface READMEs so they describe the actual v0.4 candidate instead of stale Milestone 12-next language.
-
-## Final PR head validation
-
-PR #8 final head:
+### Final PR head
 
 `51fa8651042222808569e1de4b502a7db13fe7ae`
 
-All nine required PR workflows succeeded on that exact head before merge:
+All nine required PR workflows succeeded before merge, including Permanent CI, Full Runtime, Reference, Targeted, Samtools Stats, Picard, MultiQC, Exact Overlap, and V0.4 Release Validation.
 
-- Permanent CI run `31255441265`, job `93098011516`
-- Full Runtime Validation run `31255441202`
-- Reference Validation run `31255441216`
-- Targeted Validation run `31255441206`, job `93098011319`
-- Samtools Stats Validation run `31255441209`, job `93098011253`
-- Picard Validation run `31255441205`, job `93098011250`
-- MultiQC Validation run `31255441219`, job `93098011260`
-- Exact Overlap Validation run `31255441220`, job `93098011238`
-- V0.4 Release Validation run `31255441229`, job `93098011455`
+PR #8 was merged only after that exact head was green.
 
-PR #8 was merged only after this exact head was green.
+### Merged master validation
 
-## Merged master validation
-
-PR #8 merged to `master` as:
-
-`c1ded07bad71b330aa712d65ec38850de009a218`
+PR #8 merged to `master` as `c1ded07bad71b330aa712d65ec38850de009a218`.
 
 Every workflow triggered by that exact merge SHA completed successfully:
 
@@ -105,39 +142,52 @@ Every workflow triggered by that exact merge SHA completed successfully:
 - V0.4 Release Validation run `31255545776`, job `93098258412`
 - M2 HG002 Preparation Validation run `31255545808`, job `93098258437`
 
-The merge therefore passed the complete v0.4 compatibility/runtime matrix plus the HG002 preparation/performance path on actual `master`, not only on a pull-request merge ref.
+The merge therefore passed the complete v0.4 compatibility/runtime matrix plus HG002 preparation on actual `master`, not only on a pull-request merge ref.
 
-## Executable v0.4 proof
+## Release-evidence trigger hardening
 
-The permanent v0.4 gate proves all of the following on each candidate SHA it validates:
+Master commit `03e5cc3fe267c714d0f96830c5a47ebb396f8ece` added this file itself to the push and pull-request path filters for `.github/workflows/v0.4-release-validation.yml`.
 
-1. pinned tool identities are Samtools 1.24, Picard 3.4.0 / bundled HTSJDK 4.2.0, and MultiQC 1.35;
-2. the released CLI exposes only the proved v0.4 compatibility profiles and rejects unproved WGS/Hs format names;
-3. ordinary whole-input canonical `summary.json` is byte-identical between serial decoding and `--io-threads 2`;
-4. targeted canonical `summary.json` is byte-identical between serial decoding and `--io-threads 2`;
-5. `--threads 2` remains an explicitly serial collector configuration, reports `collector_threads_used = 1`, and emits `collector_threads_serial_v0_1`;
-6. generated Samtools Stats matches pinned Samtools 1.24 exactly with no blanket numerical tolerance;
-7. pinned MultiQC 1.35 independently parses generated Samtools reference and AlignGauge text and the parsed Samtools Stats / insert-size data are byte-identical;
-8. generated Picard AlignmentSummary and InsertSize projections match pinned Picard 3.4.0 exactly;
-9. pinned MultiQC 1.35 independently parses generated Picard InsertSize reference and AlignGauge text and parsed data are byte-identical;
-10. WGS/Hs discovery fixtures remain discovery-only with `compatibility_claim: false`;
-11. required evidence artifacts must exist and the validation checkout must remain clean.
+That ensured the final release-evidence commit `5be4aa4e5df3e8feb17fdde46c408683ac08bb53` triggered `ci/v0.4-release` on its own exact SHA instead of inheriting proof from a parent or PR-wide diff.
 
-Parser success alone is never accepted as compatibility proof. Unsupported fields are omitted rather than synthesized as zero. Reference-tool or parser failure is fatal.
+## Publication and verification
 
-## Released execution-mode boundary
+A one-time publisher was added only after the exact release SHA was green:
 
-Collector/reduction execution remains deterministic and serial. Released bounded concurrency is HTSlib reader/decompression concurrency through `--io-threads` while preserving one logical ordered record stream.
+- publisher child commit: `5b551ffd352fd920856e48006c44a7ae6bc30419`
+- publisher run `31255923016`, job `93099134102` — success
 
-- `--io-threads 0` normalizes to one effective reader thread.
-- `--io-threads 2` uses two effective reader I/O threads in the release-gate proof.
-- canonical summaries are byte-identical across those settings for whole-input and targeted paths.
-- provenance intentionally differs where it truthfully records configured/effective I/O threads and timing values.
-- indexed reference-partition execution remains unsupported by ADR-0010.
+The publisher:
 
-## Fail-closed release boundaries
+1. proved its immediate parent was the exact release SHA;
+2. revalidated the exact run identities for Permanent CI, Reference Validation, and V0.4 Release Validation;
+3. refused an already-existing `v0.4.0` tag or release;
+4. created GitHub release ID `367190259` with `target_commitish = 5be4aa4e5df3e8feb17fdde46c408683ac08bb53`;
+5. fetched the resulting tag and release independently and required both to resolve to the same exact target.
 
-The release gate fails rather than degrades when:
+The publisher completed successfully and was removed in commit `163ff40e1fedb38dced8c9535d6a4260959e33d8`.
+
+## Post-release closure
+
+A separate one-time documentation closer was used only after publication:
+
+- closer setup commit: `355b2834c02672577250ca144e323384722f8d38`
+- closer run `31256011737`, job `93099344963` — success
+- guarded documentation commit: `4a0e6360ec57cb407350c786542ae799986d47fc`
+- closer removal commit: `4923b853da0b68a5742ff1cc6d357d22685f4759`
+
+The closer verified the already-published release identity before editing and then updated only post-release documentation:
+
+- `docs/DNA_QC_ENGINE_TODO.md` now marks all four v0.4 release gates complete and records the exact release SHA/CI identities;
+- root `README.md` identifies `v0.4.0` as the latest published release and links the release;
+- `crates/aligngauge-cli/README.md` records the exact published release SHA and release-SHA gates;
+- `docs/evidence/V0_4_COMPATIBILITY_REPORT.md` records the published release identity.
+
+Both temporary write-enabled one-time workflows were removed after their single intended use. No standing publisher or post-release closer remains in the repository.
+
+## Fail-closed boundaries
+
+The permanent release gate fails rather than degrades when:
 
 - a pinned reference-tool contract changes;
 - an unproved WGS/Hs compatibility format appears;
@@ -152,27 +202,4 @@ The release gate fails rather than degrades when:
 
 There is no warning-only reference path, approximate compatibility fallback, zero-fill policy, or pre-success evidence marker.
 
-## Exact release-candidate trigger hardening
-
-Immediately after the fully green merge, master commit `03e5cc3fe267c714d0f96830c5a47ebb396f8ece` added this file itself to the push and pull-request path filters for `.github/workflows/v0.4-release-validation.yml`.
-
-That closes a subtle release-process gap: an evidence-only final candidate can no longer change `V0_4_RELEASE_VALIDATION.md` without triggering `ci/v0.4-release` on that exact SHA.
-
-The commit containing this final evidence text is therefore the intended `v0.4.0` tag target **only if** its own Permanent CI and V0.4 Release Validation runs, plus every other workflow it triggers, complete successfully.
-
-## Publication rule
-
-No tag is created speculatively.
-
-After the exact commit containing this evidence is green, publication follows the repository's established one-time-publisher pattern:
-
-1. create a temporary child commit containing a narrowly scoped publisher workflow;
-2. require that publisher to verify its parent is the exact validated release SHA;
-3. re-check the required release-SHA workflow conclusions;
-4. refuse publication if `v0.4.0` already exists;
-5. create the GitHub release with `target_commitish` equal to the validated parent SHA;
-6. verify the resulting tag resolves to that exact SHA;
-7. remove the temporary write-enabled publisher;
-8. close the TODO and post-release documentation in later non-release commits.
-
-The publisher child is never the release target. The tag must point to the already-validated parent candidate.
+This post-release evidence file is part of the permanent v0.4 validation trigger surface. Its own commit must therefore pass Permanent CI, Reference Validation, and V0.4 Release Validation before repository closure is considered complete.
