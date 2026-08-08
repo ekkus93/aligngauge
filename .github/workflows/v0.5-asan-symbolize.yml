@@ -1,0 +1,86 @@
+name: V0.5 ASan Symbolize
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/v0.5-asan-symbolize.yml"
+      - "crates/aligngauge-hts/tests/asan_corrupt_isolation.rs"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  symbolize:
+    name: diagnostic/v0.5-asan-symbolize
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Install AddressSanitizer target
+        run: rustup target add x86_64-unknown-linux-gnuasan
+
+      - name: Resolve LLVM symbolizer
+        shell: bash
+        run: |
+          set -euo pipefail
+          symbolizer=""
+          for candidate in llvm-symbolizer-20 llvm-symbolizer-19 llvm-symbolizer-18 llvm-symbolizer; do
+            if command -v "$candidate" >/dev/null; then
+              symbolizer=$(command -v "$candidate")
+              break
+            fi
+          done
+          if [[ -z "$symbolizer" ]]; then
+            echo 'No llvm-symbolizer is available on the pinned runner image.' >&2
+            exit 1
+          fi
+          printf 'ASAN_SYMBOLIZER_PATH=%s\n' "$symbolizer" >> "$GITHUB_ENV"
+          "$symbolizer" --version
+
+      - name: Reproduce and symbolize truncated BGZF leak
+        shell: bash
+        env:
+          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNUASAN_LINKER: cc
+          CC_x86_64_unknown_linux_gnuasan: cc
+          CXX_x86_64_unknown_linux_gnuasan: c++
+          CFLAGS_x86_64_unknown_linux_gnuasan: -fsanitize=address -fno-omit-frame-pointer -g
+          CXXFLAGS_x86_64_unknown_linux_gnuasan: -fsanitize=address -fno-omit-frame-pointer -g
+          CARGO_TARGET_DIR: target/v0.5-asan-symbolize
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1:abort_on_error=0:symbolize=1
+        run: |
+          set -euo pipefail
+          mkdir -p target/v0.5-asan-symbolize-evidence
+          set +e
+          cargo test -p aligngauge-hts \
+            --target x86_64-unknown-linux-gnuasan \
+            --test asan_corrupt_isolation \
+            --locked \
+            truncated_bgzf_is_leak_clean -- --exact --nocapture \
+            >target/v0.5-asan-symbolize-evidence/truncated-bgzf.log 2>&1
+          status=$?
+          set -e
+          cat target/v0.5-asan-symbolize-evidence/truncated-bgzf.log
+          if [[ $status -eq 0 ]]; then
+            echo 'Expected the known truncated-BGZF leak to reproduce, but it did not.' >&2
+            exit 1
+          fi
+          grep -F 'SUMMARY: AddressSanitizer: 135641 byte(s) leaked in 8 allocation(s).' \
+            target/v0.5-asan-symbolize-evidence/truncated-bgzf.log >/dev/null
+          grep -E 'bgzf|inflate|hread|hts_' \
+            target/v0.5-asan-symbolize-evidence/truncated-bgzf.log \
+            >target/v0.5-asan-symbolize-evidence/native-symbols.txt
+          test -s target/v0.5-asan-symbolize-evidence/native-symbols.txt
+
+      - name: Upload symbolized trace only
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: v0.5-asan-symbolized-${{ github.sha }}
+          path: target/v0.5-asan-symbolize-evidence/
+          if-no-files-found: error
+          retention-days: 7
