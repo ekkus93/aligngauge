@@ -21,9 +21,10 @@ const FLAG_SUPPLEMENTARY: u16 = 0x800;
 
 #[test]
 fn write_exact_overlap_differential_fixture() -> Result<(), Box<dyn Error>> {
-    let output_dir = std::env::var_os("ALIGNGAUGE_M13_OUTPUT_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("target/m13-overlap-test"));
+    let output_dir = std::env::var_os("ALIGNGAUGE_M13_OUTPUT_DIR").map_or_else(
+        || PathBuf::from("target/m13-overlap-test"),
+        PathBuf::from,
+    );
     fs::create_dir_all(&output_dir)?;
 
     let records = overlap_records();
@@ -35,20 +36,20 @@ fn write_exact_overlap_differential_fixture() -> Result<(), Box<dyn Error>> {
     fs::write(output_dir.join("overlap.bam"), bam)?;
 
     let counters = summarize(&records)?;
-    assert_eq!(counters.wgs_retained_bases, 135);
-    assert_eq!(counters.wgs_baseq_excluded_bases, 10);
-    assert_eq!(counters.wgs_overlap_excluded_bases, 35);
-    assert_eq!(counters.hs_overlap_clipped_read_bases, 64);
+    assert_eq!(counters.wgs_retained, 135);
+    assert_eq!(counters.wgs_baseq_excluded, 10);
+    assert_eq!(counters.wgs_overlap_excluded, 35);
+    assert_eq!(counters.hs_overlap_clipped, 64);
     fs::write(output_dir.join("aligngauge.tsv"), counters.render())?;
     Ok(())
 }
 
 #[derive(Debug, Default)]
 struct Counters {
-    wgs_retained_bases: u64,
-    wgs_baseq_excluded_bases: u64,
-    wgs_overlap_excluded_bases: u64,
-    hs_overlap_clipped_read_bases: u64,
+    wgs_retained: u64,
+    wgs_baseq_excluded: u64,
+    wgs_overlap_excluded: u64,
+    hs_overlap_clipped: u64,
 }
 
 impl Counters {
@@ -60,10 +61,10 @@ impl Counters {
                 "wgs_overlap_excluded_bases\t{}\n",
                 "hs_overlap_clipped_read_bases\t{}\n",
             ),
-            self.wgs_retained_bases,
-            self.wgs_baseq_excluded_bases,
-            self.wgs_overlap_excluded_bases,
-            self.hs_overlap_clipped_read_bases,
+            self.wgs_retained,
+            self.wgs_baseq_excluded,
+            self.wgs_overlap_excluded,
+            self.hs_overlap_clipped,
         )
     }
 }
@@ -87,16 +88,16 @@ fn summarize(records: &[RecordSpec]) -> Result<Counters, Box<dyn Error>> {
                 },
                 |_| Ok(()),
             )?;
-            counters.wgs_retained_bases = counters
-                .wgs_retained_bases
+            counters.wgs_retained = counters
+                .wgs_retained
                 .checked_add(result.retained_bases)
                 .ok_or("WGS retained counter overflow")?;
-            counters.wgs_baseq_excluded_bases = counters
-                .wgs_baseq_excluded_bases
+            counters.wgs_baseq_excluded = counters
+                .wgs_baseq_excluded
                 .checked_add(result.baseq_excluded_bases)
                 .ok_or("WGS base-quality counter overflow")?;
-            counters.wgs_overlap_excluded_bases = counters
-                .wgs_overlap_excluded_bases
+            counters.wgs_overlap_excluded = counters
+                .wgs_overlap_excluded
                 .checked_add(result.overlap_excluded_bases)
                 .ok_or("WGS overlap counter overflow")?;
         }
@@ -113,8 +114,8 @@ fn summarize(records: &[RecordSpec]) -> Result<Counters, Box<dyn Error>> {
                 mate_start,
                 &raw_cigar,
             )?;
-            counters.hs_overlap_clipped_read_bases = counters
-                .hs_overlap_clipped_read_bases
+            counters.hs_overlap_clipped = counters
+                .hs_overlap_clipped
                 .checked_add(clipped)
                 .ok_or("Hs overlap counter overflow")?;
         }
