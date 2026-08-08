@@ -22,6 +22,7 @@ on:
       - "docs/evidence/M11_PICARD_ALIGNMENT_INSERT_SIZE.md"
       - "docs/evidence/M13_EXACT_OVERLAP.md"
       - "docs/evidence/V0_4_COMPATIBILITY_REPORT.md"
+      - "docs/evidence/V0_4_RELEASE_VALIDATION.md"
   pull_request:
     paths:
       - ".github/workflows/v0.4-release-validation.yml"
@@ -42,6 +43,7 @@ on:
       - "docs/evidence/M11_PICARD_ALIGNMENT_INSERT_SIZE.md"
       - "docs/evidence/M13_EXACT_OVERLAP.md"
       - "docs/evidence/V0_4_COMPATIBILITY_REPORT.md"
+      - "docs/evidence/V0_4_RELEASE_VALIDATION.md"
   workflow_dispatch:
 
 permissions:
