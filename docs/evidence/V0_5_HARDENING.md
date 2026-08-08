@@ -150,4 +150,6 @@ M15 hardening implementation has no remaining fuzz/security/reproducibility bloc
 2. signed/attested release checksums/artifacts remain an exact-release-candidate/publication item;
 3. after M14 closes, the eventual exact release candidate must repeat all required permanent gates before any tag exists.
 
-No v0.5 tag or GitHub release has been created, and no pending item may be interpreted as passed.
+No v0.5 tag or GitHub release has been created.
+
+No pending item may be interpreted as passed.
