@@ -69,6 +69,6 @@ Standalone `inspect` and `validate-reference` commands remain deferred until the
 
 Permanent runtime and release E2E validation exercise compatibility and release paths independently so compatibility behavior cannot silently acquire release-mode requirements. Evidence is recorded in `docs/evidence/V0_2_CRAM_VALIDATION.md`, `docs/evidence/V0_3_TARGETED_VALIDATION.md`, `docs/evidence/M10_SAMTOOLS_STATS_MULTIQC.md`, `docs/evidence/M11_PICARD_ALIGNMENT_INSERT_SIZE.md`, `docs/evidence/M13_EXACT_OVERLAP.md`, `docs/evidence/V0_4_COMPATIBILITY_REPORT.md`, and `docs/evidence/V0_4_RELEASE_VALIDATION.md`.
 
-`v0.3.0` remains the latest published product release while the v0.4 release candidate is being closed. No `v0.4.0` tag or GitHub release is created until the exact release commit passes Permanent CI and the permanent v0.4 release-validation gate. The eventual tag is pinned to that validated commit rather than created speculatively.
+`v0.4.0` is the latest published product release. Its tag points exactly to release SHA `5be4aa4e5df3e8feb17fdde46c408683ac08bb53` (GitHub release ID `367190259`). That exact SHA passed Permanent CI run `31255804251`, Reference Validation run `31255804281`, and V0.4 Release Validation run `31255804250` before publication.
 
 This release-surface document is intentionally part of the standing validation trigger sets so compatibility-surface documentation changes cannot bypass runtime, reference, targeted, Samtools Stats, Picard, MultiQC, exact-overlap, or v0.4 qualification.

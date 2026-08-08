@@ -236,6 +236,4 @@ The v0.4 release validator is additive. It does not weaken or substitute for Per
 
 ## Release status
 
-The **compatibility-report reconciliation requirement is satisfied in this candidate state**, subject to CI validating this committed report.
-
-The report does not claim that a `v0.4.0` tag already exists. The remaining repository operations are evidence/TODO closure, exact merge validation on `master`, selection of an exact green release commit, and only then creation of the `v0.4.0` tag and GitHub release.
+The compatibility-report reconciliation requirement is satisfied for published `v0.4.0`. The release tag points exactly to validated release SHA `5be4aa4e5df3e8feb17fdde46c408683ac08bb53` (GitHub release ID `367190259`). The exact release SHA passed Permanent CI run `31255804251`, Reference Validation run `31255804281`, and V0.4 Release Validation run `31255804250` before publication.

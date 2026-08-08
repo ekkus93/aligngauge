@@ -3,7 +3,7 @@
 **Repository:** `ekkus93/aligngauge`
 
 **Companion specification:** `docs/DNA_QC_ENGINE_SPEC.md`  
-**Status:** Ralph Loop active — `v0.3.0` released; Milestone 13 complete; v0.4 release gate next
+**Status:** Ralph Loop active — `v0.4.0` released; v0.5 production-beta qualification next
 **Last updated:** 2026-08-08  
 **Supersedes:** Initial `DNA_QC_ENGINE_TODO.md` dated 2026-08-05
 
@@ -763,10 +763,12 @@ Only implement if measured value justifies complexity. ADR-0010 records that the
 
 ### v0.4 release gate
 
-- [ ] Compatibility report reconciles every claimed field.
-- [ ] MultiQC parses generated outputs.
-- [ ] Serial and released parallel modes agree.
-- [ ] Permanent CI succeeds on the exact release commit.
+**Status:** Complete — `v0.4.0` published at exact release SHA `5be4aa4e5df3e8feb17fdde46c408683ac08bb53` (GitHub release ID `367190259`). Exact release-SHA validation: Permanent CI run `31255804251`, job `93098870269`; Reference Validation run `31255804281`, job `93098876451`; V0.4 Release Validation run `31255804250`, job `93098876838`; all successful.
+
+- [x] Compatibility report reconciles every claimed field.
+- [x] MultiQC parses generated outputs.
+- [x] Serial and released parallel modes agree.
+- [x] Permanent CI succeeds on the exact release commit.
 
 ---
 

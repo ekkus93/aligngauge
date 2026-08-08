@@ -8,12 +8,12 @@ AlignGauge analyzes existing aligned sequencing data. It is not software for con
 
 ## Status
 
-AlignGauge `v0.3.0` remains the latest published release while the `v0.4.0` release candidate is being validated. The v0.3 tag is pinned by release policy to exact release SHA `eccd45157d34ada00a3403a2b24d606956878b62` (GitHub release ID `366930828`). That exact release SHA passed Permanent CI, Full Runtime Validation, Reference Validation, Targeted Validation, and HG002 Preparation Validation before publication. The v0.2 tag remains pinned by release policy to exact release/evidence SHA `ce3aa273da40c679c292e588584781ab1df241de`; the earlier v0.1 tag remains pinned to validated evidence SHA `9423a9d3496459fdbceb2e7bc5178b4b3100357c` (product implementation SHA `f93001cf22a2315f01e6b857c295720d99e392ca`).
+AlignGauge `v0.4.0` is the latest published release, pinned to exact release SHA `5be4aa4e5df3e8feb17fdde46c408683ac08bb53` (GitHub release ID `367190259`). The v0.3 tag is pinned by release policy to exact release SHA `eccd45157d34ada00a3403a2b24d606956878b62` (GitHub release ID `366930828`). That exact release SHA passed Permanent CI, Full Runtime Validation, Reference Validation, Targeted Validation, and HG002 Preparation Validation before publication. The v0.2 tag remains pinned by release policy to exact release/evidence SHA `ce3aa273da40c679c292e588584781ab1df241de`; the earlier v0.1 tag remains pinned to validated evidence SHA `9423a9d3496459fdbceb2e7bc5178b4b3100357c` (product implementation SHA `f93001cf22a2315f01e6b857c295720d99e392ca`).
 
 - v0.1: local coordinate-sorted BAM, CPU counters, exact canonical coverage, JSON/provenance, and atomic output publication.
 - v0.2: adds CRAM analysis with an explicit local FASTA, fail-closed SN/LN/M5 validation, actual local-reference provenance, BAM/CRAM canonical equivalence, and production HTSlib builds with remote reference transports excluded.
 - v0.3: adds fail-closed BED3–BED12 target parsing, deterministic target normalization, `--targets <BED>`, `--near-distance <N>` (default 250), exact on/near/off-target partitioning, per-source target depth/dropout reporting, native target enrichment, and `target_uniformity_penalty_80`.
-- v0.4 release candidate: adds the exact `samtools-stats-1.24-multiqc-1.35` compatibility profile, the exact Picard 3.4.0 13-field reference-independent AlignmentSummary subset, the exact Picard 3.4.0 default `ALL_READS` InsertSize profile, pinned MultiQC 1.35 generated-output validation for the supported parser surfaces, and an explicit release gate proving serial versus released HTSlib I/O-thread canonical equivalence.
+- v0.4: adds the exact `samtools-stats-1.24-multiqc-1.35` compatibility profile, the exact Picard 3.4.0 13-field reference-independent AlignmentSummary subset, the exact Picard 3.4.0 default `ALL_READS` InsertSize profile, pinned MultiQC 1.35 generated-output validation for the supported parser surfaces, and an explicit release gate proving serial versus released HTSlib I/O-thread canonical equivalence.
 - Targeted analysis reuses the exact canonical chunked coverage sweep; counters, whole-genome coverage, and targeted reductions remain one alignment traversal.
 - Native targeted metrics do not claim Picard `CollectHsMetrics`, `FOLD_ENRICHMENT`, or `FOLD_80_BASE_PENALTY` compatibility. Comparable target-depth primitives are independently validated against pinned Samtools 1.24.
 - Picard WgsMetrics and HsMetrics remain explicitly deferred from v0.4. Milestone 13 proves their exact overlap primitives against pinned Picard 3.4.0 / HTSJDK 4.2.0, but complete WGS/Hs record filtering, reductions, renderers, full metric differentials, and generated-output MultiQC proof have not been promoted to release profiles.
@@ -26,7 +26,7 @@ AlignGauge `v0.3.0` remains the latest published release while the `v0.4.0` rele
 - Indexed reference-partition execution is not admitted for v0.4.
 - GPU/backend selection remains research-only until end-to-end benchmarks justify it.
 
-No `v0.4.0` tag or GitHub release is created until the exact release commit has passed Permanent CI and the permanent v0.4 release-validation gate. The tag is evidence of a validated commit, not a mechanism for creating one.
+`v0.4.0` was published only after exact release SHA `5be4aa4e5df3e8feb17fdde46c408683ac08bb53` passed Permanent CI, Reference Validation, and the permanent v0.4 release-validation gate. The tag is evidence of that validated commit and points directly to it.
 
 ## Development
 
@@ -41,6 +41,7 @@ RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features --no-deps
 
 ## Planning and evidence
 
+- [v0.4.0 release](https://github.com/ekkus93/aligngauge/releases/tag/v0.4.0)
 - [v0.3.0 release](https://github.com/ekkus93/aligngauge/releases/tag/v0.3.0)
 - [v0.2.0 release](https://github.com/ekkus93/aligngauge/releases/tag/v0.2.0)
 - [v0.1.0 release](https://github.com/ekkus93/aligngauge/releases/tag/v0.1.0)
