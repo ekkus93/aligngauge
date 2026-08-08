@@ -104,6 +104,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p target
           set +e
           bash testdata/hg002/provision-full-wgs-source.sh \
             > target/v0.5-provision-usage.stdout \
