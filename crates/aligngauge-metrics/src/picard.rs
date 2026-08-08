@@ -740,24 +740,25 @@ fn pair_orientation(
     } else {
         current_start
     };
-    let negative_five_prime = if read_reverse {
-        let reference_span = match record.cigar() {
-            FieldValue::Value(value) => value.reference_span,
-            FieldValue::Missing | FieldValue::NotRequested => {
-                return Err(plan_error(record, "CIGAR reference span"));
-            }
+    let negative_five_prime =
+        if read_reverse {
+            let reference_span = match record.cigar() {
+                FieldValue::Value(value) => value.reference_span,
+                FieldValue::Missing | FieldValue::NotRequested => {
+                    return Err(plan_error(record, "CIGAR reference span"));
+                }
+            };
+            current
+                .position
+                .checked_add(i64::try_from(reference_span).map_err(|source| {
+                    plan_error(record, "CIGAR reference span").with_source(source)
+                })?)
+                .ok_or_else(|| overflow("insert.alignment_end"))?
+        } else {
+            current_start
+                .checked_add(i64::from(template_length))
+                .ok_or_else(|| overflow("insert.mate_five_prime"))?
         };
-        current
-            .position
-            .checked_add(i64::try_from(reference_span).map_err(|source| {
-                plan_error(record, "CIGAR reference span").with_source(source)
-            })?)
-            .ok_or_else(|| overflow("insert.alignment_end"))?
-    } else {
-        current_start
-            .checked_add(i64::from(template_length))
-            .ok_or_else(|| overflow("insert.mate_five_prime"))?
-    };
     Ok(if positive_five_prime < negative_five_prime {
         PicardPairOrientation::Fr
     } else {
@@ -1094,9 +1095,7 @@ pub fn analyze_picard_insert_size_bam(
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        IntegerHistogram, PicardPairOrientation, centered_widths, default_adapter_kmers,
-    };
+    use super::{IntegerHistogram, PicardPairOrientation, centered_widths, default_adapter_kmers};
 
     #[test]
     fn mode_ties_choose_the_smallest_insert_size() {
