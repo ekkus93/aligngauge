@@ -1,6 +1,6 @@
-//! Narrow audited ownership shim around the HTSlib header-open boundary.
+//! Narrow audited ownership shim around the `HTSlib` header-open boundary.
 //!
-//! The rest of AlignGauge forbids unsafe Rust. This private crate exists solely to own raw
+//! The rest of `AlignGauge` forbids unsafe Rust. This private crate exists solely to own raw
 //! `htsFile*` and `sam_hdr_t*` values on the malformed-header path that rust-htslib 1.0.1 does not
 //! close before returning `BamOpen`.
 
@@ -12,7 +12,7 @@ use std::ptr::NonNull;
 use rust_htslib::htslib;
 use rust_htslib::utils::path_to_cstring;
 
-/// Failures produced while proving HTSlib can open, parse, and close one alignment header.
+/// Failures produced while proving `HTSlib` can open, parse, and close one alignment header.
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum HeaderPreflightError {
     /// The path could not be represented as a C string.
