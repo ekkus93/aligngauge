@@ -46,11 +46,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  hardening:
-    name: ci/v0.5-hardening
+  preflight:
+    name: ci/v0.5-hardening-preflight
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
-
+    timeout-minutes: 30
     steps:
       - name: Check out repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -99,32 +98,60 @@ jobs:
       - name: Run atomic output fault injection
         run: cargo test -p aligngauge-core atomic::tests --locked
 
+      - name: Verify repository remains clean
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "$(git status --porcelain --untracked-files=all)"
+          git diff --check
+
+  asan:
+    name: ci/v0.5-hardening-asan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
       - name: Install AddressSanitizer target
         run: rustup target add x86_64-unknown-linux-gnuasan
 
-      - name: Run HTS boundary under AddressSanitizer
+      - name: Run HTS boundary under AddressSanitizer and LeakSanitizer
         env:
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNUASAN_LINKER: cc
           CC_x86_64_unknown_linux_gnuasan: cc
           CXX_x86_64_unknown_linux_gnuasan: c++
-          CFLAGS_x86_64_unknown_linux_gnuasan: -fsanitize=address -fno-omit-frame-pointer
-          CXXFLAGS_x86_64_unknown_linux_gnuasan: -fsanitize=address -fno-omit-frame-pointer
+          CFLAGS_x86_64_unknown_linux_gnuasan: -fsanitize=address -fno-omit-frame-pointer -g
+          CXXFLAGS_x86_64_unknown_linux_gnuasan: -fsanitize=address -fno-omit-frame-pointer -g
           CARGO_TARGET_DIR: target/v0.5-asan
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1:abort_on_error=0:symbolize=1
         run: cargo test -p aligngauge-hts --target x86_64-unknown-linux-gnuasan --locked
+
+  fuzz:
+    name: ci/v0.5-hardening-fuzz
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
 
       - name: Install pinned cargo-fuzz
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p target/v0.5-hardening
           rustup toolchain install nightly-2026-08-07 --profile minimal
           cargo +nightly-2026-08-07 install --locked cargo-fuzz --version 0.13.2
-          cargo fuzz --version | tee target/v0.5-cargo-fuzz-version.txt
+          cargo fuzz --version | tee target/v0.5-hardening/cargo-fuzz-version.txt
 
       - name: Fuzz BED parser
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p target/v0.5-hardening
           (
             cd fuzz
             cargo +nightly-2026-08-07 fuzz run bed_parser -- \
@@ -141,10 +168,34 @@ jobs:
               -runs=20000 -max_len=4096 -rss_limit_mb=2048
           ) 2>&1 | tee target/v0.5-hardening/cigar-blocks-fuzz.log
 
+      - name: Upload fuzz evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: v0.5-fuzz-${{ github.sha }}
+          path: |
+            target/v0.5-hardening/cargo-fuzz-version.txt
+            target/v0.5-hardening/bed-parser-fuzz.log
+            target/v0.5-hardening/cigar-blocks-fuzz.log
+            fuzz/artifacts/
+          if-no-files-found: error
+          retention-days: 14
+
+  supply_chain:
+    name: ci/v0.5-hardening-supply-chain
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
       - name: Install pinned cargo-deny
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p target/v0.5-hardening
           cargo install --locked cargo-deny --version 0.20.2
           cargo deny --version | tee target/v0.5-hardening/cargo-deny-version.txt
 
@@ -210,7 +261,7 @@ jobs:
           grep -F 'aligngauge-v0.5.0-linux-x86_64/aligngauge' \
             target/v0.5-hardening/release-archive-contents.txt >/dev/null
 
-      - name: Write hardening machine report
+      - name: Write supply-chain machine report
         shell: bash
         run: |
           set -euo pipefail
@@ -225,16 +276,11 @@ jobs:
               return hashlib.sha256(path.read_bytes()).hexdigest()
 
           report = {
-              'schema': 'aligngauge-v0.5-hardening-v1',
+              'schema': 'aligngauge-v0.5-supply-chain-v1',
               'status': 'pass',
               'git_commit': subprocess.check_output(
                   ['git', 'rev-parse', 'HEAD'], text=True
               ).strip(),
-              'atomic_output_fault_injection': 'pass',
-              'asan_hts_boundary': 'pass',
-              'bed_parser_fuzz_runs': 20000,
-              'cigar_boundary_fuzz_runs': 20000,
-              'cargo_fuzz_version': Path('target/v0.5-cargo-fuzz-version.txt').read_text().strip(),
               'cargo_deny': 'pass',
               'sbom_sha256': digest(root / 'supply-chain/a/sbom.cdx.json'),
               'license_inventory_sha256': digest(root / 'supply-chain/a/licenses.json'),
@@ -246,20 +292,19 @@ jobs:
               'signed_release_artifacts': False,
               'signed_release_artifacts_disposition': 'required on exact release candidate before publication',
           }
-          (root / 'hardening.json').write_text(
+          (root / 'supply-chain.json').write_text(
               json.dumps(report, indent=2, sort_keys=True) + '\n',
               encoding='utf-8',
           )
           PY
 
-      - name: Upload v0.5 hardening evidence
+      - name: Upload supply-chain and reproducibility evidence
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: v0.5-hardening-${{ github.sha }}
+          name: v0.5-supply-chain-${{ github.sha }}
           path: |
-            target/v0.5-hardening/hardening.json
-            target/v0.5-hardening/bed-parser-fuzz.log
-            target/v0.5-hardening/cigar-blocks-fuzz.log
+            target/v0.5-hardening/supply-chain.json
             target/v0.5-hardening/cargo-deny.txt
             target/v0.5-hardening/cargo-deny-version.txt
             target/v0.5-hardening/supply-chain/a/sbom.cdx.json
@@ -272,13 +317,24 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Verify repository remains clean
+  gate:
+    name: ci/v0.5-hardening
+    if: always()
+    needs: [preflight, asan, fuzz, supply_chain]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require every independent hardening gate
         shell: bash
+        env:
+          PREFLIGHT_RESULT: ${{ needs.preflight.result }}
+          ASAN_RESULT: ${{ needs.asan.result }}
+          FUZZ_RESULT: ${{ needs.fuzz.result }}
+          SUPPLY_CHAIN_RESULT: ${{ needs.supply_chain.result }}
         run: |
           set -euo pipefail
-          if [[ -n "$(git status --porcelain --untracked-files=all)" ]]; then
-            git status --short
-            git diff --check
-            exit 1
-          fi
-          git diff --check
+          printf 'preflight=%s\nasan=%s\nfuzz=%s\nsupply_chain=%s\n' \
+            "$PREFLIGHT_RESULT" "$ASAN_RESULT" "$FUZZ_RESULT" "$SUPPLY_CHAIN_RESULT"
+          [[ "$PREFLIGHT_RESULT" == success ]]
+          [[ "$ASAN_RESULT" == success ]]
+          [[ "$FUZZ_RESULT" == success ]]
+          [[ "$SUPPLY_CHAIN_RESULT" == success ]]
