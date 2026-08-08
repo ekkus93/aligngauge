@@ -120,6 +120,33 @@ usage probe into `target/` before creating that directory. The failure was left 
 then fixed by creating the output directory explicitly. No provisioner assertion or
 hardening gate was suppressed.
 
+## Merged provisioning validation
+
+PR #10 merged the exact validated evidence head
+`64d453bc7cd1f46928e72232fc26f8a7f43f806d` to `master` as:
+
+`d8b2657671ada20c61a462824e4b3d9ddfc3f06b`
+
+Every workflow triggered by that exact merge SHA completed successfully:
+
+- Permanent CI run `31268413220`, job `93130179422` — success
+- Full Runtime Validation run `31268413233`, job `93130179542` — success
+- Reference Validation run `31268413288`, job `93130179485` — success
+- Targeted Validation run `31268413243`, job `93130179388` — success
+- Samtools Stats Validation run `31268413242`, job `93130179297` — success
+- Picard Validation run `31268413253`, job `93130179343` — success
+- V0.4 Release Validation run `31268413251`, job `93130179351` — success
+- V0.5 Hardening Validation run `31268413258`; aggregate job `93130496496` — success
+- M2 HG002 Preparation Validation run `31268413240`, job `93130179267` — success
+
+The merged v0.5 hardening run again passed the provisioner preflight, ASan/LSan,
+both fuzz campaigns, supply-chain/reproducibility checks, and aggregate gate. The
+source-acquisition path is therefore merged and validated on actual `master`.
+
+This is still **not** Milestone 14 completion evidence: the real whole-genome source,
+prepared ~30× BAM, repeated full runs, resource measurements, and complete differential
+campaign remain outstanding.
+
 ## Evidence required to change this report to COMPLETE
 
 Copy from the successful campaign without reinterpretation:
