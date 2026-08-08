@@ -21,10 +21,8 @@ const FLAG_SUPPLEMENTARY: u16 = 0x800;
 
 #[test]
 fn write_exact_overlap_differential_fixture() -> Result<(), Box<dyn Error>> {
-    let output_dir = std::env::var_os("ALIGNGAUGE_M13_OUTPUT_DIR").map_or_else(
-        || PathBuf::from("target/m13-overlap-test"),
-        PathBuf::from,
-    );
+    let output_dir = std::env::var_os("ALIGNGAUGE_M13_OUTPUT_DIR")
+        .map_or_else(|| PathBuf::from("target/m13-overlap-test"), PathBuf::from);
     fs::create_dir_all(&output_dir)?;
 
     let records = overlap_records();
