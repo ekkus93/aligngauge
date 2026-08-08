@@ -1,0 +1,258 @@
+name: Picard Validation
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - ".github/workflows/picard-validation.yml"
+      - "crates/aligngauge-cli/**"
+      - "crates/aligngauge-core/**"
+      - "crates/aligngauge-hts/**"
+      - "crates/aligngauge-metrics/**"
+      - "crates/aligngauge-testkit/**"
+      - "testdata/fixtures/**"
+      - "testdata/hg002/**"
+      - "testdata/manifest.v1.tsv"
+      - "tools/reference/picard/**"
+      - "docs/DNA_QC_ENGINE_SPEC.md"
+      - "docs/DNA_QC_ENGINE_TODO.md"
+      - "docs/adr/ADR-0008-PICARD_ALIGNMENT_INSERT_SIZE_PROFILE.md"
+      - "docs/evidence/M11_PICARD_ALIGNMENT_INSERT_SIZE.md"
+  pull_request:
+    paths:
+      - ".github/workflows/picard-validation.yml"
+      - "crates/aligngauge-cli/**"
+      - "crates/aligngauge-core/**"
+      - "crates/aligngauge-hts/**"
+      - "crates/aligngauge-metrics/**"
+      - "crates/aligngauge-testkit/**"
+      - "testdata/fixtures/**"
+      - "testdata/hg002/**"
+      - "testdata/manifest.v1.tsv"
+      - "tools/reference/picard/**"
+      - "docs/DNA_QC_ENGINE_SPEC.md"
+      - "docs/DNA_QC_ENGINE_TODO.md"
+      - "docs/adr/ADR-0008-PICARD_ALIGNMENT_INSERT_SIZE_PROFILE.md"
+      - "docs/evidence/M11_PICARD_ALIGNMENT_INSERT_SIZE.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: ci/picard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Validate Picard reference lock and tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          source tools/reference/picard/image.lock
+          [[ "$version" == "3.4.0" ]]
+          [[ "$image" == "broadinstitute/picard@sha256:f11df229b5b49ea28a872c04fc5d33e76bd14890754079390f36897c16194b28" ]]
+          [[ "$jar" == "/usr/picard/picard.jar" ]]
+          bash -n tools/reference/picard/run-alignment-summary.sh
+          bash -n tools/reference/picard/run-insert-size.sh
+          python3 -m py_compile tools/reference/picard/compare-alignment-summary.py
+          python3 -m py_compile tools/reference/picard/compare-insert-size.py
+
+      - name: Verify deterministic Picard fixture identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import csv
+          from pathlib import Path
+
+          expected = {
+              "picard_alignment_edge": (
+                  "9956c88b79f048cf791fda3f239e611b48493eac7d56e10dde9b55316f029223",
+                  "05b99f5553264f49624ba4778a7b90d0ff54869a686980da08409de204dcfcf8",
+              ),
+              "picard_insert_edge": (
+                  "568e5d4fab910a7a958c6ee95622cb949c247bc0768657792130fd4d6aa8105c",
+                  "b4d73ff0e3d1503a6b548d272ef3594d9abf6e80e0873081f19a71573b56074a",
+              ),
+          }
+          with Path("testdata/manifest.v1.tsv").open(encoding="utf-8", newline="") as handle:
+              rows = {row["id"]: row for row in csv.DictReader(handle, delimiter="\t")}
+          for fixture_id, (bam_sha, bai_sha) in expected.items():
+              row = rows.get(fixture_id)
+              assert row is not None, fixture_id
+              assert row["schema"] == "aligngauge-testdata-v1", fixture_id
+              assert row["kind"] == "committed", fixture_id
+              assert row["expected_validity"] == "valid", fixture_id
+              assert row["path"] == f"testdata/fixtures/{fixture_id}.bam", fixture_id
+              assert row["index_path"] == f"testdata/fixtures/{fixture_id}.bam.bai", fixture_id
+              assert row["sha256"] == bam_sha, fixture_id
+              assert row["index_sha256"] == bai_sha, fixture_id
+          PY
+
+      - name: Build AlignGauge Picard compatibility probes
+        run: cargo build --release -p aligngauge-cli --locked
+
+      - name: Compare synthetic Picard alignment-summary subset exactly
+        shell: bash
+        run: |
+          set -euo pipefail
+          for id in basic flags_and_pairs empty picard_alignment_edge; do
+            root="target/m11/$id/alignment"
+            mkdir -p "$root/reference"
+            bash tools/reference/picard/run-alignment-summary.sh \
+              "testdata/fixtures/$id.bam" \
+              "$root/reference"
+            target/release/aligngauge qc \
+              --input "testdata/fixtures/$id.bam" \
+              --format picard-alignment-summary \
+              > "$root/aligngauge.txt"
+            python3 tools/reference/picard/compare-alignment-summary.py \
+              "$root/reference/metrics.txt" \
+              "$root/aligngauge.txt" \
+              "$root/differential.json"
+          done
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          for path in sorted(Path('target/m11').glob('*/alignment/differential.json')):
+              report = json.loads(path.read_text())
+              assert report['status'] == 'exact', path
+              assert report['tolerance'] is None, path
+              assert report['compatibility_profile'] == 'picard-alignment-summary-3.4.0-all-reads-subset-v1', path
+          PY
+
+      - name: Compare synthetic Picard insert-size profile exactly
+        shell: bash
+        run: |
+          set -euo pipefail
+          for id in basic flags_and_pairs empty picard_insert_edge; do
+            root="target/m11/$id/insert"
+            mkdir -p "$root/reference"
+            bash tools/reference/picard/run-insert-size.sh \
+              "testdata/fixtures/$id.bam" \
+              "$root/reference"
+            target/release/aligngauge qc \
+              --input "testdata/fixtures/$id.bam" \
+              --format picard-insert-size \
+              > "$root/aligngauge.txt"
+            python3 tools/reference/picard/compare-insert-size.py \
+              "$root/reference/metrics.txt" \
+              "$root/aligngauge.txt" \
+              "$root/differential.json"
+          done
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          for path in sorted(Path('target/m11').glob('*/insert/differential.json')):
+              report = json.loads(path.read_text())
+              assert report['status'] == 'exact', path
+              assert report['tolerance'] is None, path
+              assert report['compatibility_profile'] == 'picard-insert-size-3.4.0-all-reads-v1', path
+          edge = json.loads(Path('target/m11/picard_insert_edge/insert/differential.json').read_text())
+          assert edge['metric_rows'] == 1
+          PY
+
+      - name: Prepare deterministic HG002 subset
+        run: testdata/hg002/prepare.sh "$GITHUB_WORKSPACE/target/m11/hg002"
+
+      - name: Compare HG002 Picard alignment-summary subset exactly
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=target/m11/hg002/alignment
+          mkdir -p "$root/reference"
+          bash tools/reference/picard/run-alignment-summary.sh \
+            target/m11/hg002/subset.bam \
+            "$root/reference"
+          target/release/aligngauge qc \
+            --input target/m11/hg002/subset.bam \
+            --format picard-alignment-summary \
+            > "$root/aligngauge.txt"
+          python3 tools/reference/picard/compare-alignment-summary.py \
+            "$root/reference/metrics.txt" \
+            "$root/aligngauge.txt" \
+            "$root/differential.json"
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path('target/m11/hg002/alignment/differential.json').read_text())
+          assert report['status'] == 'exact'
+          assert report['tolerance'] is None
+          PY
+
+      - name: Compare HG002 Picard insert-size profile exactly
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=target/m11/hg002/insert
+          mkdir -p "$root/reference"
+          bash tools/reference/picard/run-insert-size.sh \
+            target/m11/hg002/subset.bam \
+            "$root/reference"
+          target/release/aligngauge qc \
+            --input target/m11/hg002/subset.bam \
+            --format picard-insert-size \
+            > "$root/aligngauge.txt"
+          python3 tools/reference/picard/compare-insert-size.py \
+            "$root/reference/metrics.txt" \
+            "$root/aligngauge.txt" \
+            "$root/differential.json"
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path('target/m11/hg002/insert/differential.json').read_text())
+          assert report['status'] == 'exact'
+          assert report['tolerance'] is None
+          PY
+
+      - name: Prove unsupported alignment-summary columns stay absent
+        shell: bash
+        run: |
+          set -euo pipefail
+          header="$(grep -m1 '^CATEGORY' target/m11/hg002/alignment/aligngauge.txt)"
+          expected=$'CATEGORY\tTOTAL_READS\tPF_READS\tPCT_PF_READS\tPF_NOISE_READS\tPCT_ADAPTER\tMEAN_READ_LENGTH\tSD_READ_LENGTH\tMEDIAN_READ_LENGTH\tMAD_READ_LENGTH\tMIN_READ_LENGTH\tMAX_READ_LENGTH\tBAD_CYCLES'
+          [[ "$header" == "$expected" ]]
+          if grep -Eq 'PF_READS_ALIGNED|PF_MISMATCH_RATE|PF_INDEL_RATE|PCT_CHIMERAS|STRAND_BALANCE|PCT_SOFTCLIP|PCT_HARDCLIP' \
+            target/m11/hg002/alignment/aligngauge.txt; then
+            echo 'AlignGauge emitted a reference-dependent field outside the M11 compatibility claim' >&2
+            exit 1
+          fi
+
+      - name: Upload M11 validation evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: picard-validation-${{ github.sha }}
+          path: |
+            target/m11/basic/alignment/reference/metrics.txt
+            target/m11/basic/alignment/reference/image.txt
+            target/m11/basic/alignment/aligngauge.txt
+            target/m11/basic/alignment/differential.json
+            target/m11/flags_and_pairs/insert/reference/metrics.txt
+            target/m11/flags_and_pairs/insert/reference/output_state.txt
+            target/m11/flags_and_pairs/insert/aligngauge.txt
+            target/m11/flags_and_pairs/insert/differential.json
+            target/m11/picard_alignment_edge/alignment/reference/metrics.txt
+            target/m11/picard_alignment_edge/alignment/aligngauge.txt
+            target/m11/picard_alignment_edge/alignment/differential.json
+            target/m11/picard_insert_edge/insert/reference/metrics.txt
+            target/m11/picard_insert_edge/insert/reference/output_state.txt
+            target/m11/picard_insert_edge/insert/aligngauge.txt
+            target/m11/picard_insert_edge/insert/differential.json
+            target/m11/hg002/prepared.manifest
+            target/m11/hg002/alignment/reference/metrics.txt
+            target/m11/hg002/alignment/reference/image.txt
+            target/m11/hg002/alignment/aligngauge.txt
+            target/m11/hg002/alignment/differential.json
+            target/m11/hg002/insert/reference/metrics.txt
+            target/m11/hg002/insert/reference/output_state.txt
+            target/m11/hg002/insert/aligngauge.txt
+            target/m11/hg002/insert/differential.json
+          if-no-files-found: error
+          retention-days: 7
