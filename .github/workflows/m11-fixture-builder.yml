@@ -1,0 +1,53 @@
+name: M11 Fixture Builder
+
+on:
+  push:
+    branches:
+      - milestone-11-picard-profiles
+    paths:
+      - .github/workflows/m11-fixture-builder.yml
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Add M11 fixture definitions
+        run: python3 scripts/m11_add_fixtures.py
+      - name: Format fixture source
+        run: cargo fmt --all
+      - name: Regenerate deterministic corpus
+        run: cargo run -p aligngauge-testkit --locked -- generate-corpus --root .
+      - name: Verify generated corpus locally
+        run: cargo run -p aligngauge-testkit --locked -- verify-manifest --root .
+      - name: Test testkit
+        run: cargo test -p aligngauge-testkit --locked
+      - name: Verify restricted fixture diff
+        run: |
+          set -euo pipefail
+          git diff --check
+          mapfile -t changed < <(git diff --name-only)
+          for path in "${changed[@]}"; do
+            case "$path" in
+              crates/aligngauge-testkit/src/corpus.rs|testdata/manifest.v1.tsv|testdata/fixtures/picard_alignment_edge.bam|testdata/fixtures/picard_alignment_edge.bam.bai|testdata/fixtures/picard_insert_edge.bam|testdata/fixtures/picard_insert_edge.bam.bai)
+                ;;
+              *)
+                echo "unexpected fixture diff path: $path" >&2
+                exit 1
+                ;;
+            esac
+          done
+      - name: Commit validated fixtures and remove builder
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add crates/aligngauge-testkit/src/corpus.rs testdata/manifest.v1.tsv testdata/fixtures/picard_alignment_edge.bam testdata/fixtures/picard_alignment_edge.bam.bai testdata/fixtures/picard_insert_edge.bam testdata/fixtures/picard_insert_edge.bam.bai
+          git rm .github/workflows/m11-fixture-builder.yml scripts/m11_add_fixtures.py
+          git commit -m 'test: add deterministic Picard edge fixtures'
+          git push origin HEAD:milestone-11-picard-profiles
