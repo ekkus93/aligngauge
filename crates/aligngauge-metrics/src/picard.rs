@@ -469,6 +469,9 @@ impl PicardInsertSizeReport {
     /// Render the default `ALL_READS` `InsertSizeMetrics` table and trimmed histogram surface.
     #[must_use]
     pub fn render_picard_metrics(&self) -> String {
+        if self.rows.is_empty() {
+            return String::new();
+        }
         let mut out = String::new();
         writeln!(out, "## htsjdk.samtools.metrics.StringHeader").expect("String write cannot fail");
         writeln!(
@@ -504,39 +507,37 @@ impl PicardInsertSizeReport {
                 row.width_of_99_percent,
             ).expect("String write cannot fail");
         }
-        if !self.rows.is_empty() {
-            writeln!(out).expect("String write cannot fail");
-            writeln!(out, "## HISTOGRAM\tjava.lang.Integer").expect("String write cannot fail");
-            write!(out, "insert_size").expect("String write cannot fail");
-            for row in &self.rows {
-                write!(out, "\t{}", row.pair_orientation.histogram_label())
-                    .expect("String write cannot fail");
-            }
-            writeln!(out).expect("String write cannot fail");
-            let max = self
+        writeln!(out).expect("String write cannot fail");
+        writeln!(out, "## HISTOGRAM\tjava.lang.Integer").expect("String write cannot fail");
+        write!(out, "insert_size").expect("String write cannot fail");
+        for row in &self.rows {
+            write!(out, "\t{}", row.pair_orientation.histogram_label())
+                .expect("String write cannot fail");
+        }
+        writeln!(out).expect("String write cannot fail");
+        let max = self
+            .rows
+            .iter()
+            .filter_map(|row| row.histogram.last_key_value().map(|(key, _)| *key))
+            .max()
+            .unwrap_or(0);
+        for size in 0..=max {
+            if self
                 .rows
                 .iter()
-                .filter_map(|row| row.histogram.last_key_value().map(|(key, _)| *key))
-                .max()
-                .unwrap_or(0);
-            for size in 0..=max {
-                if self
-                    .rows
-                    .iter()
-                    .all(|row| !row.histogram.contains_key(&size))
-                {
-                    continue;
-                }
-                write!(out, "{size}").expect("String write cannot fail");
-                for row in &self.rows {
-                    if let Some(value) = row.histogram.get(&size) {
-                        write!(out, "\t{value}").expect("String write cannot fail");
-                    } else {
-                        write!(out, "\t").expect("String write cannot fail");
-                    }
-                }
-                writeln!(out).expect("String write cannot fail");
+                .all(|row| !row.histogram.contains_key(&size))
+            {
+                continue;
             }
+            write!(out, "{size}").expect("String write cannot fail");
+            for row in &self.rows {
+                if let Some(value) = row.histogram.get(&size) {
+                    write!(out, "\t{value}").expect("String write cannot fail");
+                } else {
+                    write!(out, "\t").expect("String write cannot fail");
+                }
+            }
+            writeln!(out).expect("String write cannot fail");
         }
         out
     }
@@ -739,25 +740,24 @@ fn pair_orientation(
     } else {
         current_start
     };
-    let negative_five_prime =
-        if read_reverse {
-            let reference_span = match record.cigar() {
-                FieldValue::Value(value) => value.reference_span,
-                FieldValue::Missing | FieldValue::NotRequested => {
-                    return Err(plan_error(record, "CIGAR reference span"));
-                }
-            };
-            current
-                .position
-                .checked_add(i64::try_from(reference_span).map_err(|source| {
-                    plan_error(record, "CIGAR reference span").with_source(source)
-                })?)
-                .ok_or_else(|| overflow("insert.alignment_end"))?
-        } else {
-            current_start
-                .checked_add(i64::from(template_length))
-                .ok_or_else(|| overflow("insert.mate_five_prime"))?
+    let negative_five_prime = if read_reverse {
+        let reference_span = match record.cigar() {
+            FieldValue::Value(value) => value.reference_span,
+            FieldValue::Missing | FieldValue::NotRequested => {
+                return Err(plan_error(record, "CIGAR reference span"));
+            }
         };
+        current
+            .position
+            .checked_add(i64::try_from(reference_span).map_err(|source| {
+                plan_error(record, "CIGAR reference span").with_source(source)
+            })?)
+            .ok_or_else(|| overflow("insert.alignment_end"))?
+    } else {
+        current_start
+            .checked_add(i64::from(template_length))
+            .ok_or_else(|| overflow("insert.mate_five_prime"))?
+    };
     Ok(if positive_five_prime < negative_five_prime {
         PicardPairOrientation::Fr
     } else {
@@ -1094,7 +1094,9 @@ pub fn analyze_picard_insert_size_bam(
 
 #[cfg(test)]
 mod tests {
-    use super::{IntegerHistogram, PicardPairOrientation, centered_widths, default_adapter_kmers};
+    use super::{
+        IntegerHistogram, PicardPairOrientation, centered_widths, default_adapter_kmers,
+    };
 
     #[test]
     fn mode_ties_choose_the_smallest_insert_size() {
