@@ -1,8 +1,8 @@
 # AlignGauge v0.4 release validation evidence
 
-**State:** validated release-gate implementation candidate; no `v0.4.0` tag or GitHub release exists yet.
+**State:** validated release-gate and release-surface candidates; no `v0.4.0` tag or GitHub release exists yet.
 
-## Candidate identity
+## Release-gate implementation candidate
 
 Validated candidate SHA:
 
@@ -16,7 +16,45 @@ Exact candidate workflow evidence:
 - Permanent CI run `31254954580`, job `93096873958` — success
 - Reference Validation run `31254954662`, job `93096874325` — success
 
-The candidate is not itself declared the final release commit. Documentation/TODO closure and merged-master validation still occur before a tag is created.
+The implementation candidate is not itself declared the final release commit. Documentation/TODO closure and merged-master validation still occur before a tag is created.
+
+## Reconciled evidence/report candidate
+
+Reconciled evidence SHA:
+
+`39f464d7a54ed3b18fff0ea62e1fc47e71b7596f`
+
+This commit contains the field-by-field `V0_4_COMPATIBILITY_REPORT.md` and the initial committed release-validation evidence. Every workflow triggered by that exact evidence state succeeded:
+
+- V0.4 Release Validation run `31255113725`, job `93097266573` — success
+- Permanent CI run `31255113745`, job `93097251861` — success
+- Reference Validation run `31255113727`, job `93097266292` — success
+- MultiQC Validation run `31255113729`, job `93097242866` — success
+- Exact Overlap Validation run `31255113726`, job `93097242950` — success
+
+The compatibility report therefore existed in reconciled form while the executable release gate, reference differential suite, permanent MultiQC boundary checks, and exact-overlap oracle remained green.
+
+## Broad release-surface candidate
+
+Broad candidate SHA:
+
+`ba53a4dca8e06a653a3ad23c1f6a8711628a096d`
+
+This commit updates both user-facing release-surface READMEs so they no longer describe Milestone 12 as future work. Because `crates/aligngauge-cli/README.md` is part of the standing compatibility/runtime trigger surface, the exact SHA re-ran the complete nine-workflow PR matrix rather than receiving a docs-only shortcut.
+
+Every workflow on that exact SHA succeeded:
+
+- Permanent CI run `31255308013`, job `93097721487` — success
+- Full Runtime Validation run `31255308000`, job `93097699603` — success
+- Reference Validation run `31255308023`, job `93097722713` — success
+- Targeted Validation run `31255308011`, job `93097724071` — success
+- Samtools Stats Validation run `31255308064`, job `93097699600` — success
+- Picard Validation run `31255308045`, job `93097699494` — success
+- MultiQC Validation run `31255308016`, job `93097699402` — success
+- Exact Overlap Validation run `31255308010`, job `93097699391` — success
+- V0.4 Release Validation run `31255308018`, job `93097723581` — success
+
+This is the broad pre-TODO release candidate. The next branch state may close the first three v0.4 TODO checks because their claims are now executable and green; the fourth release check remains open until an exact post-merge release commit is selected and validated.
 
 ## Release scope proved
 
@@ -109,15 +147,14 @@ It fails when:
 
 ## Remaining closure before tag
 
-This evidence freezes the release-gate implementation candidate only.
-
 Before `v0.4.0` is created:
 
-1. the compatibility report must be committed in final reconciled form;
-2. that evidence state must pass its triggered CI;
-3. the TODO release-gate checklist must be closed without claiming an unvalidated tag;
-4. PR #8 must merge with an exact validated head;
-5. the resulting `master` SHA must pass every triggered permanent workflow;
-6. the exact commit selected for the `v0.4.0` tag must itself have successful Permanent CI and release-gate evidence.
+1. close the first three v0.4 TODO checks against the proven evidence above while leaving exact-release-commit CI open;
+2. validate that TODO-closure PR head;
+3. merge PR #8 with an exact validated head;
+4. validate the resulting `master` merge SHA across every triggered permanent workflow;
+5. create the final release-candidate documentation commit on `master` and validate Permanent CI plus `ci/v0.4-release` on that exact commit;
+6. use a one-time child publisher, following the repository's prior release pattern, to re-check the validated parent and create `v0.4.0` targeting that parent;
+7. remove the one-time publisher after successful publication and record the release identity in post-release documentation.
 
-Only then may the tag and GitHub release be created.
+The publisher commit is not the release target. The tag must point to the already-validated parent release commit.
