@@ -35,7 +35,10 @@ mkdir -p \
   "$work/aligngauge-insert-input" \
   "$work/discovery-input"
 
-# Use identical names so parsed reference/AlignGauge data can be byte-compared.
+# Picard reference files embed the original INPUT path in their command header,
+# while AlignGauge compatibility projections do not impersonate Picard command
+# lines. Force the pinned MultiQC parser to use identical filenames as sample
+# identity so parser-data comparison isolates the metrics contract.
 cp "$reference_abs" "$work/reference-insert-input/sample.picard.insert-size.txt"
 cp "$actual_abs" "$work/aligngauge-insert-input/sample.picard.insert-size.txt"
 cp "$wgs_fixture" "$work/discovery-input/sample.picard.wgs-metrics.txt"
@@ -50,7 +53,7 @@ for side in reference aligngauge; do
   docker run --rm --network none \
     -v "$work:/work" \
     "$MULTIQC_IMAGE" \
-    multiqc -f -m picard \
+    multiqc -f -m picard --fn_as_s_name \
       -o "/work/${side}-insert-out" \
       "/work/${side}-insert-input" \
       > "$outdir_abs/${side}-insert.stdout.txt" \
@@ -72,7 +75,7 @@ cmp \
 docker run --rm --network none \
   -v "$work:/work" \
   "$MULTIQC_IMAGE" \
-  multiqc -f -m picard \
+  multiqc -f -m picard --fn_as_s_name \
     -o /work/discovery-out \
     /work/discovery-input \
     > "$outdir_abs/discovery.stdout.txt" \
@@ -108,6 +111,7 @@ report = {
     "schema": "aligngauge-multiqc-picard-validation-v1",
     "status": "exact-supported-surfaces-plus-discovery-only-fixtures",
     "multiqc_version": "1.35",
+    "sample_identity_mode": "filename-via-fn_as_s_name",
     "supported_generated_output": {
         "picard_insert_size_3_4_0_all_reads_v1": {
             "parsed_reference_vs_aligngauge": "byte-identical",
