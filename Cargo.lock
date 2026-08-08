@@ -56,11 +56,19 @@ name = "aligngauge-hts"
 version = "0.0.0"
 dependencies = [
  "aligngauge-core",
+ "aligngauge-hts-ffi",
  "aligngauge-testkit",
  "flate2",
  "md-5",
  "rust-htslib",
  "sha2",
+]
+
+[[package]]
+name = "aligngauge-hts-ffi"
+version = "0.0.0"
+dependencies = [
+ "rust-htslib",
 ]
 
 [[package]]

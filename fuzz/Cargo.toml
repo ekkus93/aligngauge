@@ -1,0 +1,30 @@
+[package]
+name = "aligngauge-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+members = ["."]
+
+[dependencies]
+libfuzzer-sys = "=0.4.13"
+aligngauge-formats = { path = "../crates/aligngauge-formats" }
+aligngauge-coverage = { path = "../crates/aligngauge-coverage" }
+
+[[bin]]
+name = "bed_parser"
+path = "fuzz_targets/bed_parser.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "cigar_blocks"
+path = "fuzz_targets/cigar_blocks.rs"
+test = false
+doc = false
+bench = false

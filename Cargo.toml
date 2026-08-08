@@ -5,6 +5,7 @@ members = [
     "crates/aligngauge-coverage",
     "crates/aligngauge-formats",
     "crates/aligngauge-hts",
+    "crates/aligngauge-hts-ffi",
     "crates/aligngauge-metrics",
     "crates/aligngauge-testkit",
 ]

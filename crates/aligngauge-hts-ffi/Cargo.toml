@@ -1,0 +1,20 @@
+[package]
+name = "aligngauge-hts-ffi"
+version = "0.0.0"
+description = "Narrow audited HTSlib ownership shim for AlignGauge"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+rust-htslib = { version = "=1.0.1", default-features = false, features = ["bzip2", "lzma"] }
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+missing_docs = "deny"
+
+[lints.clippy]
+all = { level = "deny", priority = -1 }
+pedantic = { level = "deny", priority = -1 }

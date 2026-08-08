@@ -10,6 +10,7 @@ publish = false
 
 [dependencies]
 aligngauge-core = { path = "../aligngauge-core" }
+aligngauge-hts-ffi = { path = "../aligngauge-hts-ffi" }
 flate2 = "1.1"
 md-5 = "=0.10.6"
 rust-htslib = { version = "=1.0.1", default-features = false, features = ["bzip2", "lzma"] }

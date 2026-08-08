@@ -1207,6 +1207,18 @@ fn open_htslib_reader(
     options: ReaderOptions,
     format: AlignmentFormat,
 ) -> Result<Reader, AlignGaugeError> {
+    aligngauge_hts_ffi::preflight_header(input).map_err(|source| {
+        AlignGaugeError::new(
+            ErrorCategory::InputCorrupt,
+            format!(
+                "failed HTSlib header ownership preflight for {} input '{}'",
+                format.as_str(),
+                input.display()
+            ),
+        )
+        .with_detail("input", input.to_string_lossy().into_owned())
+        .with_source(source)
+    })?;
     let mut reader = Reader::from_path(input).map_err(|source| {
         AlignGaugeError::new(
             ErrorCategory::InputCorrupt,
