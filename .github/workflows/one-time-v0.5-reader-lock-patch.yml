@@ -15,7 +15,7 @@ jobs:
     if: github.repository == 'ekkus93/aligngauge'
     runs-on: ubuntu-24.04
     env:
-      EXPECTED_PARENT: 6e26a33f420d451717f0d7a91ba27c9927567874
+      EXPECTED_PARENT: 1b0de1c32c1b670ec28f31d6f5f560964fb8547c
     steps:
       - name: Check out exact branch head
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -123,7 +123,6 @@ jobs:
           git diff --check
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add Cargo.lock crates/aligngauge-hts/src/reader.rs \
-            .github/workflows/one-time-v0.5-reader-lock-patch.yml
+          git add Cargo.lock crates/aligngauge-hts/src/reader.rs
           git commit -m 'fix: preflight HTS headers through owned FFI shim'
           git push origin HEAD:agent/v0.5-production-beta
