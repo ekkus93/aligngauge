@@ -12,7 +12,7 @@ script_directory=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 repository_root=$(cd -- "$script_directory/../.." && pwd)
 cd "$repository_root"
 
-for executable in cargo find git gzip install python3 sha256sum tar touch; do
+for executable in cargo find git gzip install python3 rm sha256sum tar touch; do
   command -v "$executable" >/dev/null || {
     echo "required executable not found: $executable" >&2
     exit 69
@@ -38,8 +38,22 @@ mkdir -p -- "$output_parent"
 output_parent=$(realpath "$output_parent")
 output_directory="$output_parent/$output_name"
 staging=$(mktemp -d "$output_parent/.${output_name}.staging.XXXXXX")
+
+# Native build products can retain their build-directory identity even when source
+# paths are remapped. Use one deterministic absolute build root for every sequential
+# reproducibility build instead of placing Cargo output under the random staging path.
+build_root="$repository_root/target/v0.5-release-build"
+case "$build_root" in
+  "$repository_root/target/v0.5-release-build") ;;
+  *)
+    echo "refusing unexpected deterministic build root: $build_root" >&2
+    exit 64
+    ;;
+esac
+rm -rf -- "$build_root"
+
 cleanup() {
-  rm -rf -- "$staging"
+  rm -rf -- "$staging" "$build_root"
 }
 trap cleanup EXIT
 mkdir -p "$staging/package/$artifact_name" "$staging/generated" "$staging/final"
@@ -48,7 +62,7 @@ export SOURCE_DATE_EPOCH="$source_date_epoch"
 export RUSTFLAGS="--remap-path-prefix=$repository_root=/src"
 export CFLAGS="-ffile-prefix-map=$repository_root=/src -fdebug-prefix-map=$repository_root=/src"
 export CXXFLAGS="$CFLAGS"
-CARGO_TARGET_DIR="$staging/cargo-target" \
+CARGO_TARGET_DIR="$build_root" \
   cargo build --release -p aligngauge-cli --bin aligngauge --locked
 
 python3 tools/v0.5/generate-sbom.py \
@@ -57,7 +71,7 @@ python3 tools/v0.5/generate-sbom.py \
   --licenses "$staging/generated/licenses.json"
 
 install -m 0755 \
-  "$staging/cargo-target/release/aligngauge" \
+  "$build_root/release/aligngauge" \
   "$staging/package/$artifact_name/aligngauge"
 install -m 0644 README.md "$staging/package/$artifact_name/README.md"
 install -m 0644 LICENSE "$staging/package/$artifact_name/LICENSE"
@@ -97,6 +111,9 @@ tar --sort=name \
 gzip -n -9 "$staging/$artifact_name.tar"
 sha256sum "$staging/$artifact_name.tar.gz" \
   | sed "s#  $staging/#  #" >"$staging/SHA256SUMS"
+sha256sum "$staging/package/$artifact_name/aligngauge" \
+  | sed "s#  $staging/package/$artifact_name/#  #" \
+  >"$staging/BINARY.SHA256"
 sha256sum \
   "$staging/package/$artifact_name/aligngauge" \
   "$staging/package/$artifact_name/sbom.cdx.json" \
@@ -106,6 +123,7 @@ sha256sum \
 
 install -m 0644 "$staging/$artifact_name.tar.gz" "$staging/final/$artifact_name.tar.gz"
 install -m 0644 "$staging/SHA256SUMS" "$staging/final/SHA256SUMS"
+install -m 0644 "$staging/BINARY.SHA256" "$staging/final/BINARY.SHA256"
 install -m 0644 "$staging/CONTENTS.SHA256" "$staging/final/CONTENTS.SHA256"
 install -m 0644 "$staging/generated/sbom.cdx.json" "$staging/final/sbom.cdx.json"
 install -m 0644 "$staging/generated/licenses.json" "$staging/final/licenses.json"
@@ -113,4 +131,4 @@ printf '%s\n' "$release_commit" >"$staging/final/RELEASE_COMMIT"
 printf 'complete\n' >"$staging/final/_SUCCESS"
 mv -- "$staging/final" "$output_directory"
 trap - EXIT
-rm -rf -- "$staging"
+rm -rf -- "$staging" "$build_root"
