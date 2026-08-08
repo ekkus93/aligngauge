@@ -31,7 +31,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   validate:
@@ -136,83 +136,3 @@ jobs:
             target/m12/multiqc/work/discovery-out/multiqc_data/multiqc_picard_HsMetrics.txt
           if-no-files-found: error
           retention-days: 7
-
-  close_m12_docs:
-    name: m12/close-todo
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-    needs: validate
-    runs-on: ubuntu-24.04
-
-    steps:
-      - name: Check out source branch with write token
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-        with:
-          ref: ${{ github.event.pull_request.head.ref }}
-          persist-credentials: true
-
-      - name: Mark M12 complete and restore read-only workflow
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-
-          todo = Path('docs/DNA_QC_ENGINE_TODO.md')
-          text = todo.read_text()
-          old_top = '**Status:** Ralph Loop active — `v0.3.0` released; Milestone 11 complete; Milestone 12 next\n**Last updated:** 2026-08-07  '
-          new_top = '**Status:** Ralph Loop active — `v0.3.0` released; Milestone 12 complete; Milestone 13 next\n**Last updated:** 2026-08-08  '
-          if old_top not in text:
-              raise SystemExit('top-level M12 status marker not found')
-          text = text.replace(old_top, new_top, 1)
-
-          old = '''## Milestone 12 — WGS/hybrid-selection and MultiQC
-
-- [ ] Select Picard WGS metrics in scope.
-- [ ] Select hybrid-selection metrics in scope.
-- [ ] Define fold-80 behavior.
-- [ ] Add MultiQC fixture discovery tests.
-- [ ] Run pinned MultiQC parser.
-- [ ] Ensure parser failures fail CI.
-- [ ] Create `docs/evidence/V0_4_COMPATIBILITY_REPORT.md`.
-'''
-          new = '''## Milestone 12 — WGS/hybrid-selection and MultiQC
-
-**Status:** Complete — validated evidence SHA `5b7f6d15970918862d1006ea4c6add6937479ea6`; MultiQC Validation `31246937565` / `93076990568`, Permanent CI `31246937609` / `93076990623`, Reference Validation `31246937557` / `93076990412`, and Samtools Stats Validation `31246937566` / `93076990392` all successful. Evidence: `docs/evidence/V0_4_COMPATIBILITY_REPORT.md`. Milestone 12 does not publish `v0.4.0`; Milestone 13 is next.
-
-- [x] Select Picard WGS metrics in scope.
-- [x] Select hybrid-selection metrics in scope.
-- [x] Define fold-80 behavior.
-- [x] Add MultiQC fixture discovery tests.
-- [x] Run pinned MultiQC parser.
-- [x] Ensure parser failures fail CI.
-- [x] Create `docs/evidence/V0_4_COMPATIBILITY_REPORT.md`.
-
-### Milestone 12 acceptance gate
-
-- [x] ADR-0009 freezes the WGS/HsMetrics candidate surfaces without exposing approximate Picard renderers before exact overlap correction.
-- [x] Native `target_uniformity_penalty_80` remains distinct from Picard `FOLD_80_BASE_PENALTY`; there is no rename or numeric fallback.
-- [x] Pinned MultiQC 1.35 parses exact generated Picard/AlignGauge insert-size output to byte-identical data and discovers the WGS/Hs parser fixtures with `compatibility_claim: false`.
-- [x] Parser failures are fatal: the first sample-identity mismatch failed CI and was corrected with explicit MultiQC filename sample identity rather than suppressed.
-- [x] Permanent CI succeeds on the exact validated evidence SHA.
-'''
-          if old not in text:
-              raise SystemExit('M12 checklist block not found')
-          text = text.replace(old, new, 1)
-          todo.write_text(text)
-
-          workflow = Path('.github/workflows/multiqc-validation.yml')
-          wf = workflow.read_text()
-          marker = '\n  close_m12_docs:\n'
-          if marker not in wf:
-              raise SystemExit('one-shot close job marker not found')
-          wf = wf.split(marker, 1)[0]
-          wf = wf.replace('permissions:\n  contents: write\n', 'permissions:\n  contents: read\n', 1)
-          workflow.write_text(wf.rstrip() + '\n')
-          PY
-
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add docs/DNA_QC_ENGINE_TODO.md .github/workflows/multiqc-validation.yml
-          git diff --cached --check
-          git commit -m 'docs: mark Milestone 12 complete'
-          git push origin HEAD
