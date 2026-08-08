@@ -37,6 +37,12 @@ by rerunning the same explicit command. A checksum mismatch, contradictory
 partial/final state, insufficient free space, missing content length, or network error
 is fatal.
 
+The source destination must resolve outside the repository and may contain only the
+provisioner's explicitly recognized final, partial, manifest, or completion files.
+Unexpected entries are fatal rather than ignored. Completed state is revalidated against
+the exact profile, URLs, filenames, byte sizes, MD5 values, and reference build before
+being accepted.
+
 A checksum failure does not silently delete or replace the transferred file. The
 operator must resolve that state explicitly.
 
@@ -81,6 +87,38 @@ Every workflow triggered by that exact evidence state succeeded, including Perma
 The implementation checklist was reconciled in bot bookkeeping commit `195bcb296c77b6aafdb92f56a39341ea1dc7a26f`. Milestone 15 now records all implemented hardening items complete except signed/attested release artifacts, which remain an exact-release-candidate/publication item. Milestone 14 remains entirely open.
 
 This section records readiness of the machinery only. It is not full-HG002 evidence and does not alter the `BLOCKED` state above.
+
+## Provisioner readiness validation
+
+Validated source-provisioning candidate:
+
+`eb5450e921b5fd85aed586483143fddb47b546d2`
+
+That exact PR head passed every workflow triggered by the provisioning/runbook changes:
+
+- Permanent CI run `31268000968`, job `93129169371` — success
+- Full Runtime Validation run `31268000979`, job `93129169532` — success
+- Reference Validation run `31268000981`, job `93129169423` — success
+- Targeted Validation run `31268000974`, job `93129169458` — success
+- Samtools Stats Validation run `31268000975`, job `93129169301` — success
+- Picard Validation run `31268000986`, job `93129169392` — success
+- V0.4 Release Validation run `31268000983`, job `93129170404` — success
+- V0.5 Hardening Validation run `31268001028`; aggregate job `93129484046` — success
+
+Within the v0.5 hardening workflow, the no-network provisioner preflight job
+`93129206862` passed shell syntax, explicit usage-failure, pinned-source/checksum,
+resumable-transfer, manifest/completion-marker, and no-warning-only-pattern checks. ASan,
+both 20,000-run fuzz campaigns, and supply-chain/reproducibility subgates also passed
+before the aggregate job succeeded.
+
+This validates the acquisition machinery and its fail-closed boundary; it does **not**
+claim that the 118 GB source was downloaded in GitHub-hosted CI and does not satisfy any
+unchecked Milestone 14 campaign item.
+
+An earlier preflight attempt exposed a CI harness defect: the workflow redirected the
+usage probe into `target/` before creating that directory. The failure was left red,
+then fixed by creating the output directory explicitly. No provisioner assertion or
+hardening gate was suppressed.
 
 ## Evidence required to change this report to COMPLETE
 
