@@ -1,0 +1,124 @@
+name: One-time v0.4.0 post-release closer
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/one-time-v0.4.0-post-release-close.yml
+
+permissions:
+  contents: write
+
+jobs:
+  close:
+    name: release/v0.4.0-post-close
+    if: github.repository == 'ekkus93/aligngauge'
+    runs-on: ubuntu-24.04
+    env:
+      RELEASE_SHA: 5be4aa4e5df3e8feb17fdde46c408683ac08bb53
+      RELEASE_ID: '367190259'
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check out current master
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Verify published release identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
+          ref="$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${api}/git/ref/tags/v0.4.0")"
+          [[ "$(jq -r '.object.sha' <<<"${ref}")" == "${RELEASE_SHA}" ]]
+          release="$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${api}/releases/tags/v0.4.0")"
+          [[ "$(jq -r '.id' <<<"${release}")" == "${RELEASE_ID}" ]]
+          [[ "$(jq -r '.target_commitish' <<<"${release}")" == "${RELEASE_SHA}" ]]
+          [[ "$(jq -r '.draft' <<<"${release}")" == "false" ]]
+          [[ "$(jq -r '.prerelease' <<<"${release}")" == "false" ]]
+
+      - name: Close v0.4 documentation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_exact(path: str, old: str, new: str) -> None:
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected exactly one match, found {count}: {old!r}')
+              p.write_text(text.replace(old, new, 1))
+
+          replace_exact(
+              'docs/DNA_QC_ENGINE_TODO.md',
+              '**Status:** Ralph Loop active — `v0.3.0` released; Milestone 13 complete; v0.4 release gate next',
+              '**Status:** Ralph Loop active — `v0.4.0` released; v0.5 production-beta qualification next',
+          )
+
+          replace_exact(
+              'docs/DNA_QC_ENGINE_TODO.md',
+              '### v0.4 release gate\n\n- [ ] Compatibility report reconciles every claimed field.\n- [ ] MultiQC parses generated outputs.\n- [ ] Serial and released parallel modes agree.\n- [ ] Permanent CI succeeds on the exact release commit.',
+              '### v0.4 release gate\n\n**Status:** Complete — `v0.4.0` published at exact release SHA `5be4aa4e5df3e8feb17fdde46c408683ac08bb53` (GitHub release ID `367190259`). Exact release-SHA validation: Permanent CI run `31255804251`, job `93098870269`; Reference Validation run `31255804281`, job `93098876451`; V0.4 Release Validation run `31255804250`, job `93098876838`; all successful.\n\n- [x] Compatibility report reconciles every claimed field.\n- [x] MultiQC parses generated outputs.\n- [x] Serial and released parallel modes agree.\n- [x] Permanent CI succeeds on the exact release commit.',
+          )
+
+          replace_exact(
+              'README.md',
+              'AlignGauge `v0.3.0` remains the latest published release while the `v0.4.0` release candidate is being validated.',
+              'AlignGauge `v0.4.0` is the latest published release, pinned to exact release SHA `5be4aa4e5df3e8feb17fdde46c408683ac08bb53` (GitHub release ID `367190259`).',
+          )
+          replace_exact(
+              'README.md',
+              '- v0.4 release candidate: adds the exact `samtools-stats-1.24-multiqc-1.35` compatibility profile, the exact Picard 3.4.0 13-field reference-independent AlignmentSummary subset, the exact Picard 3.4.0 default `ALL_READS` InsertSize profile, pinned MultiQC 1.35 generated-output validation for the supported parser surfaces, and an explicit release gate proving serial versus released HTSlib I/O-thread canonical equivalence.',
+              '- v0.4: adds the exact `samtools-stats-1.24-multiqc-1.35` compatibility profile, the exact Picard 3.4.0 13-field reference-independent AlignmentSummary subset, the exact Picard 3.4.0 default `ALL_READS` InsertSize profile, pinned MultiQC 1.35 generated-output validation for the supported parser surfaces, and an explicit release gate proving serial versus released HTSlib I/O-thread canonical equivalence.',
+          )
+          replace_exact(
+              'README.md',
+              'No `v0.4.0` tag or GitHub release is created until the exact release commit has passed Permanent CI and the permanent v0.4 release-validation gate. The tag is evidence of a validated commit, not a mechanism for creating one.',
+              '`v0.4.0` was published only after exact release SHA `5be4aa4e5df3e8feb17fdde46c408683ac08bb53` passed Permanent CI, Reference Validation, and the permanent v0.4 release-validation gate. The tag is evidence of that validated commit and points directly to it.',
+          )
+          replace_exact(
+              'README.md',
+              '## Planning and evidence\n\n- [v0.3.0 release]',
+              '## Planning and evidence\n\n- [v0.4.0 release](https://github.com/ekkus93/aligngauge/releases/tag/v0.4.0)\n- [v0.3.0 release]',
+          )
+
+          replace_exact(
+              'crates/aligngauge-cli/README.md',
+              '`v0.3.0` remains the latest published product release while the v0.4 release candidate is being closed. No `v0.4.0` tag or GitHub release is created until the exact release commit passes Permanent CI and the permanent v0.4 release-validation gate. The eventual tag is pinned to that validated commit rather than created speculatively.',
+              '`v0.4.0` is the latest published product release. Its tag points exactly to release SHA `5be4aa4e5df3e8feb17fdde46c408683ac08bb53` (GitHub release ID `367190259`). That exact SHA passed Permanent CI run `31255804251`, Reference Validation run `31255804281`, and V0.4 Release Validation run `31255804250` before publication.',
+          )
+
+          replace_exact(
+              'docs/evidence/V0_4_COMPATIBILITY_REPORT.md',
+              'The **compatibility-report reconciliation requirement is satisfied in this candidate state**, subject to CI validating this committed report.\n\nThe report does not claim that a `v0.4.0` tag already exists. The remaining repository operations are evidence/TODO closure, exact merge validation on `master`, selection of an exact green release commit, and only then creation of the `v0.4.0` tag and GitHub release.',
+              'The compatibility-report reconciliation requirement is satisfied for published `v0.4.0`. The release tag points exactly to validated release SHA `5be4aa4e5df3e8feb17fdde46c408683ac08bb53` (GitHub release ID `367190259`). The exact release SHA passed Permanent CI run `31255804251`, Reference Validation run `31255804281`, and V0.4 Release Validation run `31255804250` before publication.',
+          )
+          PY
+
+          git diff --check
+          git diff --exit-code -- .github/workflows/one-time-v0.4.0-post-release-close.yml
+          git diff -- docs/DNA_QC_ENGINE_TODO.md README.md crates/aligngauge-cli/README.md docs/evidence/V0_4_COMPATIBILITY_REPORT.md
+
+      - name: Commit and push post-release documentation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/DNA_QC_ENGINE_TODO.md README.md crates/aligngauge-cli/README.md docs/evidence/V0_4_COMPATIBILITY_REPORT.md
+          git diff --cached --check
+          git commit -m 'docs: close v0.4.0 release'
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:master
