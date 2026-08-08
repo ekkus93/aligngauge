@@ -1,0 +1,376 @@
+name: V0.4 Release Validation
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - ".github/workflows/v0.4-release-validation.yml"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "crates/**"
+      - "testdata/**"
+      - "tools/**"
+      - "docs/DNA_QC_ENGINE_SPEC.md"
+      - "docs/DNA_QC_ENGINE_TODO.md"
+      - "docs/adr/ADR-0007-SAMTOOLS_STATS_MULTIQC_PROFILE.md"
+      - "docs/adr/ADR-0008-PICARD_ALIGNMENT_INSERT_SIZE_PROFILE.md"
+      - "docs/adr/ADR-0009-PICARD_WGS_HS_MULTIQC_SCOPE.md"
+      - "docs/adr/ADR-0010-EXACT_OVERLAP_STREAMING_POLICY.md"
+      - "docs/adr/ADR-0011-V0_4_RELEASE_SCOPE.md"
+      - "docs/evidence/M10_SAMTOOLS_STATS_MULTIQC.md"
+      - "docs/evidence/M11_PICARD_ALIGNMENT_INSERT_SIZE.md"
+      - "docs/evidence/M13_EXACT_OVERLAP.md"
+      - "docs/evidence/V0_4_COMPATIBILITY_REPORT.md"
+  pull_request:
+    paths:
+      - ".github/workflows/v0.4-release-validation.yml"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "crates/**"
+      - "testdata/**"
+      - "tools/**"
+      - "docs/DNA_QC_ENGINE_SPEC.md"
+      - "docs/DNA_QC_ENGINE_TODO.md"
+      - "docs/adr/ADR-0007-SAMTOOLS_STATS_MULTIQC_PROFILE.md"
+      - "docs/adr/ADR-0008-PICARD_ALIGNMENT_INSERT_SIZE_PROFILE.md"
+      - "docs/adr/ADR-0009-PICARD_WGS_HS_MULTIQC_SCOPE.md"
+      - "docs/adr/ADR-0010-EXACT_OVERLAP_STREAMING_POLICY.md"
+      - "docs/adr/ADR-0011-V0_4_RELEASE_SCOPE.md"
+      - "docs/evidence/M10_SAMTOOLS_STATS_MULTIQC.md"
+      - "docs/evidence/M11_PICARD_ALIGNMENT_INSERT_SIZE.md"
+      - "docs/evidence/M13_EXACT_OVERLAP.md"
+      - "docs/evidence/V0_4_COMPATIBILITY_REPORT.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v0-4-release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: ci/v0.4-release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Verify v0.4 pins and release-scope contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          source tools/reference/samtools/image.lock
+          [[ "$SAMTOOLS_VERSION" == "1.24" ]]
+          source tools/reference/picard/image.lock
+          [[ "$version" == "3.4.0" ]]
+          source tools/reference/multiqc/image.lock
+          [[ "$MULTIQC_VERSION" == "1.35" ]]
+          grep -F 'samtools-stats-1.24-multiqc-1.35' docs/adr/ADR-0011-V0_4_RELEASE_SCOPE.md >/dev/null
+          grep -F 'picard-alignment-summary-3.4.0-all-reads-subset-v1' docs/adr/ADR-0011-V0_4_RELEASE_SCOPE.md >/dev/null
+          grep -F 'picard-insert-size-3.4.0-all-reads-v1' docs/adr/ADR-0011-V0_4_RELEASE_SCOPE.md >/dev/null
+          grep -F 'not promoted in v0.4' docs/adr/ADR-0011-V0_4_RELEASE_SCOPE.md >/dev/null
+
+      - name: Build exact release candidate binary
+        run: cargo build --release -p aligngauge-cli --locked
+
+      - name: Verify released compatibility CLI boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          target/release/aligngauge --help > target/v0.4-help.txt
+          grep -F 'samtools-stats' target/v0.4-help.txt >/dev/null
+          grep -F 'picard-alignment-summary' target/v0.4-help.txt >/dev/null
+          grep -F 'picard-insert-size' target/v0.4-help.txt >/dev/null
+          if grep -Eq 'picard-wgs|picard-hs-metrics' target/v0.4-help.txt; then
+            echo 'unproved WGS/Hs compatibility format appeared in the released CLI surface' >&2
+            exit 1
+          fi
+          for format in picard-wgs picard-hs-metrics; do
+            if target/release/aligngauge qc \
+              --input testdata/fixtures/basic.bam \
+              --format "$format" \
+              > "target/$format.stdout" \
+              2> "target/$format.stderr"; then
+              echo "$format unexpectedly succeeded" >&2
+              exit 1
+            fi
+            test ! -s "target/$format.stdout"
+            grep -F 'unsupported --format' "target/$format.stderr" >/dev/null
+          done
+
+      - name: Prove serial and released I/O-parallel whole-input equivalence
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=target/v04/modes/whole
+          rm -rf "$root"
+          mkdir -p "$root"
+          target/release/aligngauge qc \
+            --input testdata/fixtures/basic.bam \
+            --outdir "$root/serial" \
+            --io-threads 0 \
+            --memory-limit 1GiB \
+            --quiet
+          target/release/aligngauge qc \
+            --input testdata/fixtures/basic.bam \
+            --outdir "$root/io2" \
+            --io-threads 2 \
+            --memory-limit 1GiB \
+            --quiet
+          cmp "$root/serial/summary.json" "$root/io2/summary.json"
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path('target/v04/modes/whole')
+          serial = json.loads((root / 'serial/provenance.json').read_text())
+          io2 = json.loads((root / 'io2/provenance.json').read_text())
+          assert serial['resolved_config']['io_threads'] == 0
+          assert serial['analysis_plan']['effective_reader_io_threads'] == 1
+          assert io2['resolved_config']['io_threads'] == 2
+          assert io2['analysis_plan']['effective_reader_io_threads'] == 2
+          assert serial['analysis_plan']['collector_threads_used'] == 1
+          assert io2['analysis_plan']['collector_threads_used'] == 1
+          assert (root / 'serial/_SUCCESS').is_file()
+          assert (root / 'io2/_SUCCESS').is_file()
+          PY
+
+      - name: Prove serial and released I/O-parallel targeted equivalence
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=target/v04/modes/targeted
+          rm -rf "$root"
+          mkdir -p "$root"
+          targets=crates/aligngauge-coverage/tests/fixtures/chunk_boundary_targets.bed
+          for mode in serial io2; do
+            if [[ "$mode" == serial ]]; then io_threads=0; else io_threads=2; fi
+            target/release/aligngauge qc \
+              --input testdata/fixtures/chunk_boundary.bam \
+              --outdir "$root/$mode" \
+              --targets "$targets" \
+              --near-distance 5 \
+              --coverage-thresholds 1,2 \
+              --io-threads "$io_threads" \
+              --memory-limit 1GiB \
+              --quiet
+          done
+          cmp "$root/serial/summary.json" "$root/io2/summary.json"
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path('target/v04/modes/targeted')
+          serial = json.loads((root / 'serial/provenance.json').read_text())
+          io2 = json.loads((root / 'io2/provenance.json').read_text())
+          assert serial['analysis_plan']['effective_reader_io_threads'] == 1
+          assert io2['analysis_plan']['effective_reader_io_threads'] == 2
+          assert serial['analysis_plan']['collector_threads_used'] == 1
+          assert io2['analysis_plan']['collector_threads_used'] == 1
+          PY
+
+      - name: Prove configured collector threads do not masquerade as parallel execution
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=target/v04/modes/collector-limit
+          rm -rf "$root"
+          if ! target/release/aligngauge qc \
+            --input testdata/fixtures/basic.bam \
+            --outdir "$root" \
+            --threads 2 \
+            --io-threads 0 \
+            --memory-limit 1GiB \
+            --quiet \
+            > target/v04-collector.stdout \
+            2> target/v04-collector.stderr; then
+            cat target/v04-collector.stderr >&2
+            exit 1
+          fi
+          test ! -s target/v04-collector.stdout
+          grep -F 'warning[collector_threads_serial_v0_1]' target/v04-collector.stderr >/dev/null
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          provenance = json.loads(Path('target/v04/modes/collector-limit/provenance.json').read_text())
+          assert provenance['analysis_plan']['configured_collector_threads'] == 2
+          assert provenance['analysis_plan']['collector_threads_used'] == 1
+          PY
+
+      - name: Generate and compare v0.4 Samtools Stats exactly
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=target/v04/samtools
+          mkdir -p "$root/reference"
+          bash tools/reference/samtools/run-stats.sh \
+            testdata/fixtures/flags_and_pairs.bam \
+            "$root/reference"
+          target/release/aligngauge qc \
+            --input testdata/fixtures/flags_and_pairs.bam \
+            --format samtools-stats \
+            > "$root/aligngauge.stats"
+          python3 tools/reference/samtools/compare-stats.py \
+            "$root/reference/stdout.txt" \
+            "$root/aligngauge.stats" \
+            "$root/differential.json"
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path('target/v04/samtools/differential.json').read_text())
+          assert report['status'] == 'exact'
+          assert report['sn_rows'] == 39
+          assert report['tolerance'] is None
+          PY
+
+      - name: Parse generated v0.4 Samtools Stats with pinned MultiQC
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash tools/reference/multiqc/validate-samtools-stats.sh \
+            target/v04/samtools/reference/stdout.txt \
+            target/v04/samtools/aligngauge.stats \
+            target/v04/samtools/multiqc
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path('target/v04/samtools/multiqc/report.json').read_text())
+          assert report['status'] == 'exact'
+          assert report['multiqc_version'] == '1.35'
+          assert report['comparison']['multiqc_samtools_stats'] == 'byte-identical'
+          assert report['comparison']['samtools_insert_size'] == 'byte-identical'
+          PY
+
+      - name: Generate and compare v0.4 Picard profiles exactly
+        shell: bash
+        run: |
+          set -euo pipefail
+          alignment=target/v04/picard/alignment
+          insert=target/v04/picard/insert
+          mkdir -p "$alignment/reference" "$insert/reference"
+          bash tools/reference/picard/run-alignment-summary.sh \
+            testdata/fixtures/picard_alignment_edge.bam \
+            "$alignment/reference"
+          target/release/aligngauge qc \
+            --input testdata/fixtures/picard_alignment_edge.bam \
+            --format picard-alignment-summary \
+            > "$alignment/aligngauge.txt"
+          python3 tools/reference/picard/compare-alignment-summary.py \
+            "$alignment/reference/metrics.txt" \
+            "$alignment/aligngauge.txt" \
+            "$alignment/differential.json"
+
+          bash tools/reference/picard/run-insert-size.sh \
+            testdata/fixtures/picard_insert_edge.bam \
+            "$insert/reference"
+          target/release/aligngauge qc \
+            --input testdata/fixtures/picard_insert_edge.bam \
+            --format picard-insert-size \
+            > "$insert/aligngauge.txt"
+          python3 tools/reference/picard/compare-insert-size.py \
+            "$insert/reference/metrics.txt" \
+            "$insert/aligngauge.txt" \
+            "$insert/differential.json"
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          for path in [
+              Path('target/v04/picard/alignment/differential.json'),
+              Path('target/v04/picard/insert/differential.json'),
+          ]:
+              report = json.loads(path.read_text())
+              assert report['status'] == 'exact', path
+          PY
+
+      - name: Parse generated v0.4 Picard InsertSize with pinned MultiQC
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash tools/reference/multiqc/validate-picard.sh \
+            target/v04/picard/insert/reference/metrics.txt \
+            target/v04/picard/insert/aligngauge.txt \
+            target/v04/picard/multiqc
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path('target/v04/picard/multiqc/m12-multiqc-validation-report.json').read_text())
+          assert report['status'] == 'exact'
+          assert report['multiqc_version'] == '1.35'
+          assert report['insert_size']['comparison'] == 'byte-identical'
+          assert report['wgs_fixture']['compatibility_claim'] is False
+          assert report['hs_fixture']['compatibility_claim'] is False
+          PY
+
+      - name: Write v0.4 executable gate report
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          report = {
+              'schema': 'aligngauge-v0.4-release-gate-v1',
+              'status': 'exact',
+              'release_profiles': [
+                  'samtools-stats-1.24-multiqc-1.35',
+                  'picard-alignment-summary-3.4.0-all-reads-subset-v1',
+                  'picard-insert-size-3.4.0-all-reads-v1',
+              ],
+              'multiqc_generated_profiles': [
+                  'samtools-stats-1.24-multiqc-1.35',
+                  'picard-insert-size-3.4.0-all-reads-v1',
+              ],
+              'mode_equivalence': {
+                  'whole_input_summary': 'byte-identical',
+                  'targeted_summary': 'byte-identical',
+                  'serial_effective_io_threads': 1,
+                  'parallel_effective_io_threads': 2,
+                  'collector_threads_used': 1,
+              },
+              'deferred': {
+                  'picard_wgs': True,
+                  'picard_hs_metrics': True,
+                  'indexed_partition_parallelism': True,
+              },
+          }
+          Path('target/v04/release-gate.json').write_text(
+              json.dumps(report, indent=2, sort_keys=True) + '\n'
+          )
+          PY
+
+      - name: Upload v0.4 release-gate evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: v0.4-release-validation-${{ github.sha }}
+          path: |
+            target/v04/release-gate.json
+            target/v04/modes/whole/serial/summary.json
+            target/v04/modes/whole/io2/summary.json
+            target/v04/modes/whole/serial/provenance.json
+            target/v04/modes/whole/io2/provenance.json
+            target/v04/modes/targeted/serial/summary.json
+            target/v04/modes/targeted/io2/summary.json
+            target/v04/samtools/differential.json
+            target/v04/samtools/multiqc/report.json
+            target/v04/picard/alignment/differential.json
+            target/v04/picard/insert/differential.json
+            target/v04/picard/multiqc/m12-multiqc-validation-report.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Verify repository remains clean
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "$(git status --porcelain)" ]]; then
+            git status --short
+            git diff --check
+            exit 1
+          fi
+          git diff --check
