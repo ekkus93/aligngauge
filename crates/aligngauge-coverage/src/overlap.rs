@@ -266,9 +266,11 @@ impl PicardWgsOverlapCorrector {
                 })
             })?;
         self.active_names.retain(|_, state| state.last_end > start);
-        let expired_loci = u64::try_from(self.active_loci.range(..start).count()).map_err(|source| {
-            invariant_error("Picard WGS expired-locus count does not fit u64").with_source(source)
-        })?;
+        let expired_loci =
+            u64::try_from(self.active_loci.range(..start).count()).map_err(|source| {
+                invariant_error("Picard WGS expired-locus count does not fit u64")
+                    .with_source(source)
+            })?;
         let released_loci = expired_loci
             .checked_mul(LOCUS_BYTES)
             .ok_or_else(|| invariant_error("Picard WGS released-locus accounting overflowed"))?;
