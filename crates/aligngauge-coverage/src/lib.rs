@@ -11,6 +11,7 @@ use aligngauge_hts::{BamReader, FieldPlan, ReaderOptions};
 
 mod accumulator;
 mod cigar;
+mod overlap;
 mod plan;
 mod report;
 mod targeted;
@@ -18,6 +19,12 @@ mod util;
 
 pub use accumulator::CoverageCollector;
 pub use cigar::{CoverageBlock, cigar_to_coverage_blocks};
+pub use overlap::{
+    EXACT_OVERLAP_EXECUTION_MODE, INDEXED_PARTITION_EXACT_OVERLAP_SUPPORTED,
+    PICARD_HS_OVERLAP_PROFILE, PICARD_WGS_LOCUS_ACCUMULATION_CAP, PICARD_WGS_MINIMUM_BASE_QUALITY,
+    PICARD_WGS_OVERLAP_PROFILE, PicardWgsOverlapCorrector, PicardWgsOverlapRecord,
+    PicardWgsOverlapSummary, picard_hs_trailing_read_bases_to_clip, picard_wgs_flag_candidate,
+};
 pub use plan::{CoverageMemoryPlan, CoverageOptions};
 pub use report::{CoverageReport, PerReferenceCoverage};
 pub use targeted::{DEFAULT_NEAR_DISTANCE_BASES, TARGETED_PROFILE, TargetedCoverageReport};

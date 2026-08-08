@@ -1,0 +1,136 @@
+name: Exact Overlap Validation
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - ".github/workflows/overlap-validation.yml"
+      - "crates/aligngauge-coverage/**"
+      - "crates/aligngauge-cli/tests/m13_overlap_probe.rs"
+      - "crates/aligngauge-core/**"
+      - "crates/aligngauge-testkit/**"
+      - "tools/reference/picard/**"
+      - "docs/DNA_QC_ENGINE_SPEC.md"
+      - "docs/DNA_QC_ENGINE_TODO.md"
+      - "docs/adr/ADR-0010-EXACT_OVERLAP_STREAMING_POLICY.md"
+      - "docs/evidence/M13_EXACT_OVERLAP.md"
+      - "docs/evidence/V0_4_COMPATIBILITY_REPORT.md"
+  pull_request:
+    paths:
+      - ".github/workflows/overlap-validation.yml"
+      - "crates/aligngauge-coverage/**"
+      - "crates/aligngauge-cli/tests/m13_overlap_probe.rs"
+      - "crates/aligngauge-core/**"
+      - "crates/aligngauge-testkit/**"
+      - "tools/reference/picard/**"
+      - "docs/DNA_QC_ENGINE_SPEC.md"
+      - "docs/DNA_QC_ENGINE_TODO.md"
+      - "docs/adr/ADR-0010-EXACT_OVERLAP_STREAMING_POLICY.md"
+      - "docs/evidence/M13_EXACT_OVERLAP.md"
+      - "docs/evidence/V0_4_COMPATIBILITY_REPORT.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: ci/exact-overlap
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Validate pinned overlap contract and tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          source tools/reference/picard/image.lock
+          [[ "$version" == "3.4.0" ]]
+          [[ "$image" == "broadinstitute/picard@sha256:f11df229b5b49ea28a872c04fc5d33e76bd14890754079390f36897c16194b28" ]]
+          [[ "$jar" == "/usr/picard/picard.jar" ]]
+          bash -n tools/reference/picard/run-m13-overlap-oracle.sh
+          grep -F 'picard-wgs-3.4.0-default-overlap-v1' docs/adr/ADR-0010-EXACT_OVERLAP_STREAMING_POLICY.md >/dev/null
+          grep -F 'picard-hs-3.4.0-default-overlap-v1' docs/adr/ADR-0010-EXACT_OVERLAP_STREAMING_POLICY.md >/dev/null
+          grep -F 'streaming-coordinate-order-v1' docs/adr/ADR-0010-EXACT_OVERLAP_STREAMING_POLICY.md >/dev/null
+          grep -F 'INDEXED_PARTITION_EXACT_OVERLAP_SUPPORTED: bool = false' crates/aligngauge-coverage/src/overlap.rs >/dev/null
+          if grep -F '|| true' tools/reference/picard/run-m13-overlap-oracle.sh; then
+            echo 'M13 oracle runner contains a warning-only failure bypass' >&2
+            exit 1
+          fi
+
+      - name: Run exact overlap unit tests
+        run: cargo test --locked -p aligngauge-coverage
+
+      - name: Generate deterministic exact-overlap fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf target/m13-overlap
+          mkdir -p target/m13-overlap
+          ALIGNGAUGE_M13_OUTPUT_DIR="$GITHUB_WORKSPACE/target/m13-overlap" \
+            cargo test --locked -p aligngauge-cli \
+              --test m13_overlap_probe \
+              -- --exact write_exact_overlap_differential_fixture
+          cat > target/m13-overlap/expected.tsv <<'EOF'
+          wgs_retained_bases	135
+          wgs_baseq_excluded_bases	10
+          wgs_overlap_excluded_bases	35
+          hs_overlap_clipped_read_bases	64
+          EOF
+          cmp target/m13-overlap/expected.tsv target/m13-overlap/aligngauge.tsv
+
+      - name: Run pinned Picard HTSJDK overlap oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash tools/reference/picard/run-m13-overlap-oracle.sh \
+            target/m13-overlap/overlap.bam \
+            target/m13-overlap/reference
+          if ! cmp -s \
+            target/m13-overlap/aligngauge.tsv \
+            target/m13-overlap/reference/oracle.tsv; then
+            diff -u \
+              target/m13-overlap/reference/oracle.tsv \
+              target/m13-overlap/aligngauge.tsv >&2
+            exit 1
+          fi
+
+      - name: Record exact overlap evidence identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum \
+            target/m13-overlap/overlap.bam \
+            target/m13-overlap/aligngauge.tsv \
+            target/m13-overlap/reference/oracle.tsv \
+            > target/m13-overlap/sha256sums.txt
+          printf 'compatibility_profile_wgs\tpicard-wgs-3.4.0-default-overlap-v1\n' \
+            > target/m13-overlap/profile.txt
+          printf 'compatibility_profile_hs\tpicard-hs-3.4.0-default-overlap-v1\n' \
+            >> target/m13-overlap/profile.txt
+          printf 'execution_mode\tstreaming-coordinate-order-v1\n' \
+            >> target/m13-overlap/profile.txt
+          printf 'indexed_partition_exact_overlap_supported\tfalse\n' \
+            >> target/m13-overlap/profile.txt
+
+      - name: Upload M13 exact overlap evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: exact-overlap-validation-${{ github.sha }}
+          path: |
+            target/m13-overlap/overlap.bam
+            target/m13-overlap/expected.tsv
+            target/m13-overlap/aligngauge.tsv
+            target/m13-overlap/reference/oracle.tsv
+            target/m13-overlap/reference/image.txt
+            target/m13-overlap/reference/invocation.txt
+            target/m13-overlap/reference/exit_status.txt
+            target/m13-overlap/sha256sums.txt
+            target/m13-overlap/profile.txt
+          if-no-files-found: error
+          retention-days: 7
