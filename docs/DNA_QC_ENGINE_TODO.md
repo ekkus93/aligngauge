@@ -685,14 +685,24 @@ Implement SPEC §9.
 
 ## Milestone 11 — Picard alignment and insert-size profiles
 
-- [ ] Pin Picard version.
-- [ ] Define alignment-summary subset.
-- [ ] Implement insert-size histogram.
-- [ ] Reproduce or explicitly rename MAD trimming behavior.
-- [ ] Test tie-breaking and rounding.
-- [ ] Separate compatibility from “similar metric.”
-- [ ] Differential fixtures for edge distributions.
-- [ ] Document expected differences.
+**Status:** Implementation and differential evidence complete on pre-evidence source SHA `46b8a330cc26fd2b0f472bcc72322c01fd15311f`; final clean evidence-commit acceptance pending exact-SHA CI. Evidence: `docs/evidence/M11_PICARD_ALIGNMENT_INSERT_SIZE.md`. Milestone 11 does not publish `v0.4.0`.
+
+- [x] Pin Picard version.
+- [x] Define alignment-summary subset.
+- [x] Implement insert-size histogram.
+- [x] Reproduce or explicitly rename MAD trimming behavior.
+- [x] Test tie-breaking and rounding.
+- [x] Separate compatibility from “similar metric.”
+- [x] Differential fixtures for edge distributions.
+- [x] Document expected differences.
+- [x] Create `docs/evidence/M11_PICARD_ALIGNMENT_INSERT_SIZE.md`.
+
+### Milestone 11 acceptance gate
+
+- [x] The claimed 13-column reference-independent alignment-summary subset matches pinned Picard 3.4.0 exactly on deterministic fixtures and HG002 with no tolerance.
+- [x] The default `ALL_READS` insert-size metrics and trimmed histogram match pinned Picard 3.4.0 exactly on deterministic fixtures and HG002 with no tolerance.
+- [x] Reference-dependent alignment-summary fields, PDF compatibility, and non-`ALL_READS` accumulation levels are explicitly documented as unsupported/deferred rather than zero-filled or approximated.
+- [ ] Permanent CI succeeds on the exact clean evidence commit.
 
 ## Milestone 12 — WGS/hybrid-selection and MultiQC
 
