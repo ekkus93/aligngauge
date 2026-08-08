@@ -75,7 +75,6 @@ replace_exact(
 )
 replace_exact(path, "    Ok(collector.finish())\n", "    collector.finish()\n")
 
-# Clippy documentation normalization without suppressions.
 for old, new in [
     ("/// Exact default ALL_READS insert-size compatibility profile.", "/// Exact default `ALL_READS` insert-size compatibility profile."),
     ("/// Picard alignment-summary category emitted by the ALL_READS collector.", "/// Picard alignment-summary category emitted by the `ALL_READS` collector."),
@@ -87,7 +86,6 @@ for old, new in [
 ]:
     replace_exact(path, old, new)
 
-# Express Java truncating casts through checked decimal conversion so Rust has no unchecked cast.
 replace_exact(
     path,
     "    let trim_width = width_float.trunc() as u32;\n",
@@ -133,5 +131,27 @@ fn truncating_f64_to_u32(value: f64) -> Option<u32> {
     }
     value.trunc().to_string().parse::<u32>().ok()
 }
+''',
+)
+
+# Exact floating-point unit expectations are represented by exact IEEE bits,
+# not by an epsilon and not by a lint suppression.
+replace_exact(
+    path,
+    "        assert_eq!(histogram.mode(), 10.0);\n",
+    "        assert_eq!(histogram.mode().to_bits(), 10.0_f64.to_bits());\n",
+)
+replace_exact(
+    path,
+    "        assert_eq!(histogram.median(), 15.5);\n",
+    "        assert_eq!(histogram.median().to_bits(), 15.5_f64.to_bits());\n",
+)
+replace_exact(
+    path,
+    "        assert_eq!(histogram.median_absolute_deviation(), 5.0);\n",
+    '''        assert_eq!(
+            histogram.median_absolute_deviation().to_bits(),
+            5.0_f64.to_bits()
+        );
 ''',
 )
