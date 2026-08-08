@@ -1,5 +1,5 @@
 name: M11 Picard Oracle
-# rerun after immutable-image identity correction
+# rerun after empty insert-output contract fix
 
 on:
   push:
@@ -53,4 +53,4 @@ jobs:
       - name: Show differential reports
         if: always()
         run: |
-          find "$RUNNER_TEMP/m11-oracle" -type f \( -name 'differential.json' -o -name 'metrics.txt' -o -name 'aligngauge.txt' \) -print -exec sh -c 'echo "--- $1"; cat "$1"' _ {} \;
+          find "$RUNNER_TEMP/m11-oracle" -type f \( -name 'differential.json' -o -name 'metrics.txt' -o -name 'aligngauge.txt' -o -name 'output_state.txt' \) -print -exec sh -c 'echo "--- $1"; cat "$1"' _ {} \;
