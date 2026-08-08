@@ -1,0 +1,138 @@
+name: MultiQC Validation
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - ".github/workflows/multiqc-validation.yml"
+      - "crates/aligngauge-cli/**"
+      - "crates/aligngauge-hts/**"
+      - "crates/aligngauge-metrics/**"
+      - "testdata/fixtures/picard_insert_edge.bam"
+      - "tools/reference/picard/**"
+      - "tools/reference/multiqc/**"
+      - "docs/DNA_QC_ENGINE_SPEC.md"
+      - "docs/DNA_QC_ENGINE_TODO.md"
+      - "docs/adr/ADR-0009-PICARD_WGS_HS_MULTIQC_SCOPE.md"
+      - "docs/evidence/V0_4_COMPATIBILITY_REPORT.md"
+  pull_request:
+    paths:
+      - ".github/workflows/multiqc-validation.yml"
+      - "crates/aligngauge-cli/**"
+      - "crates/aligngauge-hts/**"
+      - "crates/aligngauge-metrics/**"
+      - "testdata/fixtures/picard_insert_edge.bam"
+      - "tools/reference/picard/**"
+      - "tools/reference/multiqc/**"
+      - "docs/DNA_QC_ENGINE_SPEC.md"
+      - "docs/DNA_QC_ENGINE_TODO.md"
+      - "docs/adr/ADR-0009-PICARD_WGS_HS_MULTIQC_SCOPE.md"
+      - "docs/evidence/V0_4_COMPATIBILITY_REPORT.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: ci/multiqc
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Validate pinned tools and discovery fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          source tools/reference/multiqc/image.lock
+          [[ "$MULTIQC_VERSION" == "1.35" ]]
+          [[ "$MULTIQC_IMAGE" == "quay.io/biocontainers/multiqc@sha256:b65e3fe879df27b92334dda0fd987a6e21bdee09a2848551d4f287099a93b7ac" ]]
+          source tools/reference/picard/image.lock
+          [[ "$version" == "3.4.0" ]]
+          bash -n tools/reference/multiqc/validate-picard.sh
+          grep -F '## METRICS CLASS' tools/reference/multiqc/fixtures/picard-wgs-discovery.metrics.txt >/dev/null
+          grep -F 'WgsMetrics' tools/reference/multiqc/fixtures/picard-wgs-discovery.metrics.txt >/dev/null
+          grep -F 'HsMetrics' tools/reference/multiqc/fixtures/picard-hs-discovery.metrics.txt >/dev/null
+
+      - name: Build AlignGauge compatibility probe
+        run: cargo build --release -p aligngauge-cli --locked
+
+      - name: Prepare exact Picard insert-size pair
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=target/m12/insert
+          mkdir -p "$root/reference"
+          bash tools/reference/picard/run-insert-size.sh \
+            testdata/fixtures/picard_insert_edge.bam \
+            "$root/reference"
+          target/release/aligngauge qc \
+            --input testdata/fixtures/picard_insert_edge.bam \
+            --format picard-insert-size \
+            > "$root/aligngauge.txt"
+          python3 tools/reference/picard/compare-insert-size.py \
+            "$root/reference/metrics.txt" \
+            "$root/aligngauge.txt" \
+            "$root/differential.json"
+
+      - name: Run pinned MultiQC Picard parser
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash tools/reference/multiqc/validate-picard.sh \
+            target/m12/insert/reference/metrics.txt \
+            target/m12/insert/aligngauge.txt \
+            target/m12/multiqc
+
+      - name: Enforce compatibility boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          differential = json.loads(Path('target/m12/insert/differential.json').read_text())
+          assert differential['status'] == 'exact'
+          assert differential['tolerance'] is None
+          assert differential['compatibility_profile'] == 'picard-insert-size-3.4.0-all-reads-v1'
+
+          report = json.loads(Path('target/m12/multiqc/report.json').read_text())
+          assert report['multiqc_version'] == '1.35'
+          assert report['sample_identity_mode'] == 'filename-via-fn_as_s_name'
+          assert report['supported_generated_output']['picard_insert_size_3_4_0_all_reads_v1']['parsed_reference_vs_aligngauge'] == 'byte-identical'
+          assert report['discovery_only']['picard_wgs_metrics']['status'] == 'discovered-and-parsed'
+          assert report['discovery_only']['picard_hs_metrics']['status'] == 'discovered-and-parsed'
+          assert report['discovery_only']['picard_wgs_metrics']['compatibility_claim'] is False
+          assert report['discovery_only']['picard_hs_metrics']['compatibility_claim'] is False
+          assert Path('target/m12/multiqc/_SUCCESS').is_file()
+          PY
+
+      - name: Upload M12 MultiQC evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: multiqc-validation-${{ github.sha }}
+          path: |
+            target/m12/insert/reference/metrics.txt
+            target/m12/insert/aligngauge.txt
+            target/m12/insert/differential.json
+            target/m12/multiqc/image.txt
+            target/m12/multiqc/version.txt
+            target/m12/multiqc/report.json
+            target/m12/multiqc/reference-insert.stdout.txt
+            target/m12/multiqc/reference-insert.stderr.txt
+            target/m12/multiqc/aligngauge-insert.stdout.txt
+            target/m12/multiqc/aligngauge-insert.stderr.txt
+            target/m12/multiqc/discovery.stdout.txt
+            target/m12/multiqc/discovery.stderr.txt
+            target/m12/multiqc/work/reference-insert-out/multiqc_data/multiqc_picard_insertSize.txt
+            target/m12/multiqc/work/aligngauge-insert-out/multiqc_data/multiqc_picard_insertSize.txt
+            target/m12/multiqc/work/discovery-out/multiqc_data/multiqc_picard_wgsmetrics.txt
+            target/m12/multiqc/work/discovery-out/multiqc_data/multiqc_picard_HsMetrics.txt
+          if-no-files-found: error
+          retention-days: 7

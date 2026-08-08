@@ -3,8 +3,8 @@
 **Repository:** `ekkus93/aligngauge`
 
 **Companion specification:** `docs/DNA_QC_ENGINE_SPEC.md`  
-**Status:** Ralph Loop active — `v0.3.0` released; Milestone 11 complete; Milestone 12 next
-**Last updated:** 2026-08-07  
+**Status:** Ralph Loop active — `v0.3.0` released; Milestone 12 complete; Milestone 13 next
+**Last updated:** 2026-08-08  
 **Supersedes:** Initial `DNA_QC_ENGINE_TODO.md` dated 2026-08-05
 
 ## 1. How to use this TODO
@@ -706,13 +706,23 @@ Implement SPEC §9.
 
 ## Milestone 12 — WGS/hybrid-selection and MultiQC
 
-- [ ] Select Picard WGS metrics in scope.
-- [ ] Select hybrid-selection metrics in scope.
-- [ ] Define fold-80 behavior.
-- [ ] Add MultiQC fixture discovery tests.
-- [ ] Run pinned MultiQC parser.
-- [ ] Ensure parser failures fail CI.
-- [ ] Create `docs/evidence/V0_4_COMPATIBILITY_REPORT.md`.
+**Status:** Complete — validated evidence SHA `5b7f6d15970918862d1006ea4c6add6937479ea6`; MultiQC Validation `31246937565` / `93076990568`, Permanent CI `31246937609` / `93076990623`, Reference Validation `31246937557` / `93076990412`, and Samtools Stats Validation `31246937566` / `93076990392` all successful. Evidence: `docs/evidence/V0_4_COMPATIBILITY_REPORT.md`. Milestone 12 does not publish `v0.4.0`; Milestone 13 is next.
+
+- [x] Select Picard WGS metrics in scope.
+- [x] Select hybrid-selection metrics in scope.
+- [x] Define fold-80 behavior.
+- [x] Add MultiQC fixture discovery tests.
+- [x] Run pinned MultiQC parser.
+- [x] Ensure parser failures fail CI.
+- [x] Create `docs/evidence/V0_4_COMPATIBILITY_REPORT.md`.
+
+### Milestone 12 acceptance gate
+
+- [x] ADR-0009 freezes the WGS/HsMetrics candidate surfaces without exposing approximate Picard renderers before exact overlap correction.
+- [x] Native `target_uniformity_penalty_80` remains distinct from Picard `FOLD_80_BASE_PENALTY`; there is no rename or numeric fallback.
+- [x] Pinned MultiQC 1.35 parses exact generated Picard/AlignGauge insert-size output to byte-identical data and discovers the WGS/Hs parser fixtures with `compatibility_claim: false`.
+- [x] Parser failures are fatal: the first sample-identity mismatch failed CI and was corrected with explicit MultiQC filename sample identity rather than suppressed.
+- [x] Permanent CI succeeds on the exact validated evidence SHA.
 
 ## Milestone 13 — Exact overlap correction and parallelism
 
