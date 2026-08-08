@@ -49,16 +49,16 @@ replace_once(
 # Document the public compatibility probes without changing the latest released version.
 replace_once(
     "crates/aligngauge-cli/README.md",
-    "Milestone 10 is now accepted: the `samtools-stats` compatibility probe is validated exactly against pinned Samtools 1.24 and pinned MultiQC 1.35, with all unsupported `samtools stats` sections intentionally omitted. Milestone 11 is next.\n",
-    "Milestone 10 remains accepted. Milestone 11 now adds two Picard 3.4.0 compatibility probes as an evidence candidate; `v0.3.0` remains the latest released product and no `v0.4.0` release is implied.\n",
+    "- `aligngauge qc --input <BAM> --format <...>` exposes explicit differential/compatibility projections, including `samtools-flagstat`, `samtools-idxstats`, and the Milestone 10 `samtools-stats` subset.\n",
+    "- `aligngauge qc --input <BAM> --format <...>` exposes explicit differential/compatibility projections, including `samtools-flagstat`, `samtools-idxstats`, the Milestone 10 `samtools-stats` subset, and the Milestone 11 `picard-alignment-summary` / `picard-insert-size` profiles.\n",
 )
 replace_once(
     "crates/aligngauge-cli/README.md",
-    "aligngauge qc --input <BAM> --format samtools-stats\n```\n",
-    "aligngauge qc --input <BAM> --format samtools-stats\naligngauge qc --input <BAM> --format picard-alignment-summary\naligngauge qc --input <BAM> --format picard-insert-size\n```\n",
+    "Milestone 10 acceptance is closed after exact validation of both the clean evidence candidate and the merged `master` commit. The Ralph loop proceeds to Milestone 11 — Picard alignment and insert-size profiles. This M10 closeout still does not publish or imply `v0.4.0`.\n",
+    "Milestone 10 remains accepted. Milestone 11 now adds two Picard 3.4.0 `ALL_READS` compatibility probes as an evidence candidate. `picard-alignment-summary` claims exactly the documented 13 reference-independent columns; `picard-insert-size` claims the default metrics rows and trimmed histogram. Reference-dependent alignment-summary fields, the insert-size PDF, and SAMPLE/LIBRARY/READ_GROUP breakdowns remain unsupported or deferred rather than approximated. `v0.3.0` remains the latest released product and Milestone 11 does not publish or imply `v0.4.0`.\n",
 )
 replace_once(
     "crates/aligngauge-cli/README.md",
-    "The compatibility path remains intentionally separate from the release report path. It does not publish `summary.json`, `provenance.json`, or `run-metadata.json`.\n",
-    "The compatibility path remains intentionally separate from the release report path. It does not publish `summary.json`, `provenance.json`, or `run-metadata.json`. The Picard alignment-summary profile claims only its explicitly documented 13 reference-independent columns; the insert-size profile claims the default `ALL_READS` metrics table and trimmed histogram, not the PDF chart or SAMPLE/LIBRARY/READ_GROUP breakdowns.\n",
+    "v0.2 CRAM/reference evidence is recorded in `docs/evidence/V0_2_CRAM_VALIDATION.md`; v0.3 targeted evidence is recorded in `docs/evidence/V0_3_TARGETED_VALIDATION.md`; Milestone 10 Samtools-stats/MultiQC evidence is recorded in `docs/evidence/M10_SAMTOOLS_STATS_MULTIQC.md`.\n",
+    "v0.2 CRAM/reference evidence is recorded in `docs/evidence/V0_2_CRAM_VALIDATION.md`; v0.3 targeted evidence is recorded in `docs/evidence/V0_3_TARGETED_VALIDATION.md`; Milestone 10 Samtools-stats/MultiQC evidence is recorded in `docs/evidence/M10_SAMTOOLS_STATS_MULTIQC.md`; Milestone 11 Picard alignment/insert-size evidence is recorded in `docs/evidence/M11_PICARD_ALIGNMENT_INSERT_SIZE.md`.\n",
 )
