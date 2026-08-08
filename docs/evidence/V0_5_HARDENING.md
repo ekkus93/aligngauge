@@ -1,170 +1,153 @@
 # AlignGauge v0.5 hardening evidence
 
-**State:** validated implementation candidate; exact evidence-head validation pending. All permanent M15 hardening implementation gates are green. Signed/attested release material remains intentionally deferred to the exact release candidate/publication boundary, and Milestone 14 full-scale HG002 qualification remains a separate release blocker.
+**State:** M15 hardening implementation validated. The exact hardening evidence SHA `0e14af01c2f218aaca371c414133403e8e88c96d` and later integration head `d1e01b7d7064368179350471c050fce44cdbb377` both passed the complete permanent regression/hardening matrix. Signed/attested release material remains intentionally pending until the exact release-candidate/publication boundary. Milestone 14 full-scale HG002 qualification remains a separate release blocker.
 
 ## Hardening contract
 
-ADR-0012 makes the following v0.5 release blockers rather than warning-only checks:
+ADR-0012 makes these failures release-blocking rather than warning-only:
 
-1. BED parser fuzz campaign failure;
-2. raw BAM CIGAR coverage-boundary fuzz campaign failure;
+1. BED parser fuzz failure;
+2. raw BAM CIGAR coverage-boundary fuzz failure;
 3. atomic-output fault-injection regression;
-4. sanitizer-compatible HTS/native-boundary test failure where the pinned runner supports the sanitizer configuration;
-5. unresolved dependency advisory under the committed policy;
-6. unapproved or unknown dependency license;
-7. unknown package source;
-8. SBOM/license inventory generation failure;
-9. nondeterministic generated SBOM/license inventory;
-10. release-binary reproducibility mismatch under the documented controlled build inputs;
-11. missing schema migration/compatibility documentation;
-12. missing signed/attested release checksum evidence at publication.
+4. ASan/LeakSanitizer HTS/native-boundary failure;
+5. release-blocking dependency advisory;
+6. unapproved or unknown dependency license/source;
+7. SBOM/license inventory generation or determinism failure;
+8. release-artifact reproducibility mismatch;
+9. missing schema migration/compatibility documentation;
+10. missing signed/attested release checksum evidence at publication.
 
-The workflow fails nonzero for these conditions. It does not turn them into `continue-on-error`, `|| true`, best-effort steps, or advisory-only output.
+The permanent workflow does not use `continue-on-error`, `|| true`, or a best-effort fallback for these gates.
 
 ## Validated implementation candidate
 
-Branch candidate SHA:
+Implementation candidate branch SHA:
 
 `7d1264f4a1a553ff5d2c14315c51c91e0db05864`
 
-The pull-request workflow executed the synthetic PR merge commit `f3c17499a7b5b05f058fa018ad15bee5737733dc`, which is recorded by the machine-readable supply-chain report. The branch head itself is the source candidate; exact commit validation is repeated after merge on `master` before any v0.5 release can be qualified.
+V0.5 Hardening Validation run `31265386802` succeeded:
 
-V0.5 Hardening Validation run `31265386802` completed successfully:
+- preflight/fault injection job `93122570606`
+- ASan/LeakSanitizer job `93122570568`
+- fuzz job `93122570575`
+- supply-chain/reproducibility job `93122570591`
+- aggregate hardening job `93122984606`
 
-- `ci/v0.5-hardening-preflight` job `93122570606` — success
-- `ci/v0.5-hardening-asan` job `93122570568` — success
-- `ci/v0.5-hardening-fuzz` job `93122570575` — success
-- `ci/v0.5-hardening-supply-chain` job `93122570591` — success
-- aggregate `ci/v0.5-hardening` job `93122984606` — success
+Permanent CI run `31265386800`, job `93122570470`, also succeeded. Full Runtime, Reference, Targeted, Samtools Stats, Picard, MultiQC, and the existing v0.4 release gate were green on the same source candidate.
 
-The same candidate also passed the complete existing regression surface:
+The supply-chain machine report records the PR merge execution SHA `f3c17499a7b5b05f058fa018ad15bee5737733dc`; normal pull-request Actions execute the merge ref while GitHub records the source branch head separately.
 
-- Permanent CI run `31265386800`, job `93122570470` — success
-- Full Runtime Validation run `31265386793` — success
-- Reference Validation run `31265386804` — success
-- Targeted Validation run `31265386790` — success
-- Samtools Stats Validation run `31265386801` — success
-- Picard Validation run `31265386817` — success
-- MultiQC Validation run `31265386813` — success
-- V0.4 Release Validation run `31265386822` — success
+## Exact evidence-head validation
 
-No v0.5 tag or release exists from this evidence.
+Evidence SHA:
+
+`0e14af01c2f218aaca371c414133403e8e88c96d`
+
+Every workflow triggered by that exact evidence state succeeded:
+
+- Permanent CI run `31265637151`
+- Full Runtime Validation run `31265637159`
+- Reference Validation run `31265637146`
+- Targeted Validation run `31265637160`
+- Samtools Stats Validation run `31265637185`
+- Picard Validation run `31265637142`
+- MultiQC Validation run `31265637154`
+- V0.4 Release Validation run `31265637145`
+- V0.5 Hardening Validation run `31265637214`
+
+The hardening run succeeded in all independent jobs:
+
+- preflight/fault injection `93123185940`
+- ASan/LeakSanitizer `93123185942`
+- fuzz `93123185926`
+- supply-chain/reproducibility `93123185929`
+- aggregate gate `93123601204`
+
+## Final integration-head validation
+
+Integration head:
+
+`d1e01b7d7064368179350471c050fce44cdbb377`
+
+All ten triggered workflows succeeded before this evidence wording was closed:
+
+- Permanent CI `31265902632`
+- Full Runtime Validation `31265902601`
+- Reference Validation `31265902606`
+- Targeted Validation `31265902661`
+- Samtools Stats Validation `31265902633`
+- Picard Validation `31265902605`
+- MultiQC Validation `31265902618`
+- Exact Overlap Validation `31265902598`
+- V0.4 Release Validation `31265902646`
+- V0.5 Hardening Validation `31265902628`
+
+Final-head hardening jobs were also all green: ASan `93123916083`, preflight `93123916092`, fuzz `93123916094`, supply-chain `93123916098`, aggregate `93124281845`.
 
 ## Fuzzing
 
-The committed `fuzz/` package is intentionally outside the production Cargo workspace and contains two libFuzzer targets:
+The committed `fuzz/` package is outside the production Cargo workspace and contains two libFuzzer targets:
 
-- `bed_parser`: arbitrary bytes enter `aligngauge_formats::parse_bed_bytes` against a fixed valid sequence dictionary;
-- `cigar_blocks`: arbitrary raw BAM CIGAR words plus arbitrary start/reference lengths enter `aligngauge_coverage::cigar_to_coverage_blocks`.
+- `bed_parser` feeds arbitrary bytes to `aligngauge_formats::parse_bed_bytes` against a fixed valid sequence dictionary;
+- `cigar_blocks` feeds arbitrary raw BAM CIGAR words plus arbitrary start/reference lengths to `aligngauge_coverage::cigar_to_coverage_blocks`.
 
-On the validated candidate:
+Both completed 20,000 libFuzzer runs successfully. A panic, sanitizer finding, abort, or crash is fatal. The validated implementation-candidate fuzz artifact digest was `sha256:27fac43386bf3272322f99237591662663329e4ccba95500dcc8b809b2c538a7`.
 
-- BED parser: 20,000 libFuzzer runs — success;
-- raw CIGAR coverage boundary: 20,000 libFuzzer runs — success.
+## Atomic output fault injection
 
-Expected typed parse/validation errors are allowed. A panic, sanitizer finding, abort, or crash is a campaign failure. The fuzz evidence artifact digest is `sha256:27fac43386bf3272322f99237591662663329e4ccba95500dcc8b809b2c538a7`.
-
-## Output fault injection
-
-`aligngauge-core` exposes deterministic publication checkpoints and tests every pre-rename checkpoint. The v0.5 hardening workflow reruns the complete atomic-publication test module, including:
-
-- no partial destination visible to observers;
-- fail-closed cleanup at every pre-rename checkpoint;
-- preserved failures marked `_FAILED` with no `_SUCCESS`;
-- existing destinations never overwritten;
-- reserved/path-like output names rejected.
-
-The exact preflight/fault-injection job succeeded. This reuses the production publication implementation rather than maintaining a separate fault-injection simulation.
+The hardening preflight reruns the production atomic-publication tests, including fail-closed cleanup at every pre-rename checkpoint, no observer-visible partial destination, `_FAILED` without `_SUCCESS` for preserved failures, destination non-overwrite, and reserved/path-like output-name rejection.
 
 ## ASan/LeakSanitizer finding and mitigation
 
-The first v0.5 sanitizer campaign exposed a real native-resource leak that prior correctness tests did not detect. The committed `truncated_bgzf.bam` fixture caused `rust-htslib` 1.0.1 to open an `htsFile*`, fail `sam_hdr_read()`, and return before a high-level `Reader` existed to close the raw file. LeakSanitizer reported 135,641 bytes retained in eight allocations.
+The first sanitizer campaign found a real native-resource leak on the committed `truncated_bgzf.bam` fixture. `rust-htslib` 1.0.1 opened an `htsFile*`, failed `sam_hdr_read()`, and returned before a high-level `Reader` existed to close the raw file. LeakSanitizer reported 135,641 bytes retained in eight allocations.
 
-Diagnostic isolation proved:
+Isolation proved that ordinary valid/header/coordinate/tag paths and four other corrupt/error fixtures were leak-clean; only the truncated-BGZF malformed-header path reproduced the leak. Current upstream retained the same ownership behavior.
 
-- all ordinary valid/header/coordinate/tag paths were leak-clean;
-- four other corrupt/error fixtures were leak-clean;
-- only the truncated-BGZF malformed-header path reproduced the leak.
+AlignGauge therefore added the private `aligngauge-hts-ffi` crate as the single audited unsafe ownership boundary. Normal AlignGauge crates still inherit `unsafe_code = "forbid"`. The shim owns the temporary `htsFile*` and `sam_hdr_t*` with RAII guards behind a safe `preflight_header()` API, releasing every acquired native resource on both success and error before the unsafe-free `aligngauge-hts` crate constructs its ordinary high-level reader.
 
-Current upstream `rust-htslib` retained the same constructor ownership behavior, so the mitigation does not hide the leak or silently upgrade dependencies. Instead, AlignGauge added the private `aligngauge-hts-ffi` crate as the single audited unsafe ownership boundary. Normal AlignGauge crates continue to inherit `unsafe_code = "forbid"`.
-
-The shim owns the temporary `htsFile*` and `sam_hdr_t*` with RAII guards behind a safe `preflight_header()` API. On malformed input it destroys/closes every acquired native resource before returning. On valid input it closes the temporary preflight and only then constructs the ordinary high-level reader.
-
-The external dependency package identities in `Cargo.lock` did not move; only the new local workspace package/dependency edge was added.
-
-On the validated candidate, the complete HTS test suite passed under the dedicated `x86_64-unknown-linux-gnuasan` target with LeakSanitizer still enabled. The previously leaking truncated-BGZF path is therefore a permanent sanitizer regression test rather than an ignored upstream defect.
+External dependency package identities did not move; `Cargo.lock` gained only the new local workspace package/dependency edge. The complete HTS suite is now green under the dedicated `x86_64-unknown-linux-gnuasan` target with LeakSanitizer still enabled, making the formerly leaking path a permanent regression check rather than an ignored defect.
 
 ## Dependency/security policy
 
-The repository commits `deny.toml` and pins `cargo-deny 0.20.2` in the hardening workflow. On the validated candidate:
+`deny.toml` is enforced with pinned `cargo-deny 0.20.2`. Advisories, licenses, bans, and package sources all pass under the committed policy.
 
-- advisories — pass;
-- licenses — pass;
-- bans — pass under the committed duplicate-version policy;
-- sources — pass.
+The pinned `rust-htslib` graph contains transitive `custom_derive 0.1.7`, associated with informational unmaintained advisory `RUSTSEC-2025-0058`. No advisory ID is ignored. Vulnerability/unsoundness findings remain fatal; an unmaintained direct workspace dependency is fatal; the transitive maintenance debt remains an explicit known limitation. Registry/git wildcard dependencies remain denied.
 
-The pinned `rust-htslib` graph contains transitive `custom_derive 0.1.7`, associated with informational unmaintained advisory `RUSTSEC-2025-0058`. No advisory ID is ignored. The committed policy keeps vulnerability/unsoundness findings fatal and makes unmaintained direct workspace dependencies fatal while retaining this transitive maintenance debt as an explicit known limitation.
+## SBOM, license inventory, and reproducibility
 
-Private workspace path dependencies may omit versions; registry/git wildcard dependencies remain denied.
+`tools/v0.5/generate-sbom.py` uses `cargo metadata --locked` to generate deterministic CycloneDX 1.5 JSON plus deterministic package/license/source inventory JSON. The workflow generates each twice and byte-compares them.
 
-## SBOM and license inventory
-
-`tools/v0.5/generate-sbom.py` uses `cargo metadata --locked` to generate:
-
-- deterministic CycloneDX 1.5 JSON;
-- deterministic package/license/source inventory JSON.
-
-The workflow generated both twice and byte-compared the results successfully.
-
-Exact generated identities from the validated candidate:
+Validated implementation-candidate identities:
 
 - CycloneDX SBOM SHA-256: `cf0d124384737bc2bd7a87c814dbde0db68037a24a0adebe06f0b23eff2ee1da`
 - license inventory SHA-256: `cf1d2ad8c3ca78eb8d83fcdd0435fe9afa13384e5147ea440a959cbc23fa7400`
-- supply-chain evidence artifact ZIP digest: `sha256:7cf2b827533ff8703455a69209fe08d46c21e758283d73e8bb00026e65e06fb4`
-
-## Reproducible-build assessment
-
-The initial assessment correctly failed because each release build used a different random staging-derived Cargo/native build directory. Although repository source paths were remapped, the native dependency build path could still affect the resulting binary/archive.
-
-The release packager now:
-
-1. uses one fixed deterministic absolute build root, `target/v0.5-release-build`;
-2. removes that build root before each sequential clean build;
-3. fixes `SOURCE_DATE_EPOCH` to the exact commit timestamp;
-4. remaps repository paths for Rust and C/C++ compilation;
-5. normalizes packaged mtimes, ownership, order, tar format, and gzip metadata;
-6. emits binary/content/archive checksums.
-
-With that correction, the two independent clean release builds were byte-identical and the reproducibility assessment passed.
-
-Exact candidate artifact identities:
-
 - Linux `aligngauge` binary SHA-256: `5d95f1a857dcdc1972bb839bae0fab297c9740aaa2533376f7cdcf326c7cd609`
 - `aligngauge-v0.5.0-linux-x86_64.tar.gz` SHA-256: `67f255611947463a0b6d5b5b8a7688c23b00499ed122579a2c0013e0117c0218`
+- supply-chain evidence artifact ZIP digest: `sha256:7cf2b827533ff8703455a69209fe08d46c21e758283d73e8bb00026e65e06fb4`
 
-This is a reproducibility claim for the named Linux/pinned-toolchain build environment only. It is not a claim that arbitrary platforms or compilers produce identical binaries.
+The first two-build assessment correctly failed because separate random staging-derived Cargo/native build roots made the native release binary/archive nondeterministic. The packager now uses a fixed `target/v0.5-release-build` root, cleans it before each sequential build, fixes `SOURCE_DATE_EPOCH`, remaps Rust and C/C++ source paths, and normalizes packaged timestamps, ownership, ordering, tar format, and gzip metadata. Two clean builds are now byte-identical.
+
+This reproducibility claim is limited to the named Linux/pinned-toolchain build environment.
 
 ## Schema compatibility
 
-`docs/SCHEMA_COMPATIBILITY.md` records the current canonical schema versions and migration policy. v0.5 qualification evidence remains outside canonical `summary.json`/`provenance.json` unless a separately reviewed schema change is made.
-
-The validated candidate did not change the canonical schema versions:
+`docs/SCHEMA_COMPATIBILITY.md` records the compatibility and migration policy. v0.5 hardening did not change canonical schema versions:
 
 - summary schema `1.1.0`;
 - provenance schema `1.0.0`.
 
 ## Signed release material
 
-Permanent hardening CI can generate reproducible artifacts and checksums but cannot truthfully pre-sign or attest a release artifact before the exact release commit/tag boundary exists. v0.5 publication must therefore add cryptographic provenance/signature/attestation over the exact release artifact/checksum set, verify it, and record its identity before the signed-artifact checklist item and v0.5 release gate can close.
+The hardening workflow generates reproducible artifacts and checksums but does not pretend that a pre-release CI artifact is a signed release artifact. The eventual exact release candidate must create cryptographic provenance/signature/attestation over the exact release artifact/checksum set, verify it, and record its identity before the signed-artifact checklist item can close.
 
-This item is still **pending by design**. It is not waived by the green hardening workflow.
+This item remains **pending by design**.
 
 ## Remaining v0.5 blockers
 
-The hardening implementation is green, but v0.5 is not releasable yet:
+M15 hardening implementation has no remaining fuzz/security/reproducibility blocker, but `v0.5.0` is not releasable yet:
 
-1. Milestone 14 full ~30× whole-genome HG002 qualification has not been executed and `V0_5_FULL_HG002_REPORT.md` remains `BLOCKED`;
-2. signed/attested release checksums/artifacts must be produced and verified on the eventual exact release candidate;
-3. the exact evidence/merge/master release-candidate SHA must repeat all required permanent gates before a tag can exist.
+1. Milestone 14 full ~30× whole-genome HG002 qualification has not been executed; `V0_5_FULL_HG002_REPORT.md` remains `BLOCKED`;
+2. signed/attested release checksums/artifacts remain an exact-release-candidate/publication item;
+3. after M14 closes, the eventual exact release candidate must repeat all required permanent gates before any tag exists.
 
-No pending item may be interpreted as passed.
+No v0.5 tag or GitHub release has been created, and no pending item may be interpreted as passed.
