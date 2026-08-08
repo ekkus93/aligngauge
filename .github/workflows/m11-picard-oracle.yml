@@ -1,5 +1,5 @@
 name: M11 Picard Oracle
-# rerun after supplementary-exclusion semantic correction
+# rerun after exact Java-float MINIMUM_PCT correction
 
 on:
   push:
