@@ -13,6 +13,7 @@ on:
       - "fuzz/**"
       - "schemas/**"
       - "testdata/hg002/full-wgs-v0.5.env"
+      - "testdata/hg002/provision-full-wgs-source.sh"
       - "testdata/hg002/prepare-full-wgs.sh"
       - "tools/v0.5/**"
       - "docs/SCHEMA_COMPATIBILITY.md"
@@ -30,6 +31,7 @@ on:
       - "fuzz/**"
       - "schemas/**"
       - "testdata/hg002/full-wgs-v0.5.env"
+      - "testdata/hg002/provision-full-wgs-source.sh"
       - "testdata/hg002/prepare-full-wgs.sh"
       - "tools/v0.5/**"
       - "docs/SCHEMA_COMPATIBILITY.md"
@@ -72,7 +74,9 @@ jobs:
           grep -F 'summary.json` schema version: `1.1.0`' docs/SCHEMA_COMPATIBILITY.md >/dev/null
           grep -F 'provenance.json` schema version: `1.0.0`' docs/SCHEMA_COMPATIBILITY.md >/dev/null
           if grep -R -n -E '\|\|[[:space:]]+(true|:)|continue-on-error' \
-            testdata/hg002/prepare-full-wgs.sh tools/v0.5 fuzz; then
+            testdata/hg002/provision-full-wgs-source.sh \
+            testdata/hg002/prepare-full-wgs.sh \
+            tools/v0.5 fuzz; then
             echo 'v0.5 production hardening path contains a warning-only/fallback pattern' >&2
             exit 1
           fi
@@ -82,6 +86,7 @@ jobs:
         run: |
           set -euo pipefail
           bash -n \
+            testdata/hg002/provision-full-wgs-source.sh \
             testdata/hg002/prepare-full-wgs.sh \
             tools/v0.5/build-release-artifacts.sh \
             tools/v0.5/run-full-hg002-qualification.sh
@@ -94,6 +99,28 @@ jobs:
           ]:
               ast.parse(path.read_text(encoding='utf-8'), filename=str(path))
           PY
+
+      - name: Verify source provisioner is explicit and fail closed without network
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          bash testdata/hg002/provision-full-wgs-source.sh \
+            > target/v0.5-provision-usage.stdout \
+            2> target/v0.5-provision-usage.stderr
+          status=$?
+          set -e
+          [[ "$status" -eq 64 ]]
+          test ! -s target/v0.5-provision-usage.stdout
+          grep -F 'usage:' target/v0.5-provision-usage.stderr >/dev/null
+          grep -F 'Ordinary tests and AlignGauge runtime' \
+            testdata/hg002/provision-full-wgs-source.sh >/dev/null
+          grep -F 'HG002_SOURCE_URL' testdata/hg002/provision-full-wgs-source.sh >/dev/null
+          grep -F 'HG002_SOURCE_BAM_MD5' testdata/hg002/provision-full-wgs-source.sh >/dev/null
+          grep -F 'md5sum --check' testdata/hg002/provision-full-wgs-source.sh >/dev/null
+          grep -F -- '--continue-at -' testdata/hg002/provision-full-wgs-source.sh >/dev/null
+          grep -F 'source.manifest' testdata/hg002/provision-full-wgs-source.sh >/dev/null
+          grep -F '_SUCCESS' testdata/hg002/provision-full-wgs-source.sh >/dev/null
 
       - name: Run atomic output fault injection
         run: cargo test -p aligngauge-core atomic::tests --locked
