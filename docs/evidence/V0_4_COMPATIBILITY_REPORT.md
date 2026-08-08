@@ -131,7 +131,32 @@ Evidence SHA `5b7f6d15970918862d1006ea4c6add6937479ea6` also passed every path-t
 - Reference Validation run `31246937557`, job `93076990412` — success
 - Samtools Stats Validation run `31246937566`, job `93076990392` — success
 
-That separates implementation proof from evidence-commit proof. The remaining repository-closure step is to mark the TODO, validate that closure commit, merge PR #6, and validate the merged `master` SHA. None of those steps changes the selected WGS/Hs compatibility semantics.
+## TODO-closure validation
+
+TODO-closure SHA `0e81a63d06a524f58667e10d0bc3fa8c44999197` passed the full seven-gate pull-request suite before merge:
+
+- Permanent CI run `31247315556` — success
+- Full Runtime Validation run `31247315557` — success
+- Reference Validation run `31247315555` — success
+- Targeted Validation run `31247315569` — success
+- Samtools Stats Validation run `31247315554` — success
+- Picard Validation run `31247315551` — success
+- MultiQC Validation run `31247315558` — success
+
+## Merged master validation
+
+PR #6 merged to `master` as `733e052534ec9fc2fe6a4dd2b6d7f790f8e2a5c7`. Every push workflow triggered by that exact merge SHA completed successfully:
+
+- Permanent CI run `31247419963`, job `93078191151` — success
+- Full Runtime Validation run `31247419962`, job `93078191154` — success
+- Reference Validation run `31247419964`, job `93078191185` — success
+- Targeted Validation run `31247419951`, job `93078191067` — success
+- Samtools Stats Validation run `31247419984`, job `93078191149` — success
+- Picard Validation run `31247419972`, job `93078191098` — success
+- MultiQC Validation run `31247419965`, job `93078191083` — success
+- M2 HG002 Preparation Validation run `31247419954`, job `93078190984` — success
+
+Milestone 12 is therefore closed on `master`. The WGS/Hs surfaces remain selected-but-not-emitted by design; merged validation does not alter the Milestone 13 exact-overlap prerequisite.
 
 ## Remaining v0.4 work
 
