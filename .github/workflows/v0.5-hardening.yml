@@ -1,0 +1,284 @@
+name: V0.5 Hardening Validation
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - ".github/workflows/v0.5-hardening.yml"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "deny.toml"
+      - "rust-toolchain.toml"
+      - "crates/**"
+      - "fuzz/**"
+      - "schemas/**"
+      - "testdata/hg002/full-wgs-v0.5.env"
+      - "testdata/hg002/prepare-full-wgs.sh"
+      - "tools/v0.5/**"
+      - "docs/SCHEMA_COMPATIBILITY.md"
+      - "docs/adr/ADR-0012-V0_5_PRODUCTION_BETA_QUALIFICATION.md"
+      - "docs/evidence/V0_5_HARDENING.md"
+      - "docs/evidence/V0_5_FULL_HG002_REPORT.md"
+  pull_request:
+    paths:
+      - ".github/workflows/v0.5-hardening.yml"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "deny.toml"
+      - "rust-toolchain.toml"
+      - "crates/**"
+      - "fuzz/**"
+      - "schemas/**"
+      - "testdata/hg002/full-wgs-v0.5.env"
+      - "testdata/hg002/prepare-full-wgs.sh"
+      - "tools/v0.5/**"
+      - "docs/SCHEMA_COMPATIBILITY.md"
+      - "docs/adr/ADR-0012-V0_5_PRODUCTION_BETA_QUALIFICATION.md"
+      - "docs/evidence/V0_5_HARDENING.md"
+      - "docs/evidence/V0_5_FULL_HG002_REPORT.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v0-5-hardening-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  hardening:
+    name: ci/v0.5-hardening
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Verify v0.5 hardening contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -F 'whole alignment; no interval restriction is permitted' \
+            docs/adr/ADR-0012-V0_5_PRODUCTION_BETA_QUALIFICATION.md >/dev/null
+          grep -F '**State:** BLOCKED' docs/evidence/V0_5_FULL_HG002_REPORT.md >/dev/null
+          grep -F 'No pending item may be interpreted as passed.' \
+            docs/evidence/V0_5_HARDENING.md >/dev/null
+          grep -F 'SUMMARY_SCHEMA_VERSION: &str = "1.1.0"' \
+            crates/aligngauge-core/src/model.rs >/dev/null
+          grep -F 'PROVENANCE_SCHEMA_VERSION: &str = "1.0.0"' \
+            crates/aligngauge-core/src/model.rs >/dev/null
+          grep -F 'summary.json` schema version: `1.1.0`' docs/SCHEMA_COMPATIBILITY.md >/dev/null
+          grep -F 'provenance.json` schema version: `1.0.0`' docs/SCHEMA_COMPATIBILITY.md >/dev/null
+          if grep -R -n -E '\|\|[[:space:]]+(true|:)|continue-on-error' \
+            testdata/hg002/prepare-full-wgs.sh tools/v0.5 fuzz; then
+            echo 'v0.5 production hardening path contains a warning-only/fallback pattern' >&2
+            exit 1
+          fi
+
+      - name: Validate v0.5 script syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n \
+            testdata/hg002/prepare-full-wgs.sh \
+            tools/v0.5/build-release-artifacts.sh \
+            tools/v0.5/run-full-hg002-qualification.sh
+          python3 - <<'PY'
+          import ast
+          from pathlib import Path
+          for path in [
+              Path('tools/v0.5/generate-sbom.py'),
+              Path('tools/v0.5/measure-command.py'),
+          ]:
+              ast.parse(path.read_text(encoding='utf-8'), filename=str(path))
+          PY
+
+      - name: Run atomic output fault injection
+        run: cargo test -p aligngauge-core atomic::tests --locked
+
+      - name: Install AddressSanitizer target
+        run: rustup target add x86_64-unknown-linux-gnuasan
+
+      - name: Run HTS boundary under AddressSanitizer
+        env:
+          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNUASAN_LINKER: cc
+          CC_x86_64_unknown_linux_gnuasan: cc
+          CXX_x86_64_unknown_linux_gnuasan: c++
+          CFLAGS_x86_64_unknown_linux_gnuasan: -fsanitize=address -fno-omit-frame-pointer
+          CXXFLAGS_x86_64_unknown_linux_gnuasan: -fsanitize=address -fno-omit-frame-pointer
+          CARGO_TARGET_DIR: target/v0.5-asan
+        run: cargo test -p aligngauge-hts --target x86_64-unknown-linux-gnuasan --locked
+
+      - name: Install pinned cargo-fuzz
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install nightly-2026-08-07 --profile minimal
+          cargo +nightly-2026-08-07 install --locked cargo-fuzz --version 0.13.2
+          cargo fuzz --version | tee target/v0.5-cargo-fuzz-version.txt
+
+      - name: Fuzz BED parser
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p target/v0.5-hardening
+          (
+            cd fuzz
+            cargo +nightly-2026-08-07 fuzz run bed_parser -- \
+              -runs=20000 -max_len=4096 -rss_limit_mb=2048
+          ) 2>&1 | tee target/v0.5-hardening/bed-parser-fuzz.log
+
+      - name: Fuzz raw CIGAR coverage boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          (
+            cd fuzz
+            cargo +nightly-2026-08-07 fuzz run cigar_blocks -- \
+              -runs=20000 -max_len=4096 -rss_limit_mb=2048
+          ) 2>&1 | tee target/v0.5-hardening/cigar-blocks-fuzz.log
+
+      - name: Install pinned cargo-deny
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo install --locked cargo-deny --version 0.20.2
+          cargo deny --version | tee target/v0.5-hardening/cargo-deny-version.txt
+
+      - name: Audit advisories licenses bans and sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo deny check advisories licenses bans sources \
+            2>&1 | tee target/v0.5-hardening/cargo-deny.txt
+
+      - name: Generate deterministic SBOM and license inventory twice
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p target/v0.5-hardening/supply-chain/a target/v0.5-hardening/supply-chain/b
+          python3 tools/v0.5/generate-sbom.py \
+            --sbom target/v0.5-hardening/supply-chain/a/sbom.cdx.json \
+            --licenses target/v0.5-hardening/supply-chain/a/licenses.json
+          python3 tools/v0.5/generate-sbom.py \
+            --sbom target/v0.5-hardening/supply-chain/b/sbom.cdx.json \
+            --licenses target/v0.5-hardening/supply-chain/b/licenses.json
+          cmp \
+            target/v0.5-hardening/supply-chain/a/sbom.cdx.json \
+            target/v0.5-hardening/supply-chain/b/sbom.cdx.json
+          cmp \
+            target/v0.5-hardening/supply-chain/a/licenses.json \
+            target/v0.5-hardening/supply-chain/b/licenses.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          sbom = json.loads(Path('target/v0.5-hardening/supply-chain/a/sbom.cdx.json').read_text())
+          licenses = json.loads(Path('target/v0.5-hardening/supply-chain/a/licenses.json').read_text())
+          assert sbom['bomFormat'] == 'CycloneDX'
+          assert sbom['specVersion'] == '1.5'
+          assert sbom['components']
+          assert licenses['schema'] == 'aligngauge-license-inventory-v1'
+          assert licenses['packages']
+          PY
+          sha256sum \
+            target/v0.5-hardening/supply-chain/a/sbom.cdx.json \
+            target/v0.5-hardening/supply-chain/a/licenses.json \
+            > target/v0.5-hardening/supply-chain/SHA256SUMS
+
+      - name: Assess deterministic release artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          tools/v0.5/build-release-artifacts.sh target/v0.5-hardening/repro-a
+          tools/v0.5/build-release-artifacts.sh target/v0.5-hardening/repro-b
+          for file in \
+            aligngauge-v0.5.0-linux-x86_64.tar.gz \
+            SHA256SUMS \
+            CONTENTS.SHA256 \
+            sbom.cdx.json \
+            licenses.json \
+            RELEASE_COMMIT; do
+            cmp \
+              "target/v0.5-hardening/repro-a/$file" \
+              "target/v0.5-hardening/repro-b/$file"
+          done
+          tar -tzf target/v0.5-hardening/repro-a/aligngauge-v0.5.0-linux-x86_64.tar.gz \
+            > target/v0.5-hardening/release-archive-contents.txt
+          grep -F 'aligngauge-v0.5.0-linux-x86_64/aligngauge' \
+            target/v0.5-hardening/release-archive-contents.txt >/dev/null
+
+      - name: Write hardening machine report
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import subprocess
+          from pathlib import Path
+
+          root = Path('target/v0.5-hardening')
+          def digest(path: Path) -> str:
+              return hashlib.sha256(path.read_bytes()).hexdigest()
+
+          report = {
+              'schema': 'aligngauge-v0.5-hardening-v1',
+              'status': 'pass',
+              'git_commit': subprocess.check_output(
+                  ['git', 'rev-parse', 'HEAD'], text=True
+              ).strip(),
+              'atomic_output_fault_injection': 'pass',
+              'asan_hts_boundary': 'pass',
+              'bed_parser_fuzz_runs': 20000,
+              'cigar_boundary_fuzz_runs': 20000,
+              'cargo_fuzz_version': Path('target/v0.5-cargo-fuzz-version.txt').read_text().strip(),
+              'cargo_deny': 'pass',
+              'sbom_sha256': digest(root / 'supply-chain/a/sbom.cdx.json'),
+              'license_inventory_sha256': digest(root / 'supply-chain/a/licenses.json'),
+              'reproducible_release_artifact': 'byte-identical-two-build-assessment',
+              'release_archive_sha256': digest(
+                  root / 'repro-a/aligngauge-v0.5.0-linux-x86_64.tar.gz'
+              ),
+              'schema_migration_documented': True,
+              'signed_release_artifacts': False,
+              'signed_release_artifacts_disposition': 'required on exact release candidate before publication',
+          }
+          (root / 'hardening.json').write_text(
+              json.dumps(report, indent=2, sort_keys=True) + '\n',
+              encoding='utf-8',
+          )
+          PY
+
+      - name: Upload v0.5 hardening evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: v0.5-hardening-${{ github.sha }}
+          path: |
+            target/v0.5-hardening/hardening.json
+            target/v0.5-hardening/bed-parser-fuzz.log
+            target/v0.5-hardening/cigar-blocks-fuzz.log
+            target/v0.5-hardening/cargo-deny.txt
+            target/v0.5-hardening/cargo-deny-version.txt
+            target/v0.5-hardening/supply-chain/a/sbom.cdx.json
+            target/v0.5-hardening/supply-chain/a/licenses.json
+            target/v0.5-hardening/supply-chain/SHA256SUMS
+            target/v0.5-hardening/repro-a/aligngauge-v0.5.0-linux-x86_64.tar.gz
+            target/v0.5-hardening/repro-a/SHA256SUMS
+            target/v0.5-hardening/repro-a/CONTENTS.SHA256
+            target/v0.5-hardening/release-archive-contents.txt
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Verify repository remains clean
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "$(git status --porcelain --untracked-files=all)" ]]; then
+            git status --short
+            git diff --check
+            exit 1
+          fi
+          git diff --check
