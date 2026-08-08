@@ -68,8 +68,33 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          grep -F $'picard_alignment_edge\tvalid\t398\t6bb7bc2f0516c0c94bd460d3f9ca501ba4c2c622740981976c5fc7b9839ace8b\t104\tde8af8d39d94c9314030eca8a611f9b219877188227e6e70a1eff133c50b82da' testdata/manifest.v1.tsv
-          grep -F $'picard_insert_edge\tvalid\t526\tb8d61a55b4dd391163332b8195984821d7f303509b8d16996c73ab94a91d0f47\t104\t02bc65429d491c3b8e45f84f6b170578449aec24aad50651df905382204becff' testdata/manifest.v1.tsv
+          python3 - <<'PY'
+          import csv
+          from pathlib import Path
+
+          expected = {
+              "picard_alignment_edge": (
+                  "9956c88b79f048cf791fda3f239e611b48493eac7d56e10dde9b55316f029223",
+                  "05b99f5553264f49624ba4778a7b90d0ff54869a686980da08409de204dcfcf8",
+              ),
+              "picard_insert_edge": (
+                  "568e5d4fab910a7a958c6ee95622cb949c247bc0768657792130fd4d6aa8105c",
+                  "b4d73ff0e3d1503a6b548d272ef3594d9abf6e80e0873081f19a71573b56074a",
+              ),
+          }
+          with Path("testdata/manifest.v1.tsv").open(encoding="utf-8", newline="") as handle:
+              rows = {row["id"]: row for row in csv.DictReader(handle, delimiter="\t")}
+          for fixture_id, (bam_sha, bai_sha) in expected.items():
+              row = rows.get(fixture_id)
+              assert row is not None, fixture_id
+              assert row["schema"] == "aligngauge-testdata-v1", fixture_id
+              assert row["kind"] == "committed", fixture_id
+              assert row["expected_validity"] == "valid", fixture_id
+              assert row["path"] == f"testdata/fixtures/{fixture_id}.bam", fixture_id
+              assert row["index_path"] == f"testdata/fixtures/{fixture_id}.bam.bai", fixture_id
+              assert row["sha256"] == bam_sha, fixture_id
+              assert row["index_sha256"] == bai_sha, fixture_id
+          PY
 
       - name: Build AlignGauge Picard compatibility probes
         run: cargo build --release -p aligngauge-cli --locked
