@@ -26,7 +26,7 @@ const FLAG_SUPPLEMENTARY: u16 = 0x800;
 
 const ADAPTER_MATCH_LENGTH: usize = 16;
 const MAX_ADAPTER_ERRORS: usize = 1;
-const MINIMUM_ORIENTATION_PCT: f64 = 0.05;
+const MINIMUM_ORIENTATION_PCT: f32 = 0.05;
 const INSERT_DEVIATIONS: f64 = 10.0;
 
 const DEFAULT_ADAPTERS: [&str; 6] = [
@@ -606,7 +606,7 @@ impl PicardInsertSizeCollector {
         for orientation in PicardPairOrientation::ALL {
             let histogram = self.histograms.get(&orientation);
             let count = histogram.map_or(0, |value| value.count);
-            if u64_to_f64(count) < u64_to_f64(total_inserts) * MINIMUM_ORIENTATION_PCT {
+            if u64_to_f64(count) < u64_to_f64(total_inserts) * f64::from(MINIMUM_ORIENTATION_PCT) {
                 continue;
             }
             let histogram = histogram.ok_or_else(|| {

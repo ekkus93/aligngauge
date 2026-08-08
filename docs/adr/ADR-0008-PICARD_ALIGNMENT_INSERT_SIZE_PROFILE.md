@@ -61,7 +61,7 @@ Defaults frozen by this ADR:
 - `DEVIATIONS = 10.0`;
 - `HISTOGRAM_WIDTH = null`;
 - `MIN_HISTOGRAM_WIDTH = null`;
-- `MINIMUM_PCT = 0.05`;
+- `MINIMUM_PCT = 0.05f` as a Java `float`, promoted to `double` by the collector;
 - `INCLUDE_DUPLICATES = false`;
 - accumulation level `ALL_READS` only.
 
@@ -77,7 +77,7 @@ Record eligibility follows the pinned collector:
 - insert size is `abs(TLEN)` using checked arithmetic;
 - orientation is Picard/HTSJDK FR, RF, or TANDEM semantics.
 
-Each orientation has an independent histogram. An orientation category is emitted only when its count is at least `total_inserts * 0.05`, matching Picard's comparison rule.
+Each orientation has an independent histogram. Picard declares `MINIMUM_PCT` as Java `float` `0.05f`, passes that value to a `double` collector field, and then retains a category when `count >= total_inserts * promoted_minimum_pct`. The promoted binary32 value is slightly greater than mathematical `0.05`, so a category at mathematically exact 5% (for example 2 of 40 observations) is suppressed by Picard 3.4.0. AlignGauge reproduces that binary32-to-binary64 boundary exactly.
 
 For each emitted orientation, Milestone 11 reproduces:
 

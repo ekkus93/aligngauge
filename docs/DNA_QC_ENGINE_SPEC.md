@@ -816,7 +816,9 @@ counts nor `BAD_CYCLES`.
 
 The insert-size profile matches Picard 3.4.0 CollectInsertSizeMetrics defaults at
 ALL_READS: DEVIATIONS=10.0, HISTOGRAM_WIDTH unset, MIN_HISTOGRAM_WIDTH unset,
-MINIMUM_PCT=0.05, INCLUDE_DUPLICATES=false. It accepts only mapped paired records
+MINIMUM_PCT=Java float 0.05f promoted to the collector's double, INCLUDE_DUPLICATES=false.
+The orientation inclusion comparison must reproduce that promoted binary32 value exactly,
+including suppression of a mathematically exact 5% category. It accepts only mapped paired records
 with mapped mates, excludes first-of-pair records, secondary/supplementary records,
 duplicates, and zero TLEN, and classifies the remaining abs(TLEN) observations into
 Picard/HTSJDK FR, RF, and TANDEM orientations.
