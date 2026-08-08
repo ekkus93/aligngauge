@@ -1,4 +1,4 @@
-//! Exact overlap-correction primitives for the pinned Picard 3.4.0 profiles.
+//! Exact overlap-correction primitives for pinned Picard 3.4.0 profiles.
 //!
 //! Picard WGS and hybrid-selection metrics use different overlap algorithms. Keeping them as
 //! separate named policies prevents a generic "clip overlaps" switch from acquiring false
@@ -10,7 +10,7 @@ use aligngauge_core::{AlignGaugeError, ErrorCategory};
 
 /// Pinned default Picard WGS overlap policy.
 pub const PICARD_WGS_OVERLAP_PROFILE: &str = "picard-wgs-3.4.0-default-overlap-v1";
-/// Pinned default Picard HsMetrics overlap policy.
+/// Pinned default Picard `HsMetrics` overlap policy.
 pub const PICARD_HS_OVERLAP_PROFILE: &str = "picard-hs-3.4.0-default-overlap-v1";
 /// Authoritative Milestone 13 execution mode for exact overlap correction.
 pub const EXACT_OVERLAP_EXECUTION_MODE: &str = "streaming-coordinate-order-v1";
@@ -27,12 +27,11 @@ const FLAG_MATE_UNMAPPED: u16 = 0x8;
 const FLAG_READ1: u16 = 0x40;
 const FLAG_SECONDARY: u16 = 0x100;
 
-// Conservative deterministic planning charges. They are not allocator-size claims.
 const NAME_OVERHEAD_BYTES: u64 = 128;
 const POSITION_BYTES: u64 = 32;
 const LOCUS_BYTES: u64 = 48;
 
-/// One record presented to the exact WGS overlap stage after Picard record-level filtering.
+/// One record presented after Picard WGS record-level filtering.
 #[derive(Debug, Clone, Copy)]
 pub struct PicardWgsOverlapRecord<'a> {
     /// Zero-based reference index.
@@ -58,7 +57,7 @@ pub struct PicardWgsOverlapSummary {
     pub retained_bases: u64,
     /// Observations rejected by Picard's minimum-base-quality/no-call check.
     pub baseq_excluded_bases: u64,
-    /// High-quality observations rejected because the same query name already contributed.
+    /// High-quality observations rejected because the query name already contributed.
     pub overlap_excluded_bases: u64,
 }
 
@@ -69,11 +68,11 @@ struct ActiveNameState {
     charged_bytes: u64,
 }
 
-/// Bounded coordinate-streaming implementation of Picard WGS overlap semantics.
+/// Bounded streaming implementation of Picard WGS overlap semantics.
 ///
-/// Raw query-name state exists only while an earlier eligible observation can overlap a later
-/// coordinate-sorted record. Exceeding the caller-reserved state budget or Picard's pinned locus
-/// accumulation cap is fatal. There is no truncation, approximate identity, or warning-only path.
+/// Raw query-name state is retained only while an earlier eligible observation can overlap a later
+/// coordinate-sorted record. Exceeding the explicit state budget or Picard's pinned locus cap is
+/// fatal; state is never truncated or converted to an approximate representation.
 #[derive(Debug)]
 pub struct PicardWgsOverlapCorrector {
     state_budget_bytes: u64,
@@ -107,23 +106,22 @@ impl PicardWgsOverlapCorrector {
         })
     }
 
-    /// Current deterministic planning charge for active exact-overlap state.
+    /// Current deterministic planning charge for active state.
     #[must_use]
     pub const fn state_bytes(&self) -> u64 {
         self.state_bytes
     }
 
-    /// Hard caller-reserved planning budget for exact-overlap state.
+    /// Hard caller-reserved planning budget.
     #[must_use]
     pub const fn state_budget_bytes(&self) -> u64 {
         self.state_budget_bytes
     }
 
-    /// Observe one record and report every retained reference position.
+    /// Observe one record and report each retained reference position.
     ///
-    /// The caller is responsible for applying Picard's record-level WGS filters before this stage.
-    /// This method applies the pinned base-quality/no-call gate and then the per-locus raw-query-name
-    /// overlap identity in that order.
+    /// Record-level Picard filters are the caller's responsibility. This stage applies the pinned
+    /// base-quality/no-call gate before raw-query-name overlap identity, matching Picard ordering.
     ///
     /// # Errors
     /// Returns a typed fatal error for malformed CIGAR/query layout, coordinate regression,
@@ -135,7 +133,6 @@ impl PicardWgsOverlapCorrector {
     ) -> Result<PicardWgsOverlapSummary, AlignGaugeError> {
         validate_record(record)?;
         self.prepare_record(record.reference_id, record.start)?;
-
         let mut summary = PicardWgsOverlapSummary::default();
         let mut reference_cursor = record.start;
         let mut query_cursor = 0_usize;
@@ -152,27 +149,24 @@ impl PicardWgsOverlapCorrector {
                 input_error("Picard WGS overlap CIGAR length does not fit usize")
                     .with_source(source)
             })?;
-            let reference_length = u64::from(length_u32);
-
             match operation {
                 0 | 7 | 8 => {
                     let query_end = checked_query_end(query_cursor, length, record.sequence.len())?;
                     let reference_end = checked_reference_end(
                         reference_cursor,
-                        reference_length,
+                        u64::from(length_u32),
                         record.reference_length,
                     )?;
                     for offset in 0..length {
-                        let offset_u64 = u64::try_from(offset).map_err(|source| {
-                            input_error("Picard WGS overlap base offset does not fit u64")
-                                .with_source(source)
-                        })?;
-                        let position =
-                            reference_cursor.checked_add(offset_u64).ok_or_else(|| {
+                        let position = reference_cursor
+                            .checked_add(u64::try_from(offset).map_err(|source| {
+                                input_error("Picard WGS overlap base offset does not fit u64")
+                                    .with_source(source)
+                            })?)
+                            .ok_or_else(|| {
                                 input_error("Picard WGS overlap base coordinate overflowed")
                             })?;
                         self.observe_locus_candidate(position)?;
-
                         let query_index = query_cursor.checked_add(offset).ok_or_else(|| {
                             input_error("Picard WGS overlap query index overflowed")
                         })?;
@@ -184,18 +178,18 @@ impl PicardWgsOverlapCorrector {
                                 summary.baseq_excluded_bases,
                                 "Picard WGS base-quality exclusions",
                             )?;
-                            continue;
-                        }
-                        if self.position_was_seen(record.query_name, position)? {
+                        } else if self.position_was_seen(record.query_name, position)? {
                             summary.overlap_excluded_bases = checked_increment(
                                 summary.overlap_excluded_bases,
                                 "Picard WGS overlap exclusions",
                             )?;
-                            continue;
+                        } else {
+                            retain_position(position)?;
+                            summary.retained_bases = checked_increment(
+                                summary.retained_bases,
+                                "Picard WGS retained bases",
+                            )?;
                         }
-                        retain_position(position)?;
-                        summary.retained_bases =
-                            checked_increment(summary.retained_bases, "Picard WGS retained bases")?;
                     }
                     query_cursor = query_end;
                     reference_cursor = reference_end;
@@ -206,7 +200,7 @@ impl PicardWgsOverlapCorrector {
                 2 | 3 => {
                     reference_cursor = checked_reference_end(
                         reference_cursor,
-                        reference_length,
+                        u64::from(length_u32),
                         record.reference_length,
                     )?;
                 }
@@ -219,7 +213,6 @@ impl PicardWgsOverlapCorrector {
                 }
             }
         }
-
         if query_cursor != record.sequence.len() {
             return Err(input_error(
                 "Picard WGS overlap CIGAR query span does not match the sequence length",
@@ -230,9 +223,7 @@ impl PicardWgsOverlapCorrector {
 
     fn prepare_record(&mut self, reference_id: i32, start: u64) -> Result<(), AlignGaugeError> {
         match self.current_reference_id {
-            None => {
-                self.current_reference_id = Some(reference_id);
-            }
+            None => self.current_reference_id = Some(reference_id),
             Some(current) if reference_id < current => {
                 return Err(AlignGaugeError::new(
                     ErrorCategory::InputUnsorted,
@@ -275,16 +266,13 @@ impl PicardWgsOverlapCorrector {
                 })
             })?;
         self.active_names.retain(|_, state| state.last_end > start);
-
-        let expired_loci = self.active_loci.range(..start).count();
-        let expired_loci = u64::try_from(expired_loci).map_err(|source| {
+        let expired_loci = u64::try_from(self.active_loci.range(..start).count()).map_err(|source| {
             invariant_error("Picard WGS expired-locus count does not fit u64").with_source(source)
         })?;
         let released_loci = expired_loci
             .checked_mul(LOCUS_BYTES)
             .ok_or_else(|| invariant_error("Picard WGS released-locus accounting overflowed"))?;
         self.active_loci = self.active_loci.split_off(&start);
-
         let released = released_names
             .checked_add(released_loci)
             .ok_or_else(|| invariant_error("Picard WGS released-state accounting overflowed"))?;
@@ -312,7 +300,6 @@ impl PicardWgsOverlapCorrector {
                 .ok_or_else(|| invariant_error("Picard WGS locus observation count overflowed"))?;
             return Ok(());
         }
-
         self.reserve(LOCUS_BYTES)?;
         self.active_loci.insert(position, 1);
         Ok(())
@@ -323,15 +310,10 @@ impl PicardWgsOverlapCorrector {
         query_name: &[u8],
         position: u64,
     ) -> Result<bool, AlignGaugeError> {
-        if self
-            .active_names
-            .get(query_name)
-            .is_some_and(|state| state.positions.contains(&position))
-        {
-            return Ok(true);
-        }
-
-        if self.active_names.contains_key(query_name) {
+        if let Some(state) = self.active_names.get(query_name) {
+            if state.positions.contains(&position) {
+                return Ok(true);
+            }
             self.reserve(POSITION_BYTES)?;
             let state = self.active_names.get_mut(query_name).ok_or_else(|| {
                 invariant_error("Picard WGS overlap query-name state disappeared")
@@ -344,7 +326,6 @@ impl PicardWgsOverlapCorrector {
                 .ok_or_else(|| invariant_error("Picard WGS name-state charge overflowed"))?;
             return Ok(false);
         }
-
         let name_bytes = u64::try_from(query_name.len()).map_err(|source| {
             resource_error("Picard WGS query-name length does not fit u64").with_source(source)
         })?;
@@ -404,7 +385,6 @@ pub fn picard_hs_trailing_read_bases_to_clip(
     if mate_start < alignment_start || (mate_start == alignment_start && flags & FLAG_READ1 != 0) {
         return Ok(0);
     }
-
     let mut clipped = 0_u64;
     let mut reference_cursor = alignment_start;
     for encoded in raw_cigar {
@@ -421,7 +401,6 @@ pub fn picard_hs_trailing_read_bases_to_clip(
                     .with_detail("cigar_operation_code", u64::from(operation)),
             );
         }
-
         let consumes_reference = matches!(operation, 0 | 2 | 3 | 7 | 8);
         let consumes_query = matches!(operation, 0 | 1 | 4 | 7 | 8);
         let reference_span = if consumes_reference { length } else { 0 };
@@ -437,7 +416,6 @@ pub fn picard_hs_trailing_read_bases_to_clip(
                     })?,
             )
         };
-
         if final_reference_position.is_some_and(|end| mate_start <= end) {
             match operation {
                 0 => {
@@ -455,7 +433,7 @@ pub fn picard_hs_trailing_read_bases_to_clip(
                         input_error("Picard Hs overlap clipped-base count overflowed")
                     })?;
                 }
-                3 | 4 | 5 | 6 => {}
+                3..=6 => {}
                 _ if consumes_query => {
                     clipped = clipped.checked_add(length).ok_or_else(|| {
                         input_error("Picard Hs overlap clipped-base count overflowed")
@@ -616,7 +594,6 @@ mod tests {
                 Ok(())
             })
             .expect("second record");
-
         assert_eq!(first.retained_bases, 10);
         assert_eq!(first.overlap_excluded_bases, 0);
         assert_eq!(second.retained_bases, 5);
@@ -636,7 +613,6 @@ mod tests {
         let second = corrector
             .observe_record(record(10, b"pair", &words, &sequence, &high), |_| Ok(()))
             .expect("high-quality record");
-
         assert_eq!(first.baseq_excluded_bases, 10);
         assert_eq!(first.overlap_excluded_bases, 0);
         assert_eq!(second.retained_bases, 10);
@@ -736,7 +712,6 @@ mod tests {
                 .expect("insertion"),
             9
         );
-
         let extended = [cigar(5, 7), cigar(5, 8)];
         assert_eq!(
             picard_hs_trailing_read_bases_to_clip(FLAG_PAIRED, 100, Some(102), &extended)
