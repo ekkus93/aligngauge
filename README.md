@@ -10,6 +10,8 @@ AlignGauge analyzes existing aligned sequencing data. It is not software for con
 
 AlignGauge `v0.4.0` is the latest published release, pinned to exact release SHA `5be4aa4e5df3e8feb17fdde46c408683ac08bb53` (GitHub release ID `367190259`). The v0.3 tag is pinned by release policy to exact release SHA `eccd45157d34ada00a3403a2b24d606956878b62` (GitHub release ID `366930828`). That exact release SHA passed Permanent CI, Full Runtime Validation, Reference Validation, Targeted Validation, and HG002 Preparation Validation before publication. The v0.2 tag remains pinned by release policy to exact release/evidence SHA `ce3aa273da40c679c292e588584781ab1df241de`; the earlier v0.1 tag remains pinned to validated evidence SHA `9423a9d3496459fdbceb2e7bc5178b4b3100357c` (product implementation SHA `f93001cf22a2315f01e6b857c295720d99e392ca`).
 
+v0.5 production-beta qualification is currently paused at Milestone 14 because the real ~30× whole-genome HG002 campaign requires more local disk capacity than is presently available. No requirement has been waived and `v0.5.0` has not been published. See the [2026-08-08 project status handoff](docs/PROJECT_STATUS_HANDOFF_2026-08-08.md) for the exact restart state, validation history, storage requirements, and resume procedure.
+
 - v0.1: local coordinate-sorted BAM, CPU counters, exact canonical coverage, JSON/provenance, and atomic output publication.
 - v0.2: adds CRAM analysis with an explicit local FASTA, fail-closed SN/LN/M5 validation, actual local-reference provenance, BAM/CRAM canonical equivalence, and production HTSlib builds with remote reference transports excluded.
 - v0.3: adds fail-closed BED3–BED12 target parsing, deterministic target normalization, `--targets <BED>`, `--near-distance <N>` (default 250), exact on/near/off-target partitioning, per-source target depth/dropout reporting, native target enrichment, and `target_uniformity_penalty_80`.
@@ -41,6 +43,7 @@ RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features --no-deps
 
 ## Planning and evidence
 
+- [Current v0.5 project status handoff (2026-08-08)](docs/PROJECT_STATUS_HANDOFF_2026-08-08.md)
 - [v0.4.0 release](https://github.com/ekkus93/aligngauge/releases/tag/v0.4.0)
 - [v0.3.0 release](https://github.com/ekkus93/aligngauge/releases/tag/v0.3.0)
 - [v0.2.0 release](https://github.com/ekkus93/aligngauge/releases/tag/v0.2.0)
