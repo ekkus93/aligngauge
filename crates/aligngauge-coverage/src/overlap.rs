@@ -244,10 +244,7 @@ impl PicardWgsOverlapCorrector {
                 self.current_reference_id = Some(reference_id);
             }
             Some(_) => {
-                if self
-                    .previous_start
-                    .is_some_and(|previous| start < previous)
-                {
+                if self.previous_start.is_some_and(|previous| start < previous) {
                     return Err(AlignGaugeError::new(
                         ErrorCategory::InputUnsorted,
                         "Picard WGS overlap record position regressed",
@@ -283,35 +280,36 @@ impl PicardWgsOverlapCorrector {
         let expired_loci = u64::try_from(expired_loci).map_err(|source| {
             invariant_error("Picard WGS expired-locus count does not fit u64").with_source(source)
         })?;
-        let released_loci = expired_loci.checked_mul(LOCUS_BYTES).ok_or_else(|| {
-            invariant_error("Picard WGS released-locus accounting overflowed")
-        })?;
+        let released_loci = expired_loci
+            .checked_mul(LOCUS_BYTES)
+            .ok_or_else(|| invariant_error("Picard WGS released-locus accounting overflowed"))?;
         self.active_loci = self.active_loci.split_off(&start);
 
-        let released = released_names.checked_add(released_loci).ok_or_else(|| {
-            invariant_error("Picard WGS released-state accounting overflowed")
-        })?;
-        self.state_bytes = self.state_bytes.checked_sub(released).ok_or_else(|| {
-            invariant_error("Picard WGS overlap state accounting underflowed")
-        })?;
+        let released = released_names
+            .checked_add(released_loci)
+            .ok_or_else(|| invariant_error("Picard WGS released-state accounting overflowed"))?;
+        self.state_bytes = self
+            .state_bytes
+            .checked_sub(released)
+            .ok_or_else(|| invariant_error("Picard WGS overlap state accounting underflowed"))?;
         Ok(())
     }
 
     fn observe_locus_candidate(&mut self, position: u64) -> Result<(), AlignGaugeError> {
         if let Some(count) = self.active_loci.get_mut(&position) {
             if *count >= self.locus_accumulation_cap {
-                return Err(resource_error(
-                    "Picard WGS locus accumulation cap would be exceeded",
-                )
-                .with_detail("position", position)
-                .with_detail(
-                    "locus_accumulation_cap",
-                    u64::from(self.locus_accumulation_cap),
-                ));
+                return Err(
+                    resource_error("Picard WGS locus accumulation cap would be exceeded")
+                        .with_detail("position", position)
+                        .with_detail(
+                            "locus_accumulation_cap",
+                            u64::from(self.locus_accumulation_cap),
+                        ),
+                );
             }
-            *count = count.checked_add(1).ok_or_else(|| {
-                invariant_error("Picard WGS locus observation count overflowed")
-            })?;
+            *count = count
+                .checked_add(1)
+                .ok_or_else(|| invariant_error("Picard WGS locus observation count overflowed"))?;
             return Ok(());
         }
 
@@ -418,10 +416,10 @@ pub fn picard_hs_trailing_read_bases_to_clip(
             ));
         }
         if operation > 8 {
-            return Err(input_error(
-                "Picard Hs overlap CIGAR contains an unknown operation code",
-            )
-            .with_detail("cigar_operation_code", u64::from(operation)));
+            return Err(
+                input_error("Picard Hs overlap CIGAR contains an unknown operation code")
+                    .with_detail("cigar_operation_code", u64::from(operation)),
+            );
         }
 
         let consumes_reference = matches!(operation, 0 | 2 | 3 | 7 | 8);
@@ -467,9 +465,9 @@ pub fn picard_hs_trailing_read_bases_to_clip(
             }
         }
         if consumes_reference {
-            reference_cursor = reference_cursor.checked_add(length).ok_or_else(|| {
-                input_error("Picard Hs overlap reference coordinate overflowed")
-            })?;
+            reference_cursor = reference_cursor
+                .checked_add(length)
+                .ok_or_else(|| input_error("Picard Hs overlap reference coordinate overflowed"))?;
         }
     }
     Ok(clipped)
@@ -509,7 +507,11 @@ fn validate_record(record: PicardWgsOverlapRecord<'_>) -> Result<(), AlignGaugeE
     Ok(())
 }
 
-fn checked_query_end(start: usize, length: usize, query_length: usize) -> Result<usize, AlignGaugeError> {
+fn checked_query_end(
+    start: usize,
+    length: usize,
+    query_length: usize,
+) -> Result<usize, AlignGaugeError> {
     let end = start
         .checked_add(length)
         .ok_or_else(|| input_error("Picard WGS overlap query cursor overflowed"))?;
@@ -530,11 +532,11 @@ fn checked_reference_end(
         .checked_add(length)
         .ok_or_else(|| input_error("Picard WGS overlap reference coordinate overflowed"))?;
     if end > reference_length {
-        return Err(input_error(
-            "Picard WGS overlap CIGAR extends beyond the declared reference",
-        )
-        .with_detail("operation_end", end)
-        .with_detail("reference_length", reference_length));
+        return Err(
+            input_error("Picard WGS overlap CIGAR extends beyond the declared reference")
+                .with_detail("operation_end", end)
+                .with_detail("reference_length", reference_length),
+        );
     }
     Ok(end)
 }
@@ -605,16 +607,14 @@ mod tests {
         let qualities = [30_u8; 10];
         let mut corrector = PicardWgsOverlapCorrector::new(1 << 20).expect("budget");
         let first = corrector
-            .observe_record(
-                record(10, b"pair", &words, &sequence, &qualities),
-                |_| Ok(()),
-            )
+            .observe_record(record(10, b"pair", &words, &sequence, &qualities), |_| {
+                Ok(())
+            })
             .expect("first record");
         let second = corrector
-            .observe_record(
-                record(15, b"pair", &words, &sequence, &qualities),
-                |_| Ok(()),
-            )
+            .observe_record(record(15, b"pair", &words, &sequence, &qualities), |_| {
+                Ok(())
+            })
             .expect("second record");
 
         assert_eq!(first.retained_bases, 10);
