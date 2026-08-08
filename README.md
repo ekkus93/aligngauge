@@ -18,6 +18,9 @@ AlignGauge `v0.3.0` is the latest published release. The v0.3 tag is pinned by r
 - CRAM reference mismatch or absence is fatal; AlignGauge does not silently fall back to inherited local or remote providers.
 - Target BED contig/coordinate mismatch is fatal; AlignGauge does not infer chromosome aliases, silently drop unknown targets, or repair invalid source intervals.
 - Standalone `inspect` and `validate-reference` commands remain deferred until separately specified.
+- Milestone 10 is accepted: the pinned Samtools 1.24 `SN`/`IS` subset is exact and pinned MultiQC 1.35 consumes the generated surface equivalently.
+- Milestone 11 is accepted: the pinned Picard 3.4.0 reference-independent alignment-summary subset and default `ALL_READS` insert-size profile match deterministic fixtures and HG002 exactly with no tolerance. Reference-dependent Picard alignment-summary fields remain unsupported rather than zero-filled.
+- Milestone 12 — Picard WGS/hybrid-selection and MultiQC validation — is next. `v0.4.0` has not been released.
 - v0.4+ compatibility expansion and full-scale production qualification are not part of the v0.3 release boundary.
 - GPU/backend selection remains research-only until end-to-end benchmarks justify it.
 - Collector execution remains deterministic and serial; `--threads >1` is accepted for configuration/provenance compatibility but emits an explicit warning rather than silently implying parallel collectors.

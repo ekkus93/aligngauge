@@ -306,6 +306,39 @@ These are explicit non-claims, not hidden discrepancies:
 - MultiQC parser acceptance for Picard output is deferred to Milestone 12;
 - v0.4 release closure is deferred until Milestones 12 and 13 satisfy the v0.4 release gate.
 
+## Clean evidence candidate acceptance
+
+The clean evidence candidate `ad212b839d3054aae4c1206c5c451f4c6b098b2d` passed the complete six-gate PR matrix before merge:
+
+| Gate | Run | Job | Result |
+| --- | ---: | ---: | --- |
+| Permanent CI | `31231342595` | `93035556380` | success |
+| Full Runtime Validation | `31231342597` | `93035556543` | success |
+| Reference Validation | `31231342616` | `93035556657` | success |
+| Targeted Validation | `31231342605` | `93035556643` | success |
+| Samtools Stats Validation | `31231342607` | `93035556622` | success |
+| Picard Validation | `31231342594` | `93035556665` | success |
+
+This exact SHA therefore satisfies the Milestone 11 evidence-commit acceptance gate.
+
+## Exact merged-master validation
+
+PR #5 merged only from the validated evidence head. The exact merge commit is `b5ec36f05110a458fbc70a1b38debeefa2a195cd`.
+
+All seven push workflows attached to that exact merge commit completed successfully:
+
+| Gate | Run | Job | Result |
+| --- | ---: | ---: | --- |
+| Permanent CI | `31231472869` | `93036022316` | success |
+| Full Runtime Validation | `31231472841` | `93036022164` | success |
+| Reference Validation | `31231472844` | `93036022206` | success |
+| Targeted Validation | `31231472845` | `93036022139` | success |
+| Samtools Stats Validation | `31231472859` | `93036022163` | success |
+| Picard Validation | `31231472871` | `93036022279` | success |
+| HG002 Preparation Validation | `31231472840` | `93036022356` | success |
+
+The merge-side `ci/picard` job again passed exact synthetic alignment-summary and insert-size comparisons, deterministic HG002 preparation, exact HG002 alignment-summary and insert-size differentials, unsupported-column exclusion, and evidence upload.
+
 ## Acceptance state
 
-The implementation, direct Picard differential, edge fixtures, HG002 differential, and pre-evidence regression matrix are complete. The final Milestone 11 acceptance checkbox must be closed only after the clean commit containing this evidence and the TODO/README reconciliation passes the required exact-SHA permanent gates.
+Milestone 11 is complete. The implementation, direct Picard differential, adversarial fixtures, exact HG002 differentials, clean evidence candidate, and exact merged `master` commit all satisfy the required fail-closed validation boundary. Milestone 12 is next. Milestone 11 does not publish or imply a `v0.4.0` release.
