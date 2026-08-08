@@ -3,7 +3,7 @@
 **Repository:** `ekkus93/aligngauge`
 
 **Companion specification:** `docs/DNA_QC_ENGINE_SPEC.md`  
-**Status:** Ralph Loop active — `v0.3.0` released; Milestone 12 complete; Milestone 13 next
+**Status:** Ralph Loop active — `v0.3.0` released; Milestone 13 complete; v0.4 release gate next
 **Last updated:** 2026-08-08  
 **Supersedes:** Initial `DNA_QC_ENGINE_TODO.md` dated 2026-08-05
 
@@ -706,7 +706,7 @@ Implement SPEC §9.
 
 ## Milestone 12 — WGS/hybrid-selection and MultiQC
 
-**Status:** Complete — validated evidence SHA `5b7f6d15970918862d1006ea4c6add6937479ea6`; MultiQC Validation `31246937565` / `93076990568`, Permanent CI `31246937609` / `93076990623`, Reference Validation `31246937557` / `93076990412`, and Samtools Stats Validation `31246937566` / `93076990392` all successful. Evidence: `docs/evidence/V0_4_COMPATIBILITY_REPORT.md`. Milestone 12 does not publish `v0.4.0`; Milestone 13 is next.
+**Status:** Complete — validated evidence SHA `5b7f6d15970918862d1006ea4c6add6937479ea6`; MultiQC Validation `31246937565` / `93076990568`, Permanent CI `31246937609` / `93076990623`, Reference Validation `31246937557` / `93076990412`, and Samtools Stats Validation `31246937566` / `93076990392` all successful. Evidence: `docs/evidence/V0_4_COMPATIBILITY_REPORT.md`. Milestone 12 does not publish `v0.4.0`; its successor Milestone 13 is now complete.
 
 - [x] Select Picard WGS metrics in scope.
 - [x] Select hybrid-selection metrics in scope.
@@ -726,29 +726,40 @@ Implement SPEC §9.
 
 ## Milestone 13 — Exact overlap correction and parallelism
 
+**Status:** Complete — validated implementation candidate `3f3237ab34c43d826a2332134d3dc1462955bbf8` passed all eight PR gates; validated evidence/report SHA `8edc7563afe271357e3d0215c4d3a44c36646f68` also passed all eight gates, including Permanent CI `31249215972` / `93082789859` and Exact Overlap Validation `31249215961` / `93082777275`. Evidence: `docs/evidence/M13_EXACT_OVERLAP.md`. Milestone 13 does not publish `v0.4.0`; the separate v0.4 release gate is next.
+
 ### 13.1 Overlap correction ADR
 
-- [ ] Name the reference tool/profile.
-- [ ] Define which records participate.
-- [ ] Define primary/supplementary semantics.
-- [ ] Define pairing key.
-- [ ] Define bounded-state behavior.
-- [ ] Define behavior when the bound is exceeded.
-- [ ] Decide whether exact correction forces streaming mode.
-- [ ] Prohibit indexed parallel execution until exactness is proven.
+- [x] Name the reference tool/profile.
+- [x] Define which records participate.
+- [x] Define primary/supplementary semantics.
+- [x] Define pairing key.
+- [x] Define bounded-state behavior.
+- [x] Define behavior when the bound is exceeded.
+- [x] Decide whether exact correction forces streaming mode.
+- [x] Prohibit indexed parallel execution until exactness is proven.
 
-### 13.2 Indexed parallel research and implementation
+### 13.2 Indexed parallel admission decision
 
-Only implement if measured value justifies complexity.
+Only implement if measured value justifies complexity. ADR-0010 records that the admission condition is not met for v0.4, so no indexed reference-partition execution is released. The implementation-only bullets below are closed as explicit N/A dispositions rather than represented as implemented work.
 
-- [ ] Model readers, descriptors, buffers, and decompression pools.
-- [ ] Include them in `--memory-limit`.
-- [ ] Partition references deterministically.
-- [ ] Preserve serial equivalence.
-- [ ] Handle contig boundaries.
-- [ ] Disable incompatible exact-overlap mode.
-- [ ] Benchmark local NVMe and slower storage.
-- [ ] Keep streaming mode available and authoritative.
+- [x] **N/A for v0.4 by ADR-0010:** Model readers, descriptors, buffers, and decompression pools — no indexed mode was admitted, so no additional production resources exist to model.
+- [x] **N/A for v0.4 by ADR-0010:** Include them in `--memory-limit` — no indexed resources were introduced; exact WGS overlap state instead has its own hard reserved budget and fatal exhaustion behavior.
+- [x] **N/A for v0.4 by ADR-0010:** Partition references deterministically — no indexed partitioner was admitted.
+- [x] **N/A for v0.4 by ADR-0010:** Preserve serial equivalence — no second released indexed execution mode exists to compare; the globally ordered streaming path remains authoritative.
+- [x] **N/A for v0.4 by ADR-0010:** Handle contig boundaries — exact streaming state clears on forward reference transitions; no partition merge boundary exists.
+- [x] **N/A for v0.4 by ADR-0010:** Disable incompatible exact-overlap mode — indexed exact overlap is compile-time/profile-policy unavailable (`INDEXED_PARTITION_EXACT_OVERLAP_SUPPORTED=false`) rather than silently downgraded.
+- [x] **N/A for v0.4 by ADR-0010:** Benchmark local NVMe and slower storage — no unimplemented indexed mode is given fabricated performance evidence; future admission requires those benchmarks.
+- [x] Keep streaming mode available and authoritative.
+
+### Milestone 13 acceptance gate
+
+- [x] ADR-0010 freezes separate Picard 3.4.0 WGS and Hs exact-overlap profiles and `streaming-coordinate-order-v1` execution semantics.
+- [x] WGS raw-query-name identity, base-quality-before-overlap ordering, secondary/supplementary participation, bounded-state eviction, fatal budget exhaustion, and fatal locus-cap behavior are covered by tests and the pinned differential path.
+- [x] Hs overlap matches pinned HTSJDK 4.2.0 for ordinary pairs, equal-start ties, insertion CIGAR, and extended `=`/`X` CIGAR cases; unpaired and mate-unmapped zero-clipping behavior is unit-tested.
+- [x] The deterministic Rust and pinned Picard/HTSJDK oracle TSVs are byte-identical: retained `135`, base-quality-excluded `10`, overlap-excluded `35`, and Hs clipped-read-bases `64`.
+- [x] Exact overlap has no approximate, truncating, warning-only, or silent indexed fallback.
+- [x] The implementation candidate and committed evidence/report SHA both pass all eight triggered PR workflows.
 
 ### v0.4 release gate
 
