@@ -18,9 +18,34 @@ ADR-0012 freezes the v0.5 full-scale input as the deterministic ~30× whole-geno
 
 The standing one-megabase chr20 HG002 fixture is not acceptable M14 evidence.
 
+## Explicit source provisioning
+
+The repository now provides an explicit maintainer-only source provisioner. It is never
+called by ordinary tests or AlignGauge runtime:
+
+```bash
+SOURCE_ROOT=/data/aligngauge/hg002-source
+bash testdata/hg002/provision-full-wgs-source.sh "$SOURCE_ROOT"
+```
+
+The provisioner reads the pinned source URLs and MD5 values from
+`testdata/hg002/full-wgs-v0.5.env`, obtains the current exact upstream object sizes,
+checks remaining local capacity, downloads through resumable hidden `.partial` files,
+verifies byte size and pinned MD5 before promoting each file, writes
+`source.manifest`, and writes `_SUCCESS` last. An interrupted transfer may be resumed
+by rerunning the same explicit command. A checksum mismatch, contradictory
+partial/final state, insufficient free space, missing content length, or network error
+is fatal.
+
+A checksum failure does not silently delete or replace the transferred file. The
+operator must resolve that state explicitly.
+
+See `docs/M14_FULL_HG002_RUNBOOK.md` for the complete capacity, provisioning,
+preparation, qualification, and evidence-handoff procedure.
+
 ## Preparation
 
-Preparation command:
+Preparation command after the complete pinned source is provisioned:
 
 ```bash
 testdata/hg002/prepare-full-wgs.sh \
@@ -94,7 +119,10 @@ Copy from the successful campaign without reinterpretation:
 
 ## Current blocker
 
-The repository and GitHub-hosted CI do not contain the complete 118 GB source BAM and intentionally do not download it. Full-scale qualification therefore requires a maintainer execution environment with the pinned source BAM/BAI and sufficient local storage.
+The repository and GitHub-hosted CI do not contain the complete 118 GB source BAM. The
+new provisioner makes acquisition explicit and resumable, but it deliberately does
+not make the full campaign an ordinary CI download. Full-scale qualification still
+requires a maintainer execution environment with sufficient persistent local storage.
 
 The active execution environment used for this implementation work has only about 38 GB free, below the preparation script's fail-closed 64 GiB minimum even before provisioning the 118 GB source. It cannot execute the real M14 campaign.
 
