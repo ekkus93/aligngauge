@@ -113,7 +113,9 @@ pub struct ValidatedRecord<'a> {
     mate_coordinate: FieldValue<Option<RecordCoordinate>>,
     mapping_quality: FieldValue<u8>,
     query_length: u64,
+    sequence: FieldValue<Vec<u8>>,
     qualities_requested: bool,
+    noise_read: FieldValue<bool>,
     template_length: FieldValue<i32>,
     cigar: FieldValue<CigarFacts>,
     edit_distance: FieldValue<u64>,
@@ -162,6 +164,22 @@ impl ValidatedRecord<'_> {
     #[must_use]
     pub const fn query_length(&self) -> u64 {
         self.query_length
+    }
+
+    /// Planned decoded sequence bases.
+    #[must_use]
+    pub fn sequence(&self) -> FieldValue<&[u8]> {
+        match &self.sequence {
+            FieldValue::NotRequested => FieldValue::NotRequested,
+            FieldValue::Missing => FieldValue::Missing,
+            FieldValue::Value(value) => FieldValue::Value(value.as_slice()),
+        }
+    }
+
+    /// Planned Picard `XN` noise state. Missing is distinct from false.
+    #[must_use]
+    pub const fn noise_read(&self) -> &FieldValue<bool> {
+        &self.noise_read
     }
 
     /// Planned base qualities.
@@ -374,7 +392,9 @@ impl BamReader {
             mate_coordinate: facts.mate_coordinate,
             mapping_quality: facts.mapping_quality,
             query_length: facts.query_length,
+            sequence: facts.sequence,
             qualities_requested: facts.qualities_requested,
+            noise_read: facts.noise_read,
             template_length: facts.template_length,
             cigar: facts.cigar,
             edit_distance: facts.edit_distance,
@@ -524,7 +544,9 @@ struct RecordFacts {
     mate_coordinate: FieldValue<Option<RecordCoordinate>>,
     mapping_quality: FieldValue<u8>,
     query_length: u64,
+    sequence: FieldValue<Vec<u8>>,
     qualities_requested: bool,
+    noise_read: FieldValue<bool>,
     template_length: FieldValue<i32>,
     cigar: FieldValue<CigarFacts>,
     edit_distance: FieldValue<u64>,
@@ -568,6 +590,20 @@ fn validate_record(
         FieldValue::NotRequested
     };
     let query_length = u64_from_usize(layout.sequence_bases)?;
+    let sequence = if plan.requires(RequiredField::Sequence) {
+        let decoded = record.seq().as_bytes();
+        if decoded.len() != layout.sequence_bases {
+            return Err(record_error(
+                ErrorCategory::InputCorrupt,
+                "decoded BAM sequence length differs from the validated record layout",
+                index,
+                record,
+            ));
+        }
+        FieldValue::Value(decoded)
+    } else {
+        FieldValue::NotRequested
+    };
     let qualities_requested = plan.requires(RequiredField::Qualities);
     if qualities_requested && record.qual().len() != layout.sequence_bases {
         return Err(record_error(
@@ -601,7 +637,9 @@ fn validate_record(
         mate_coordinate,
         mapping_quality,
         query_length,
+        sequence,
         qualities_requested,
+        noise_read: tags.noise_read,
         template_length,
         cigar: if plan.requires(RequiredField::Cigar) {
             FieldValue::Value(cigar_facts)
@@ -939,6 +977,7 @@ fn checked_span_add(
 }
 
 struct TagFacts {
+    noise_read: FieldValue<bool>,
     edit_distance: FieldValue<u64>,
     mismatch_descriptor: FieldValue<String>,
     read_group: ReadGroupValue,
@@ -953,6 +992,7 @@ fn validate_auxiliary(
     cigar_operation_count: usize,
 ) -> Result<TagFacts, AlignGaugeError> {
     let mut field_count = 0_usize;
+    let mut noise_read = None;
     let mut edit_distance = None;
     let mut mismatch_descriptor = None;
     let mut read_group = None;
@@ -992,6 +1032,15 @@ fn validate_auxiliary(
         }
 
         match tag {
+            b"XN" if plan.requires(RequiredField::NoiseTag) => {
+                if noise_read.is_some() {
+                    return Err(duplicate_tag_error("XN", index, record));
+                }
+                noise_read = Some(matches!(
+                    value,
+                    Aux::I8(1) | Aux::U8(1) | Aux::I16(1) | Aux::U16(1) | Aux::I32(1) | Aux::U32(1)
+                ));
+            }
             b"CG" => {
                 saw_cg = true;
                 if !matches!(value, Aux::ArrayU32(_) | Aux::ArrayI32(_)) {
@@ -1054,6 +1103,11 @@ fn validate_auxiliary(
         ));
     }
 
+    let noise_read = if plan.requires(RequiredField::NoiseTag) {
+        noise_read.map_or(FieldValue::Missing, FieldValue::Value)
+    } else {
+        FieldValue::NotRequested
+    };
     let edit_distance = if plan.requires(RequiredField::EditDistance) {
         edit_distance.map_or(FieldValue::Missing, FieldValue::Value)
     } else {
@@ -1077,6 +1131,7 @@ fn validate_auxiliary(
     };
 
     Ok(TagFacts {
+        noise_read,
         edit_distance,
         mismatch_descriptor,
         read_group,
@@ -1127,13 +1182,6 @@ fn duplicate_tag_error(tag: &'static str, index: u64, record: &Record) -> AlignG
 }
 
 fn validate_plan(plan: &FieldPlan) -> Result<(), AlignGaugeError> {
-    if plan.requires(RequiredField::Sequence) {
-        return Err(AlignGaugeError::new(
-            ErrorCategory::UnsupportedRecord,
-            "reader plan cannot materialize packed sequence bases",
-        )
-        .with_detail("field", RequiredField::Sequence.as_str()));
-    }
     if !plan.requires(RequiredField::Flags) || !plan.requires(RequiredField::Coordinates) {
         return Err(AlignGaugeError::new(
             ErrorCategory::InternalInvariant,

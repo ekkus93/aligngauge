@@ -23,8 +23,10 @@ pub enum RequiredField {
     EditDistance,
     /// Optional `MD` mismatch descriptor.
     MismatchDescriptor,
-    /// Packed sequence bases. Reserved; not requested by v0.1 plans.
+    /// Decoded sequence bases. Materialized only by an explicit plan.
     Sequence,
+    /// Optional Picard `XN` noise tag interpreted as integer one.
+    NoiseTag,
     /// Base qualities.
     Qualities,
     /// Signed template length / TLEN.
@@ -33,7 +35,7 @@ pub enum RequiredField {
 
 impl RequiredField {
     /// All fields in stable provenance order.
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 12] = [
         Self::Flags,
         Self::Coordinates,
         Self::MateCoordinates,
@@ -43,6 +45,7 @@ impl RequiredField {
         Self::EditDistance,
         Self::MismatchDescriptor,
         Self::Sequence,
+        Self::NoiseTag,
         Self::Qualities,
         Self::TemplateLength,
     ];
@@ -60,6 +63,7 @@ impl RequiredField {
             Self::EditDistance => "nm",
             Self::MismatchDescriptor => "md",
             Self::Sequence => "sequence",
+            Self::NoiseTag => "xn_noise_tag",
             Self::Qualities => "qualities",
             Self::TemplateLength => "template_length",
         }
@@ -105,6 +109,30 @@ impl FieldPlan {
             RequiredField::Cigar,
             RequiredField::EditDistance,
             RequiredField::Qualities,
+            RequiredField::TemplateLength,
+        ])
+    }
+
+    /// Build the Picard 3.4.0 reference-independent alignment-summary plan.
+    #[must_use]
+    pub fn picard_alignment_summary() -> Self {
+        Self::from_fields([
+            RequiredField::Flags,
+            RequiredField::Coordinates,
+            RequiredField::MappingQuality,
+            RequiredField::Sequence,
+            RequiredField::NoiseTag,
+        ])
+    }
+
+    /// Build the Picard 3.4.0 default `ALL_READS` insert-size plan.
+    #[must_use]
+    pub fn picard_insert_size() -> Self {
+        Self::from_fields([
+            RequiredField::Flags,
+            RequiredField::Coordinates,
+            RequiredField::MateCoordinates,
+            RequiredField::Cigar,
             RequiredField::TemplateLength,
         ])
     }

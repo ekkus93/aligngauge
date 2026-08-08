@@ -10,7 +10,7 @@ pub const PICARD_VERSION: &str = "3.4.0";
 /// Exact reference-independent alignment-summary compatibility profile.
 pub const PICARD_ALIGNMENT_SUMMARY_PROFILE: &str =
     "picard-alignment-summary-3.4.0-all-reads-subset-v1";
-/// Exact default ALL_READS insert-size compatibility profile.
+/// Exact default `ALL_READS` insert-size compatibility profile.
 pub const PICARD_INSERT_SIZE_PROFILE: &str = "picard-insert-size-3.4.0-all-reads-v1";
 
 const FLAG_PAIRED: u16 = 0x1;
@@ -38,7 +38,7 @@ const DEFAULT_ADAPTERS: [&str; 6] = [
     "AGATCGGAAGAGCACACGTCTGAACTCCAGTCACNNNNNNNNATCTCGTATGCCGTCTTCTGCTTG",
 ];
 
-/// Picard alignment-summary category emitted by the ALL_READS collector.
+/// Picard alignment-summary category emitted by the `ALL_READS` collector.
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum PicardAlignmentCategory {
     /// Unpaired reads or Picard's required empty-file row.
@@ -187,7 +187,9 @@ impl IntegerHistogram {
         for (key, count) in &self.bins {
             let deviation = OrderedF64((f64::from(*key) - median).abs());
             let value = deviations.entry(deviation).or_default();
-            *value = value.checked_add(*count).expect("source histogram count already fits u64");
+            *value = value
+                .checked_add(*count)
+                .expect("source histogram count already fits u64");
         }
         weighted_median_f64(&deviations, self.count)
     }
@@ -254,7 +256,8 @@ impl AlignmentCategoryAccumulator {
                     increment(&mut self.pf_noise_reads, "alignment.pf_noise_reads")?;
                 }
                 let length = u32::try_from(sequence.len()).map_err(|source| {
-                    plan_error(record, "sequence length for Picard alignment summary").with_source(source)
+                    plan_error(record, "sequence length for Picard alignment summary")
+                        .with_source(source)
                 })?;
                 self.read_lengths.increment(length)?;
                 if is_adapter(record, sequence, adapter_kmers)? {
@@ -273,7 +276,9 @@ impl AlignmentCategoryAccumulator {
                         )
                     })?
                 } else {
-                    index.checked_add(1).ok_or_else(|| overflow("alignment.read_cycle"))?
+                    index
+                        .checked_add(1)
+                        .ok_or_else(|| overflow("alignment.read_cycle"))?
                 };
                 let cycle = u32::try_from(cycle).map_err(|source| {
                     plan_error(record, "Picard bad-cycle index").with_source(source)
@@ -372,13 +377,19 @@ impl PicardAlignmentSummaryCollector {
         Ok(())
     }
 
-    /// Finalize category ordering and Picard's paired BAD_CYCLES override.
-    #[must_use]
-    pub fn finish(self) -> PicardAlignmentSummaryReport {
+    /// Finalize category ordering and Picard's paired `BAD_CYCLES` override.
+    ///
+    /// # Errors
+    /// Returns a typed error if combining the paired bad-cycle counts overflows.
+    pub fn finish(self) -> Result<PicardAlignmentSummaryReport, AlignGaugeError> {
         let first = self.first.finish(PicardAlignmentCategory::FirstOfPair);
         let second = self.second.finish(PicardAlignmentCategory::SecondOfPair);
         let mut pair = self.pair.finish(PicardAlignmentCategory::Pair);
-        pair.bad_cycles = first.bad_cycles.saturating_add(second.bad_cycles);
+        pair.bad_cycles = checked_add(
+            first.bad_cycles,
+            second.bad_cycles,
+            "alignment.pair_bad_cycles",
+        )?;
         let unpaired = self.unpaired.finish(PicardAlignmentCategory::Unpaired);
 
         let mut rows = Vec::with_capacity(4);
@@ -390,7 +401,7 @@ impl PicardAlignmentSummaryCollector {
         if unpaired.total_reads > 0 || rows.is_empty() {
             rows.push(unpaired);
         }
-        PicardAlignmentSummaryReport { rows }
+        Ok(PicardAlignmentSummaryReport { rows })
     }
 }
 
@@ -422,7 +433,7 @@ impl PicardPairOrientation {
     }
 }
 
-/// One Picard InsertSizeMetrics ALL_READS row plus its trimmed orientation histogram.
+/// One Picard `InsertSizeMetrics` `ALL_READS` row plus its trimmed orientation histogram.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PicardInsertSizeRow {
     pub median_insert_size: f64,
@@ -455,7 +466,7 @@ pub struct PicardInsertSizeReport {
 }
 
 impl PicardInsertSizeReport {
-    /// Render the default ALL_READS InsertSizeMetrics table and trimmed histogram surface.
+    /// Render the default `ALL_READS` `InsertSizeMetrics` table and trimmed histogram surface.
     #[must_use]
     pub fn render_picard_metrics(&self) -> String {
         let mut out = String::new();
@@ -509,7 +520,11 @@ impl PicardInsertSizeReport {
                 .max()
                 .unwrap_or(0);
             for size in 0..=max {
-                if self.rows.iter().all(|row| !row.histogram.contains_key(&size)) {
+                if self
+                    .rows
+                    .iter()
+                    .all(|row| !row.histogram.contains_key(&size))
+                {
                     continue;
                 }
                 write!(out, "{size}").expect("String write cannot fail");
@@ -527,7 +542,7 @@ impl PicardInsertSizeReport {
     }
 }
 
-/// Checked single-pass collector for Picard 3.4.0 default ALL_READS insert-size metrics.
+/// Checked single-pass collector for Picard 3.4.0 default `ALL_READS` insert-size metrics.
 #[derive(Debug, Default)]
 pub struct PicardInsertSizeCollector {
     histograms: BTreeMap<PicardPairOrientation, IntegerHistogram>,
@@ -562,9 +577,8 @@ impl PicardInsertSizeCollector {
             .with_detail("record_index", record.index())
             .with_detail("template_length", i64::from(template_length))
         })?;
-        let insert_size = u32::try_from(insert_size).map_err(|source| {
-            plan_error(record, "Picard insert size").with_source(source)
-        })?;
+        let insert_size = u32::try_from(insert_size)
+            .map_err(|source| plan_error(record, "Picard insert size").with_source(source))?;
         let orientation = pair_orientation(record, flags, template_length)?;
         self.histograms
             .entry(orientation)
@@ -577,9 +591,12 @@ impl PicardInsertSizeCollector {
     /// # Errors
     /// Returns a typed error when reduction arithmetic cannot be represented.
     pub fn finish(self) -> Result<PicardInsertSizeReport, AlignGaugeError> {
-        let total_inserts = self.histograms.values().try_fold(0_u64, |total, histogram| {
-            checked_add(total, histogram.count, "insert.total_inserts")
-        })?;
+        let total_inserts = self
+            .histograms
+            .values()
+            .try_fold(0_u64, |total, histogram| {
+                checked_add(total, histogram.count, "insert.total_inserts")
+            })?;
         if total_inserts == 0 {
             return Ok(PicardInsertSizeReport { rows: Vec::new() });
         }
@@ -613,7 +630,8 @@ fn finalize_insert_row(
     if !(0.0..=f64::from(u32::MAX)).contains(&width_float) {
         return Err(overflow("insert.histogram_width"));
     }
-    let trim_width = width_float.trunc() as u32;
+    let trim_width =
+        truncating_f64_to_u32(width_float).ok_or_else(|| overflow("insert.histogram_width"))?;
     let trimmed = histogram.trimmed(trim_width);
     let widths = centered_widths(histogram)?;
     Ok(PicardInsertSizeRow {
@@ -656,7 +674,7 @@ fn centered_widths(histogram: &IntegerHistogram) -> Result<[u64; 11], AlignGauge
         if let Ok(low_key) = u32::try_from(low_key) {
             covered = checked_add(covered, histogram.value(low_key), "insert.width_covered")?;
         }
-        if low != high {
+        if low.to_bits() != high.to_bits() {
             let high_key = java_double_to_i32(high);
             if let Ok(high_key) = u32::try_from(high_key) {
                 covered = checked_add(covered, histogram.value(high_key), "insert.width_covered")?;
@@ -716,25 +734,30 @@ fn pair_orientation(
         .position
         .checked_add(1)
         .ok_or_else(|| overflow("insert.mate_start"))?;
-    let positive_five_prime = if read_reverse { mate_start } else { current_start };
-    let negative_five_prime = if read_reverse {
-        let reference_span = match record.cigar() {
-            FieldValue::Value(value) => value.reference_span,
-            FieldValue::Missing | FieldValue::NotRequested => {
-                return Err(plan_error(record, "CIGAR reference span"));
-            }
-        };
-        current
-            .position
-            .checked_add(i64::try_from(reference_span).map_err(|source| {
-                plan_error(record, "CIGAR reference span").with_source(source)
-            })?)
-            .ok_or_else(|| overflow("insert.alignment_end"))?
+    let positive_five_prime = if read_reverse {
+        mate_start
     } else {
         current_start
-            .checked_add(i64::from(template_length))
-            .ok_or_else(|| overflow("insert.mate_five_prime"))?
     };
+    let negative_five_prime =
+        if read_reverse {
+            let reference_span = match record.cigar() {
+                FieldValue::Value(value) => value.reference_span,
+                FieldValue::Missing | FieldValue::NotRequested => {
+                    return Err(plan_error(record, "CIGAR reference span"));
+                }
+            };
+            current
+                .position
+                .checked_add(i64::try_from(reference_span).map_err(|source| {
+                    plan_error(record, "CIGAR reference span").with_source(source)
+                })?)
+                .ok_or_else(|| overflow("insert.alignment_end"))?
+        } else {
+            current_start
+                .checked_add(i64::from(template_length))
+                .ok_or_else(|| overflow("insert.mate_five_prime"))?
+        };
     Ok(if positive_five_prime < negative_five_prime {
         PicardPairOrientation::Fr
     } else {
@@ -789,8 +812,14 @@ fn default_adapter_kmers() -> Vec<Vec<u8>> {
     for sequence in DEFAULT_ADAPTERS {
         let bytes = sequence.as_bytes();
         for window in bytes.windows(ADAPTER_MATCH_LENGTH) {
-            if window.iter().filter(|base| **base == b'N').count() <= MAX_ADAPTER_ERRORS {
-                let upper = window.iter().map(u8::to_ascii_uppercase).collect::<Vec<_>>();
+            let ambiguous = window
+                .iter()
+                .fold(0_usize, |count, base| count + usize::from(*base == b'N'));
+            if ambiguous <= MAX_ADAPTER_ERRORS {
+                let upper = window
+                    .iter()
+                    .map(u8::to_ascii_uppercase)
+                    .collect::<Vec<_>>();
                 kmers.insert(upper.clone());
                 kmers.insert(reverse_complement(&upper));
             }
@@ -858,14 +887,18 @@ fn weighted_median_u32(bins: &BTreeMap<u32, u64>, count: u64) -> f64 {
         return 0.0;
     }
     if count == 1 {
-        return bins.first_key_value().map_or(0.0, |(key, _)| f64::from(*key));
+        return bins
+            .first_key_value()
+            .map_or(0.0, |(key, _)| f64::from(*key));
     }
     let (low_rank, high_rank) = median_ranks(count);
     let mut seen = 0_u64;
     let mut low = None;
     let mut high = None;
     for (key, value) in bins {
-        seen = seen.saturating_add(*value);
+        seen = seen
+            .checked_add(*value)
+            .expect("cumulative histogram count cannot exceed the checked source count");
         if low.is_none() && seen >= low_rank {
             low = Some(f64::from(*key));
         }
@@ -874,7 +907,7 @@ fn weighted_median_u32(bins: &BTreeMap<u32, u64>, count: u64) -> f64 {
             break;
         }
     }
-    (low.unwrap_or(0.0) + high.unwrap_or(0.0)) / 2.0
+    f64::midpoint(low.unwrap_or(0.0), high.unwrap_or(0.0))
 }
 
 fn weighted_median_f64(bins: &BTreeMap<OrderedF64, u64>, count: u64) -> f64 {
@@ -883,7 +916,9 @@ fn weighted_median_f64(bins: &BTreeMap<OrderedF64, u64>, count: u64) -> f64 {
     let mut low = None;
     let mut high = None;
     for (key, value) in bins {
-        seen = seen.saturating_add(*value);
+        seen = seen
+            .checked_add(*value)
+            .expect("cumulative histogram count cannot exceed the checked source count");
         if low.is_none() && seen >= low_rank {
             low = Some(key.0);
         }
@@ -892,11 +927,11 @@ fn weighted_median_f64(bins: &BTreeMap<OrderedF64, u64>, count: u64) -> f64 {
             break;
         }
     }
-    (low.unwrap_or(0.0) + high.unwrap_or(0.0)) / 2.0
+    f64::midpoint(low.unwrap_or(0.0), high.unwrap_or(0.0))
 }
 
 const fn median_ranks(count: u64) -> (u64, u64) {
-    if count % 2 == 0 {
+    if count.is_multiple_of(2) {
         (count / 2, count / 2 + 1)
     } else {
         let rank = count / 2 + 1;
@@ -912,8 +947,25 @@ fn java_double_to_i32(value: f64) -> i32 {
     } else if value <= f64::from(i32::MIN) {
         i32::MIN
     } else {
-        value.trunc() as i32
+        value
+            .trunc()
+            .to_string()
+            .parse::<i32>()
+            .unwrap_or_else(|_| {
+                if value.is_sign_negative() {
+                    i32::MIN
+                } else {
+                    i32::MAX
+                }
+            })
     }
+}
+
+fn truncating_f64_to_u32(value: f64) -> Option<u32> {
+    if !value.is_finite() || value < 0.0 || value > f64::from(u32::MAX) {
+        return None;
+    }
+    value.trunc().to_string().parse::<u32>().ok()
 }
 
 fn required_sequence<'a>(record: &'a ValidatedRecord<'_>) -> Result<&'a [u8], AlignGaugeError> {
@@ -934,11 +986,15 @@ fn required_noise_flag(record: &ValidatedRecord<'_>) -> Result<bool, AlignGaugeE
 fn required_template_length(record: &ValidatedRecord<'_>) -> Result<i32, AlignGaugeError> {
     match record.template_length() {
         FieldValue::Value(value) => Ok(*value),
-        FieldValue::Missing | FieldValue::NotRequested => Err(plan_error(record, "template length")),
+        FieldValue::Missing | FieldValue::NotRequested => {
+            Err(plan_error(record, "template length"))
+        }
     }
 }
 
-fn required_mate(record: &ValidatedRecord<'_>) -> Result<aligngauge_hts::RecordCoordinate, AlignGaugeError> {
+fn required_mate(
+    record: &ValidatedRecord<'_>,
+) -> Result<aligngauge_hts::RecordCoordinate, AlignGaugeError> {
     match record.mate_coordinate() {
         FieldValue::Value(Some(value)) => Ok(*value),
         FieldValue::Value(None) | FieldValue::Missing | FieldValue::NotRequested => {
@@ -1014,10 +1070,10 @@ pub fn analyze_picard_alignment_summary_bam(
     while let Some(record) = reader.next_record()? {
         collector.observe(&record)?;
     }
-    Ok(collector.finish())
+    collector.finish()
 }
 
-/// Analyze one BAM with the exact default ALL_READS Picard insert-size field plan.
+/// Analyze one BAM with the exact default `ALL_READS` Picard insert-size field plan.
 ///
 /// # Errors
 /// Returns typed BAM validation, field-plan, orientation, or checked-arithmetic failures.
@@ -1045,7 +1101,7 @@ mod tests {
         let mut histogram = IntegerHistogram::default();
         histogram.increment(20).unwrap();
         histogram.increment(10).unwrap();
-        assert_eq!(histogram.mode(), 10.0);
+        assert_eq!(histogram.mode().to_bits(), 10.0_f64.to_bits());
     }
 
     #[test]
@@ -1054,8 +1110,11 @@ mod tests {
         for value in [10, 11, 20, 21] {
             histogram.increment(value).unwrap();
         }
-        assert_eq!(histogram.median(), 15.5);
-        assert_eq!(histogram.median_absolute_deviation(), 5.0);
+        assert_eq!(histogram.median().to_bits(), 15.5_f64.to_bits());
+        assert_eq!(
+            histogram.median_absolute_deviation().to_bits(),
+            5.0_f64.to_bits()
+        );
     }
 
     #[test]

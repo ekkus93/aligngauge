@@ -1,7 +1,15 @@
 //! Checked alignment metrics and pinned Samtools compatibility projections.
 
+pub mod picard;
 mod samtools_stats;
 
+pub use picard::{
+    PICARD_ALIGNMENT_SUMMARY_PROFILE, PICARD_INSERT_SIZE_PROFILE, PICARD_VERSION,
+    PicardAlignmentCategory, PicardAlignmentSummaryCollector, PicardAlignmentSummaryReport,
+    PicardAlignmentSummaryRow, PicardInsertSizeCollector, PicardInsertSizeReport,
+    PicardInsertSizeRow, PicardPairOrientation, analyze_picard_alignment_summary_bam,
+    analyze_picard_insert_size_bam,
+};
 pub use samtools_stats::{
     InsertSizeRow, MULTIQC_VERSION, SAMTOOLS_STATS_PROFILE, SamtoolsStatsCollector,
     SamtoolsStatsReport, analyze_samtools_stats_bam,

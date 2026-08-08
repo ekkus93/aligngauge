@@ -10,7 +10,10 @@ use aligngauge_core::{
     AlignGaugeError, AtomicPublisher, ConfigOverrides, ErrorCategory, LogFormat,
     ProcessEnvironment, ToJson, resolve_config,
 };
-use aligngauge_metrics::analyze_samtools_stats_bam;
+use aligngauge_metrics::{
+    analyze_picard_alignment_summary_bam, analyze_picard_insert_size_bam,
+    analyze_samtools_stats_bam,
+};
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 enum CompatibilityFormat {
@@ -19,6 +22,8 @@ enum CompatibilityFormat {
     SamtoolsFlagstat,
     SamtoolsIdxstats,
     SamtoolsStats,
+    PicardAlignmentSummary,
+    PicardInsertSize,
 }
 
 enum CliAction {
@@ -103,6 +108,24 @@ fn run_legacy(input: &Path) -> ExitCode {
 }
 
 fn run_compatibility(input: &Path, format: CompatibilityFormat) -> ExitCode {
+    if format == CompatibilityFormat::PicardAlignmentSummary {
+        return match analyze_picard_alignment_summary_bam(input) {
+            Ok(report) => {
+                print!("{}", report.render_picard_metrics());
+                ExitCode::SUCCESS
+            }
+            Err(error) => exit_with_error(&error, LogFormat::Human),
+        };
+    }
+    if format == CompatibilityFormat::PicardInsertSize {
+        return match analyze_picard_insert_size_bam(input) {
+            Ok(report) => {
+                print!("{}", report.render_picard_metrics());
+                ExitCode::SUCCESS
+            }
+            Err(error) => exit_with_error(&error, LogFormat::Human),
+        };
+    }
     if format == CompatibilityFormat::SamtoolsStats {
         return match analyze_samtools_stats_bam(input) {
             Ok(report) => {
@@ -129,7 +152,9 @@ fn run_compatibility(input: &Path, format: CompatibilityFormat) -> ExitCode {
                     Ok(output) => output,
                     Err(error) => return exit_with_error(&error, LogFormat::Human),
                 },
-                CompatibilityFormat::SamtoolsStats => {
+                CompatibilityFormat::SamtoolsStats
+                | CompatibilityFormat::PicardAlignmentSummary
+                | CompatibilityFormat::PicardInsertSize => {
                     unreachable!("handled before counter analysis")
                 }
             };
@@ -561,9 +586,11 @@ fn parse_compatibility_format(
         Some("samtools-flagstat") => Ok(CompatibilityFormat::SamtoolsFlagstat),
         Some("samtools-idxstats") => Ok(CompatibilityFormat::SamtoolsIdxstats),
         Some("samtools-stats") => Ok(CompatibilityFormat::SamtoolsStats),
+        Some("picard-alignment-summary") => Ok(CompatibilityFormat::PicardAlignmentSummary),
+        Some("picard-insert-size") => Ok(CompatibilityFormat::PicardInsertSize),
         _ => Err(usage_error(
             format!(
-                "unsupported --format '{}'; use human, json, samtools-flagstat, samtools-idxstats, or samtools-stats",
+                "unsupported --format '{}'; use human, json, samtools-flagstat, samtools-idxstats, samtools-stats, picard-alignment-summary, or picard-insert-size",
                 value.to_string_lossy()
             ),
             program,
@@ -696,7 +723,7 @@ fn usage_error(message: impl Into<String>, program: &OsStr) -> AlignGaugeError {
 
 fn usage(program: &OsStr) -> String {
     format!(
-        "Usage:\n  {0} qc --input <BAM|CRAM> --outdir <DIR> [OPTIONS]\n\nRequired release values:\n  --input <PATH>                  Local BAM or CRAM input (may also come from --config)\n  --outdir <PATH>                 New output directory (may also come from --config)\n\nCRAM reference integrity:\n  --reference <FASTA>             Explicit local FASTA required for CRAM; remote lookup is disabled\n\nTargeted v0.3 analysis:\n  --targets <BED>                 Local BED3-BED12 target definition; exact contig names required\n  --near-distance <N>             Symmetric near-target distance in bases (default 250; requires --targets)\n                                  Uses native aligngauge-targeted-v0.3 semantics; no Picard compatibility claim\n\nOptional values:\n  --threads <N>                   Collector/reduction thread limit (collector is deterministic serial)\n  --io-threads <N>                HTSlib I/O workers; 0 or 1 selects serial decoding\n  --memory-limit <SIZE>           B, KiB, MiB, GiB, or TiB (default 4GiB)\n  --coverage-thresholds <LIST>    Comma-separated positive depths (default 1,10,20,30)\n  --config <PATH>                 Strict schema_version=1 config file\n  --log-format <human|json>       Diagnostic error format\n  --quiet                         Suppress routine completion summary\n  --verbose                       Enable verbose mode in resolved provenance\n  --preserve-failed-staging       Preserve clearly incomplete staging on publication failure\n  -h, --help                      Show this help\n\nConfiguration precedence:\n  built-ins < config file < documented ALIGNGAUGE_* environment < CLI\n\nDeferred beyond v0.3:\n  --profile selection, --backend, --cuda-device\n\nLegacy BAM three-counter compatibility probe:\n  {0} qc --input <BAM>\n\nBAM compatibility projections retained for differential validation:\n  {0} qc --input <BAM> --format <human|json|samtools-flagstat|samtools-idxstats|samtools-stats>",
+        "Usage:\n  {0} qc --input <BAM|CRAM> --outdir <DIR> [OPTIONS]\n\nRequired release values:\n  --input <PATH>                  Local BAM or CRAM input (may also come from --config)\n  --outdir <PATH>                 New output directory (may also come from --config)\n\nCRAM reference integrity:\n  --reference <FASTA>             Explicit local FASTA required for CRAM; remote lookup is disabled\n\nTargeted v0.3 analysis:\n  --targets <BED>                 Local BED3-BED12 target definition; exact contig names required\n  --near-distance <N>             Symmetric near-target distance in bases (default 250; requires --targets)\n                                  Uses native aligngauge-targeted-v0.3 semantics; no Picard compatibility claim\n\nOptional values:\n  --threads <N>                   Collector/reduction thread limit (collector is deterministic serial)\n  --io-threads <N>                HTSlib I/O workers; 0 or 1 selects serial decoding\n  --memory-limit <SIZE>           B, KiB, MiB, GiB, or TiB (default 4GiB)\n  --coverage-thresholds <LIST>    Comma-separated positive depths (default 1,10,20,30)\n  --config <PATH>                 Strict schema_version=1 config file\n  --log-format <human|json>       Diagnostic error format\n  --quiet                         Suppress routine completion summary\n  --verbose                       Enable verbose mode in resolved provenance\n  --preserve-failed-staging       Preserve clearly incomplete staging on publication failure\n  -h, --help                      Show this help\n\nConfiguration precedence:\n  built-ins < config file < documented ALIGNGAUGE_* environment < CLI\n\nDeferred beyond v0.3:\n  --profile selection, --backend, --cuda-device\n\nLegacy BAM three-counter compatibility probe:\n  {0} qc --input <BAM>\n\nBAM compatibility projections retained for differential validation:\n  {0} qc --input <BAM> --format <human|json|samtools-flagstat|samtools-idxstats|samtools-stats|picard-alignment-summary|picard-insert-size>",
         program.to_string_lossy()
     )
 }
