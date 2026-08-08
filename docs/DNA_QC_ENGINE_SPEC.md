@@ -810,7 +810,9 @@ BAD_CYCLES. Reference-dependent mismatch, error, indel, chimera, strand, clippin
 and pair-alignment metrics are not part of Milestone 11 and shall be absent rather
 than serialized as invented zeros. Sequence bases may be decoded only when this
 explicit profile is selected; existing QC and Samtools-stats plans shall not
-silently acquire sequence materialization cost.
+silently acquire sequence materialization cost. Secondary and supplementary records are
+rejected before alignment-summary category dispatch and therefore contribute neither read
+counts nor `BAD_CYCLES`.
 
 The insert-size profile matches Picard 3.4.0 CollectInsertSizeMetrics defaults at
 ALL_READS: DEVIATIONS=10.0, HISTOGRAM_WIDTH unset, MIN_HISTOGRAM_WIDTH unset,

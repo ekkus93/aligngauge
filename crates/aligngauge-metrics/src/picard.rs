@@ -361,7 +361,7 @@ impl PicardAlignmentSummaryCollector {
     /// # Errors
     /// Returns a typed error for missing planned fields or checked arithmetic failure.
     pub fn observe(&mut self, record: &ValidatedRecord<'_>) -> Result<(), AlignGaugeError> {
-        if record.flags() & FLAG_SECONDARY != 0 {
+        if record.flags() & (FLAG_SECONDARY | FLAG_SUPPLEMENTARY) != 0 {
             return Ok(());
         }
         if record.flags() & FLAG_PAIRED != 0 {

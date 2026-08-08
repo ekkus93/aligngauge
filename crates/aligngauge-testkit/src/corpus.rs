@@ -275,7 +275,12 @@ pub fn generate_corpus(repository_root: &Path) -> Result<()> {
         .into_iter()
         .enumerate()
     {
-        let position = 100 + i32::try_from(index).expect("small fixture index") * 10;
+        let index = i32::try_from(index).map_err(|source| {
+            TestkitError::generation(format!(
+                "Picard alignment fixture index exceeds i32: {source}"
+            ))
+        })?;
+        let position = 100 + index * 10;
         let mut record = RecordSpec::mapped(
             format!("picard-primary-{index}"),
             0,

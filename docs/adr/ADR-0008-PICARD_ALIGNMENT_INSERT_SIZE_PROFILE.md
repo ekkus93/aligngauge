@@ -46,7 +46,7 @@ The category rows follow Picard 3.4.0 exactly:
 - paired inputs emit `FIRST_OF_PAIR`, `SECOND_OF_PAIR`, and `PAIR` when first-of-pair reads exist;
 - unpaired data emit `UNPAIRED`;
 - an empty input emits the Picard empty `UNPAIRED` row semantics;
-- secondary and supplementary records are excluded from the alignment-summary read-count categories according to the pinned collector behavior.
+- secondary and supplementary records are rejected by Picard's top-level alignment-summary collector before category dispatch, so they contribute neither read counts nor `BAD_CYCLES`.
 
 The subset reproduces Picard's default adapter-sequence list and noise-read/no-call cycle semantics. Sequence materialization is permitted only for an explicitly planned Picard alignment-summary analysis; existing v0.1-v0.3 and Samtools-stats plans do not silently gain sequence decoding cost.
 
