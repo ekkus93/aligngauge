@@ -14,7 +14,7 @@
 |---|---|---|---|
 | Samtools stats selected SN/IS sections | exact supported subset | Milestone 10 exact differential evidence | parsed and exact in Milestone 10 |
 | Picard AlignmentSummaryMetrics reference-independent 13-column subset | exact supported differential projection | Milestone 11 exact synthetic + HG002 evidence | **not claimed compatible**; MultiQC directly requires fields outside the M11 subset |
-| Picard InsertSizeMetrics default `ALL_READS` metrics + trimmed histogram | exact supported differential projection | Milestone 11 exact synthetic + HG002 evidence | Milestone 12 requires parsed Picard-vs-AlignGauge data to be byte-identical |
+| Picard InsertSizeMetrics default `ALL_READS` metrics + trimmed histogram | exact supported differential projection | Milestone 11 exact synthetic + HG002 evidence | parsed Picard-vs-AlignGauge data byte-identical in Milestone 12 |
 | Picard WgsMetrics selected default-MultiQC surface | selected candidate, not emitted | blocked on exact overlap correction | discovery/parser fixture only; no compatibility claim |
 | Picard HsMetrics selected capture/coverage surface | selected candidate, not emitted | blocked on exact overlap correction and Picard Hs semantics | discovery/parser fixture only; no compatibility claim |
 | Native `aligngauge-targeted-v0.3` | supported native profile | v0.3 validation evidence | no Picard HsMetrics claim |
@@ -82,24 +82,47 @@ The permanent validator uses real generated output for Picard insert-size compat
 
 1. starts from an exact Picard-vs-AlignGauge insert-size differential pair;
 2. runs the pinned MultiQC container with networking disabled;
-3. requires the Picard module to discover both inputs;
-4. requires the parsed insert-size data files to exist;
-5. byte-compares the parsed reference and AlignGauge data;
-6. separately requires WGS and HsMetrics discovery fixtures to produce their expected parsed data files;
-7. verifies parser-required fields are present;
-8. records `compatibility_claim: false` for both discovery-only surfaces;
-9. fails on any nonzero parser exit or missing expected output.
+3. forces filename-based sample identity with pinned MultiQC's `--fn_as_s_name` option so Picard's embedded `INPUT=` command line cannot create an artificial sample-name mismatch against an AlignGauge projection that correctly does not impersonate a Picard command invocation;
+4. requires the Picard module to discover both inputs;
+5. requires the parsed insert-size data files to exist;
+6. byte-compares the parsed reference and AlignGauge data;
+7. separately requires WGS and HsMetrics discovery fixtures to produce their expected parsed data files;
+8. verifies parser-required fields are present;
+9. records `compatibility_claim: false` for both discovery-only surfaces;
+10. fails on any nonzero parser exit or missing expected output.
 
 There is no `|| true`, warning-only parser path, zero-fill fallback, or success marker written before every assertion succeeds.
 
-## CI evidence
+## Fail-closed evidence
 
-Milestone 12 CI run IDs and exact candidate SHA are recorded here only after the branch validation succeeds. Until then, this section is intentionally pending rather than claiming validation that has not happened.
+The first parser-gate execution deliberately remained red when the parsed Picard and AlignGauge insert-size TSVs differed in sample identity:
 
-- Candidate SHA: **pending**
-- MultiQC Validation (`ci/multiqc`): **pending**
-- Permanent CI: **pending**
-- Other path-triggered permanent validation gates: **pending**
+- MultiQC Validation run `31246661302`
+- job `93076297421`
+- result: failure in `Run pinned MultiQC Picard parser`
+- direct Picard insert-size differential step: success before the parser failure
+
+The failure was not suppressed. Investigation showed that MultiQC extracted the Picard reference sample name from Picard's embedded command line but fell back to the filename for the AlignGauge projection. The validator was then changed to use MultiQC's explicit `--fn_as_s_name` sample-handling mode with identical copied filenames. No metric column, parser assertion, or compatibility boundary was relaxed.
+
+## Successful candidate CI evidence
+
+Candidate SHA `9200358708650a1b0a462f3395ab24c133b3b0b5` passed every path-triggered branch gate:
+
+- MultiQC Validation run `31246815851`, job `93076687337` — success
+- Permanent CI run `31246815856`, job `93076687424` — success
+- Reference Validation run `31246815859`, job `93076687386` — success
+- Samtools Stats Validation run `31246815862`, job `93076687403` — success
+
+The MultiQC job confirms:
+
+- direct Picard 3.4.0 insert-size differential: exact, no tolerance;
+- pinned MultiQC 1.35 version/digest check: success;
+- Picard reference and AlignGauge insert-size parsed data: byte-identical under filename sample identity;
+- WgsMetrics discovery fixture: discovered and parsed with `compatibility_claim: false`;
+- HsMetrics discovery fixture: discovered and parsed with `compatibility_claim: false`;
+- evidence artifact upload: success.
+
+This is branch-candidate evidence. The milestone remains subject to exact evidence-commit and merged-`master` validation before the TODO status is treated as final repository closure.
 
 ## Remaining v0.4 work
 
