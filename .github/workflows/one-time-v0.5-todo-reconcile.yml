@@ -1,0 +1,134 @@
+name: One-time v0.5 TODO reconciler
+
+on:
+  push:
+    branches: [agent/v0.5-production-beta]
+    paths:
+      - ".github/workflows/one-time-v0.5-todo-reconcile.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    name: maintenance/v0.5-todo-reconcile
+    if: github.repository == 'ekkus93/aligngauge'
+    runs-on: ubuntu-24.04
+    env:
+      EXPECTED_PARENT: 0e14af01c2f218aaca371c414133403e8e88c96d
+    steps:
+      - name: Check out exact branch head
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: agent/v0.5-production-beta
+          fetch-depth: 2
+          persist-credentials: true
+
+      - name: Prove helper is immediately after validated evidence head
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD^)" == "$EXPECTED_PARENT" ]]
+          test -z "$(git status --porcelain --untracked-files=all)"
+
+      - name: Reconcile v0.5 checklist exactly
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('docs/DNA_QC_ENGINE_TODO.md')
+          text = path.read_text(encoding='utf-8')
+          old = '''## Milestone 14 — Full-scale HG002 validation
+
+          - [ ] Prepare approximately 30× HG002 WGS with exact manifest.
+          - [ ] Provision sufficient local storage.
+          - [ ] Run pinned reference tools.
+          - [ ] Run AlignGauge streaming CPU.
+          - [ ] Run any released parallel CPU mode.
+          - [ ] Reconcile every claimed metric.
+          - [ ] Repeat enough runs for variance.
+          - [ ] Record wall time, CPU time, peak RSS, bytes read, and output sizes.
+          - [ ] Publish `docs/evidence/V0_5_FULL_HG002_REPORT.md`.
+
+          ## Milestone 15 — Hardening
+
+          - [ ] Parser fuzzing campaign.
+          - [ ] CIGAR fuzzing campaign.
+          - [ ] Output fault injection.
+          - [ ] Sanitizer-compatible native dependency tests where feasible.
+          - [ ] Dependency vulnerability audit.
+          - [ ] License inventory.
+          - [ ] SBOM generation.
+          - [ ] Reproducible-build assessment.
+          - [ ] Signed checksums and release artifacts.
+          - [ ] Upgrade/migration documentation for schemas.
+
+          ### v0.5 release gate
+
+          - [ ] Full-scale report is complete.
+          - [ ] Resource requirements are documented.
+          - [ ] Known limitations are explicit.
+          - [ ] No release-blocking fuzz or security finding remains.
+          - [ ] Permanent CI succeeds on the exact release commit.
+          '''.replace('          ', '')
+          new = '''## Milestone 14 — Full-scale HG002 validation
+
+          **Status:** BLOCKED pending a maintainer environment with the pinned complete 118 GB HG002 source BAM/BAI and sufficient local storage. The whole-genome preparation/campaign machinery is implemented and validated in CI, but no smaller fixture may satisfy these checklist items.
+
+          - [ ] Prepare approximately 30× HG002 WGS with exact manifest.
+          - [ ] Provision sufficient local storage.
+          - [ ] Run pinned reference tools.
+          - [ ] Run AlignGauge streaming CPU.
+          - [ ] Run any released parallel CPU mode.
+          - [ ] Reconcile every claimed metric.
+          - [ ] Repeat enough runs for variance.
+          - [ ] Record wall time, CPU time, peak RSS, bytes read, and output sizes.
+          - [ ] Publish `docs/evidence/V0_5_FULL_HG002_REPORT.md` as COMPLETE from the real full campaign.
+
+          ## Milestone 15 — Hardening
+
+          **Status:** Hardening implementation validated at evidence SHA `0e14af01c2f218aaca371c414133403e8e88c96d`; V0.5 Hardening Validation run `31265637214` and Permanent CI run `31265637151` succeeded. Signed/attested release material remains an exact-release-candidate item.
+
+          - [x] Parser fuzzing campaign.
+          - [x] CIGAR fuzzing campaign.
+          - [x] Output fault injection.
+          - [x] Sanitizer-compatible native dependency tests where feasible.
+          - [x] Dependency vulnerability audit.
+          - [x] License inventory.
+          - [x] SBOM generation.
+          - [x] Reproducible-build assessment.
+          - [ ] Signed checksums and release artifacts.
+          - [x] Upgrade/migration documentation for schemas.
+
+          ### v0.5 release gate
+
+          - [ ] Full-scale report is complete.
+          - [x] Resource requirements are documented.
+          - [x] Known limitations are explicit.
+          - [x] No release-blocking fuzz or security finding remains.
+          - [ ] Permanent CI succeeds on the exact release commit.
+          '''.replace('          ', '')
+          count = text.count(old)
+          if count != 1:
+              raise SystemExit(f'expected exactly one v0.5 TODO block, found {count}')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+          git diff --check
+          grep -F '**Status:** BLOCKED pending a maintainer environment' docs/DNA_QC_ENGINE_TODO.md >/dev/null
+          grep -F -- '- [x] Reproducible-build assessment.' docs/DNA_QC_ENGINE_TODO.md >/dev/null
+          grep -F -- '- [ ] Signed checksums and release artifacts.' docs/DNA_QC_ENGINE_TODO.md >/dev/null
+          grep -F -- '- [ ] Full-scale report is complete.' docs/DNA_QC_ENGINE_TODO.md >/dev/null
+
+      - name: Commit reconciliation and remove helper
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/one-time-v0.5-todo-reconcile.yml
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/DNA_QC_ENGINE_TODO.md
+          git commit -m 'docs: reconcile v0.5 hardening checklist'
+          git push origin HEAD:agent/v0.5-production-beta
