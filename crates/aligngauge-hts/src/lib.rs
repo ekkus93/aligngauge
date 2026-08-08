@@ -4,6 +4,7 @@
 
 mod header;
 mod plan;
+mod raw_header_preflight;
 mod reader;
 mod reference;
 
