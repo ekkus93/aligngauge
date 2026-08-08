@@ -776,6 +776,8 @@ Only implement if measured value justifies complexity. ADR-0010 records that the
 
 ## Milestone 14 — Full-scale HG002 validation
 
+**Status:** BLOCKED pending a maintainer environment with the pinned complete 118 GB HG002 source BAM/BAI and sufficient local storage. The whole-genome preparation/campaign machinery is implemented and validated in CI, but no smaller fixture may satisfy these checklist items.
+
 - [ ] Prepare approximately 30× HG002 WGS with exact manifest.
 - [ ] Provision sufficient local storage.
 - [ ] Run pinned reference tools.
@@ -784,27 +786,29 @@ Only implement if measured value justifies complexity. ADR-0010 records that the
 - [ ] Reconcile every claimed metric.
 - [ ] Repeat enough runs for variance.
 - [ ] Record wall time, CPU time, peak RSS, bytes read, and output sizes.
-- [ ] Publish `docs/evidence/V0_5_FULL_HG002_REPORT.md`.
+- [ ] Publish `docs/evidence/V0_5_FULL_HG002_REPORT.md` as COMPLETE from the real full campaign.
 
 ## Milestone 15 — Hardening
 
-- [ ] Parser fuzzing campaign.
-- [ ] CIGAR fuzzing campaign.
-- [ ] Output fault injection.
-- [ ] Sanitizer-compatible native dependency tests where feasible.
-- [ ] Dependency vulnerability audit.
-- [ ] License inventory.
-- [ ] SBOM generation.
-- [ ] Reproducible-build assessment.
+**Status:** Hardening implementation validated at evidence SHA `0e14af01c2f218aaca371c414133403e8e88c96d`; V0.5 Hardening Validation run `31265637214` and Permanent CI run `31265637151` succeeded. Signed/attested release material remains an exact-release-candidate item.
+
+- [x] Parser fuzzing campaign.
+- [x] CIGAR fuzzing campaign.
+- [x] Output fault injection.
+- [x] Sanitizer-compatible native dependency tests where feasible.
+- [x] Dependency vulnerability audit.
+- [x] License inventory.
+- [x] SBOM generation.
+- [x] Reproducible-build assessment.
 - [ ] Signed checksums and release artifacts.
-- [ ] Upgrade/migration documentation for schemas.
+- [x] Upgrade/migration documentation for schemas.
 
 ### v0.5 release gate
 
 - [ ] Full-scale report is complete.
-- [ ] Resource requirements are documented.
-- [ ] Known limitations are explicit.
-- [ ] No release-blocking fuzz or security finding remains.
+- [x] Resource requirements are documented.
+- [x] Known limitations are explicit.
+- [x] No release-blocking fuzz or security finding remains.
 - [ ] Permanent CI succeeds on the exact release commit.
 
 ---
