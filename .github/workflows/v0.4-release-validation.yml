@@ -299,12 +299,14 @@ jobs:
           python3 - <<'PY'
           import json
           from pathlib import Path
-          report = json.loads(Path('target/v04/picard/multiqc/m12-multiqc-validation-report.json').read_text())
-          assert report['status'] == 'exact'
+          report = json.loads(Path('target/v04/picard/multiqc/report.json').read_text())
+          assert report['status'] == 'exact-supported-surfaces-plus-discovery-only-fixtures'
           assert report['multiqc_version'] == '1.35'
-          assert report['insert_size']['comparison'] == 'byte-identical'
-          assert report['wgs_fixture']['compatibility_claim'] is False
-          assert report['hs_fixture']['compatibility_claim'] is False
+          generated = report['supported_generated_output']['picard_insert_size_3_4_0_all_reads_v1']
+          assert generated['parsed_reference_vs_aligngauge'] == 'byte-identical'
+          discovery = report['discovery_only']
+          assert discovery['picard_wgs_metrics']['compatibility_claim'] is False
+          assert discovery['picard_hs_metrics']['compatibility_claim'] is False
           PY
 
       - name: Write v0.4 executable gate report
@@ -360,7 +362,7 @@ jobs:
             target/v04/samtools/multiqc/report.json
             target/v04/picard/alignment/differential.json
             target/v04/picard/insert/differential.json
-            target/v04/picard/multiqc/m12-multiqc-validation-report.json
+            target/v04/picard/multiqc/report.json
           if-no-files-found: error
           retention-days: 14
 
