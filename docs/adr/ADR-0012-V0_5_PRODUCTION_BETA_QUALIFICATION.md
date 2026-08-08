@@ -69,17 +69,47 @@ Milestone 15 is independently executable in ordinary CI. It includes:
 
 - libFuzzer campaigns for the BED parser and raw BAM CIGAR coverage boundary;
 - deterministic atomic-output fault injection;
-- AddressSanitizer-compatible Rust/native-boundary tests where the toolchain supports them;
+- AddressSanitizer and LeakSanitizer coverage of the Rust/native HTS boundary where the pinned runner supports it;
 - dependency advisory and license checks;
 - deterministic license inventory and CycloneDX SBOM generation;
 - a two-build reproducibility assessment;
 - schema compatibility/migration documentation;
 - release artifact checksums plus cryptographic provenance/signature at publication.
 
-A failed fuzz target, sanitizer failure, unresolved dependency advisory, disallowed/unknown license, SBOM generation failure, reproducibility mismatch, missing release signature/attestation, or release-blocking security finding blocks v0.5. It may not be downgraded to a warning to obtain a release.
+A failed fuzz target, sanitizer failure, release-blocking advisory, disallowed/unknown license, SBOM generation failure, reproducibility mismatch, missing release signature/attestation, or release-blocking security finding blocks v0.5. It may not be downgraded to a warning to obtain a release.
+
+### Audited native ownership shim
+
+Normal AlignGauge crates continue to inherit `unsafe_code = "forbid"`. v0.5 does not relax that application-wide policy.
+
+LeakSanitizer exposed one upstream `rust-htslib` 1.0.1 malformed-header ownership defect: when `sam_hdr_read()` returns null, its BAM reader constructor returns before a high-level `Reader` exists and therefore never closes the already opened `htsFile*`. The committed `truncated_bgzf.bam` fixture reproduces that path.
+
+Because current upstream `rust-htslib` retains the same constructor behavior, AlignGauge isolates the mitigation in one private crate, `aligngauge-hts-ffi`. That crate is the only v0.5 exception to the workspace unsafe-code lint. Its entire purpose is to own the small raw HTSlib header-open boundary behind a safe `preflight_header()` API:
+
+- an `htsFile*` returned by `hts_open()` is immediately owned by an RAII guard;
+- a successful `sam_hdr_read()` result is immediately owned by a header RAII guard;
+- every error path destroys/closes resources already acquired;
+- successful preflight destroys the temporary header and requires `hts_close()` to return success;
+- only after that succeeds does the unsafe-free `aligngauge-hts` crate construct the ordinary high-level reader.
+
+The external dependency versions do not move for this mitigation. `Cargo.lock` adds only the new local workspace package and dependency edge. Permanent LeakSanitizer coverage remains enabled; the mitigation is accepted only if the previously leaking truncated-BGZF path and the complete HTS validation suite are leak-clean.
+
+### Dependency advisory policy
+
+`cargo-deny` remains fail-closed for vulnerability, unsoundness, and other release-blocking advisories. Unknown package sources and licenses outside the committed allowlist are also fatal.
+
+The pinned `rust-htslib` dependency graph contains `custom_derive 0.1.7`, covered by `RUSTSEC-2025-0058`. That advisory is informational and classifies the crate as unmaintained; it does not publish a patched version. The committed policy therefore uses `unmaintained = "workspace"`:
+
+- an unmaintained **direct workspace dependency** is release-blocking;
+- transitive unmaintained maintenance debt remains visible and must be named in release evidence, but is not reclassified as a vulnerability;
+- no advisory ID is blanket-ignored.
+
+Private workspace path dependencies may omit versions (`allow-wildcard-paths = true`); registry and git wildcard dependencies remain denied.
 
 ## Consequences
 
 v0.5 cannot be declared complete from standard GitHub-hosted CI alone. The full ~30× HG002 campaign requires explicitly provisioned storage and a local/maintainer execution environment capable of holding and repeatedly reading the prepared whole-genome BAM.
 
-This is intentional. Resource limitations are evidence boundaries, not reasons to silently replace the required workload with a smaller one.
+The production Rust code remains unsafe-free outside the single audited private FFI ownership shim. Sanitizer coverage is a permanent release gate, not a best-effort diagnostic.
+
+This is intentional. Resource limitations and hardening findings are evidence boundaries, not reasons to silently replace the required workload or suppress a failing control.
