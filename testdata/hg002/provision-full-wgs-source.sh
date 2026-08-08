@@ -16,6 +16,7 @@ EOF
 requested_destination=$1
 
 script_directory=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+repository_root=$(cd -- "$script_directory/../.." && pwd)
 # shellcheck disable=SC1091
 source "$script_directory/full-wgs-v0.5.env"
 
@@ -32,6 +33,13 @@ mkdir -p -- "$parent"
 parent=$(realpath "$parent")
 destination="$parent/$name"
 mkdir -p -- "$destination"
+destination=$(realpath "$destination")
+case "$destination/" in
+  "$repository_root/"*)
+    echo "full HG002 source destination must be outside the repository: $destination" >&2
+    exit 64
+    ;;
+esac
 
 bam_name=$(basename -- "$HG002_SOURCE_URL")
 bai_name=$(basename -- "$HG002_SOURCE_BAI_URL")
@@ -41,6 +49,22 @@ bam_partial="$destination/.${bam_name}.partial"
 bai_partial="$destination/.${bai_name}.partial"
 manifest="$destination/source.manifest"
 success_marker="$destination/_SUCCESS"
+manifest_tmp="$destination/.source.manifest.tmp"
+success_tmp="$destination/._SUCCESS.tmp"
+
+# Resumability is allowed only in a dedicated directory whose contents are
+# completely understood by this provisioner. Never guess around unrelated files.
+shopt -s nullglob dotglob
+for entry in "$destination"/*; do
+  case "$entry" in
+    "$bam"|"$bai"|"$bam_partial"|"$bai_partial"|"$manifest"|"$success_marker"|"$manifest_tmp"|"$success_tmp") ;;
+    *)
+      echo "source destination contains an unexpected entry: $entry" >&2
+      exit 65
+      ;;
+  esac
+done
+shopt -u nullglob dotglob
 
 content_length() {
   local url=$1
@@ -67,7 +91,7 @@ content_length() {
 
 available_bytes() {
   local free_kib
-  free_kib=$(df -Pk "$destination" | awk 'NR == 2 {print $4}')
+  free_kib=$(df -Pk "$destination" | awk 'NR==2 {print $4}')
   [[ "$free_kib" =~ ^[0-9]+$ ]] || {
     echo "could not determine free space for $destination" >&2
     exit 74
@@ -151,19 +175,33 @@ if [[ -f "$success_marker" ]]; then
     echo "completed source directory is missing source.manifest" >&2
     exit 65
   }
+  [[ ! -e "$bam_partial" && ! -e "$bai_partial" && ! -e "$manifest_tmp" && ! -e "$success_tmp" ]] || {
+    echo "completed source directory contains incomplete temporary state" >&2
+    exit 65
+  }
   verify_file "$bam" "$bam_size" "$HG002_SOURCE_BAM_MD5"
   verify_file "$bai" "$bai_size" "$HG002_SOURCE_BAI_MD5"
+  grep -Fx 'schema=aligngauge-hg002-full-wgs-source-v1' "$manifest" >/dev/null
   grep -Fx "profile=$HG002_V05_PROFILE" "$manifest" >/dev/null
+  grep -Fx "source_bam_url=$HG002_SOURCE_URL" "$manifest" >/dev/null
+  grep -Fx "source_bai_url=$HG002_SOURCE_BAI_URL" "$manifest" >/dev/null
+  grep -Fx "source_bam=$bam_name" "$manifest" >/dev/null
+  grep -Fx "source_bai=$bai_name" "$manifest" >/dev/null
   grep -Fx "source_bam_md5=$HG002_SOURCE_BAM_MD5" "$manifest" >/dev/null
   grep -Fx "source_bai_md5=$HG002_SOURCE_BAI_MD5" "$manifest" >/dev/null
   grep -Fx "source_bam_size_bytes=$bam_size" "$manifest" >/dev/null
   grep -Fx "source_bai_size_bytes=$bai_size" "$manifest" >/dev/null
+  grep -Fx "reference_build=$HG002_REFERENCE_BUILD" "$manifest" >/dev/null
   echo "pinned full HG002 source is already provisioned and verified: $destination"
   exit 0
 fi
 
 [[ ! -e "$manifest" ]] || {
   echo "incomplete source directory already contains source.manifest; remove it explicitly before resuming" >&2
+  exit 65
+}
+[[ ! -e "$manifest_tmp" && ! -e "$success_tmp" ]] || {
+  echo "temporary completion metadata already exists; refusing ambiguous state" >&2
   exit 65
 }
 
@@ -181,13 +219,6 @@ download_file \
   "$bam_partial" \
   "$bam_size" \
   "$HG002_SOURCE_BAM_MD5"
-
-manifest_tmp="$destination/.source.manifest.tmp"
-success_tmp="$destination/._SUCCESS.tmp"
-[[ ! -e "$manifest_tmp" && ! -e "$success_tmp" ]] || {
-  echo "temporary completion metadata already exists; refusing ambiguous state" >&2
-  exit 65
-}
 
 cat >"$manifest_tmp" <<EOF
 schema=aligngauge-hg002-full-wgs-source-v1
