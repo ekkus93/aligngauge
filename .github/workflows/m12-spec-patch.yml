@@ -1,0 +1,98 @@
+name: M12 Spec Patch
+
+on:
+  push:
+    branches: [milestone-12-picard-multiqc]
+    paths:
+      - ".github/workflows/m12-spec-patch.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: milestone-12-picard-multiqc
+          persist-credentials: true
+
+      - name: Apply normative Milestone 12 section
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('docs/DNA_QC_ENGINE_SPEC.md')
+          text = path.read_text()
+          heading = '### 12.10 v0.4 Picard WGS/hybrid-selection and MultiQC boundary'
+          if heading not in text:
+              marker = '\n## 13. Architecture\n'
+              if text.count(marker) != 1:
+                  raise SystemExit('expected exactly one Architecture marker')
+              section = r'''
+
+### 12.10 v0.4 Picard WGS/hybrid-selection and MultiQC boundary
+
+Milestone 12 pins the first candidate Picard WGS and hybrid-selection surfaces
+before they are implemented. Picard 3.4.0 remains the semantic reference and
+MultiQC 1.35 remains the parser/consumer target. ADR-0009 is normative for the
+field lists and validation boundary.
+
+The selected WGS candidate covers genome territory, mean/standard-deviation/median
+coverage, the default 30X threshold fraction, MAPQ/duplicate/unpaired/base-quality/
+overlap/capping exclusion fractions, and the high-quality coverage histogram used
+by the pinned MultiQC WGS module. The selected HsMetrics candidate covers bait and
+target territory, PF read/base accounting, bait/near/off-target placement, usable
+base fractions, enrichment, mean/median/maximum target coverage, zero-coverage
+target fraction, Picard fold-80, and the selected 1X/2X/10X/20X/30X/40X/50X/100X
+target thresholds. ADR-0009 explicitly names excluded WGS/Hs fields.
+
+These selected surfaces are not emitted by Milestone 12. Picard 3.4.0 WGS and
+HsMetrics strict coverage depends on overlapping-mate removal, and HsMetrics uses
+its own Picard filtering/target semantics. Exact overlap correction is Milestone
+13. Until those semantics are implemented and proven, AlignGauge shall not expose
+Picard WGS/Hs compatibility formats, shall not copy native coverage/targeted values
+under Picard names, and shall not zero-fill unavailable Picard fields.
+
+`target_uniformity_penalty_80` remains the native v0.3 metric defined in section
+12.7. It shall never be serialized as Picard `FOLD_80_BASE_PENALTY`. The Picard
+field becomes available only after the pinned Picard Hs filtering, overlap,
+non-zero-coverage-target, and denominator behavior is reproduced exactly and the
+field passes direct differential and MultiQC validation. There is no fallback from
+Picard fold-80 to the native metric.
+
+MultiQC compatibility evidence is separated from parser discovery. The exact
+Picard 3.4.0 default `ALL_READS` insert-size projection from section 12.9 is the
+positive generated-output parser contract: pinned MultiQC 1.35 must parse both
+Picard reference and AlignGauge text and their parsed data must be byte-identical.
+Static WGS/Hs files under `tools/reference/multiqc/fixtures/` are discovery-only
+fixtures that exercise pinned MultiQC module discovery and parser-required columns;
+they are not AlignGauge output and carry no numerical compatibility claim.
+
+The section 12.9 alignment-summary subset remains an exact Picard differential
+profile but is not a MultiQC 1.35 compatibility profile. MultiQC's Picard alignment
+plot path directly requires `PF_READS_ALIGNED` and `PF_ALIGNED_BASES`, which are
+reference-dependent and intentionally outside the M11 13-column subset. Those
+fields remain absent rather than invented, zero-filled, or approximated.
+
+The permanent Milestone 12 parser gate shall use the immutable MultiQC image,
+disable container networking during parsing, require expected parsed data files
+and fields, byte-compare supported parsed reference/AlignGauge output, and fail on
+all parser/version/discovery errors. Parser failures shall not be converted into
+warnings or best-effort success.
+'''
+              text = text.replace(marker, section + marker)
+              path.write_text(text)
+          PY
+
+          rm .github/workflows/m12-spec-patch.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/DNA_QC_ENGINE_SPEC.md .github/workflows/m12-spec-patch.yml
+          git diff --cached --check
+          git commit -m 'docs: define Milestone 12 compatibility boundary'
+          git push origin HEAD:milestone-12-picard-multiqc
