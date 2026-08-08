@@ -104,7 +104,7 @@ The first parser-gate execution deliberately remained red when the parsed Picard
 
 The failure was not suppressed. Investigation showed that MultiQC extracted the Picard reference sample name from Picard's embedded command line but fell back to the filename for the AlignGauge projection. The validator was then changed to use MultiQC's explicit `--fn_as_s_name` sample-handling mode with identical copied filenames. No metric column, parser assertion, or compatibility boundary was relaxed.
 
-## Successful candidate CI evidence
+## Successful implementation candidate
 
 Candidate SHA `9200358708650a1b0a462f3395ab24c133b3b0b5` passed every path-triggered branch gate:
 
@@ -122,7 +122,16 @@ The MultiQC job confirms:
 - HsMetrics discovery fixture: discovered and parsed with `compatibility_claim: false`;
 - evidence artifact upload: success.
 
-This is branch-candidate evidence. The milestone remains subject to exact evidence-commit and merged-`master` validation before the TODO status is treated as final repository closure.
+## Validated evidence SHA
+
+Evidence SHA `5b7f6d15970918862d1006ea4c6add6937479ea6` also passed every path-triggered branch gate after the evidence was committed:
+
+- MultiQC Validation run `31246937565`, job `93076990568` — success
+- Permanent CI run `31246937609`, job `93076990623` — success
+- Reference Validation run `31246937557`, job `93076990412` — success
+- Samtools Stats Validation run `31246937566`, job `93076990392` — success
+
+That separates implementation proof from evidence-commit proof. The remaining repository-closure step is to mark the TODO, validate that closure commit, merge PR #6, and validate the merged `master` SHA. None of those steps changes the selected WGS/Hs compatibility semantics.
 
 ## Remaining v0.4 work
 
