@@ -1,0 +1,50 @@
+name: M11 Supplementary Semantics Fix
+
+on:
+  push:
+    branches:
+      - milestone-11-picard-profiles
+    paths:
+      - .github/workflows/m11-supplementary-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply guarded source and normative-doc fix
+        run: python3 scripts/m11_supplementary_fix.py
+      - name: Format
+        run: cargo fmt --all
+      - name: Check
+        run: cargo check --workspace --all-features --locked
+      - name: Strict Clippy
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+      - name: Test workspace
+        run: cargo test --workspace --all-features --locked
+      - name: Verify restricted diff
+        run: |
+          set -euo pipefail
+          git diff --check
+          mapfile -t changed < <(git diff --name-only)
+          for path in "${changed[@]}"; do
+            case "$path" in
+              crates/aligngauge-metrics/src/picard.rs|docs/adr/ADR-0008-PICARD_ALIGNMENT_INSERT_SIZE_PROFILE.md|docs/DNA_QC_ENGINE_SPEC.md)
+                ;;
+              *) echo "unexpected fix path: $path" >&2; exit 1 ;;
+            esac
+          done
+      - name: Commit validated fix and remove temporary machinery
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add crates/aligngauge-metrics/src/picard.rs docs/adr/ADR-0008-PICARD_ALIGNMENT_INSERT_SIZE_PROFILE.md docs/DNA_QC_ENGINE_SPEC.md
+          git rm .github/workflows/m11-supplementary-fix.yml scripts/m11_supplementary_fix.py
+          git commit -m 'fix: match Picard supplementary alignment exclusion'
+          git push origin HEAD:milestone-11-picard-profiles
