@@ -8,22 +8,25 @@ AlignGauge analyzes existing aligned sequencing data. It is not software for con
 
 ## Status
 
-AlignGauge `v0.3.0` is the latest published release. The v0.3 tag is pinned by release policy to exact release SHA `eccd45157d34ada00a3403a2b24d606956878b62` (GitHub release ID `366930828`). That exact release SHA passed Permanent CI, Full Runtime Validation, Reference Validation, Targeted Validation, and HG002 Preparation Validation before publication. The v0.2 tag remains pinned by release policy to exact release/evidence SHA `ce3aa273da40c679c292e588584781ab1df241de`; the earlier v0.1 tag remains pinned to validated evidence SHA `9423a9d3496459fdbceb2e7bc5178b4b3100357c` (product implementation SHA `f93001cf22a2315f01e6b857c295720d99e392ca`).
+AlignGauge `v0.3.0` remains the latest published release while the `v0.4.0` release candidate is being validated. The v0.3 tag is pinned by release policy to exact release SHA `eccd45157d34ada00a3403a2b24d606956878b62` (GitHub release ID `366930828`). That exact release SHA passed Permanent CI, Full Runtime Validation, Reference Validation, Targeted Validation, and HG002 Preparation Validation before publication. The v0.2 tag remains pinned by release policy to exact release/evidence SHA `ce3aa273da40c679c292e588584781ab1df241de`; the earlier v0.1 tag remains pinned to validated evidence SHA `9423a9d3496459fdbceb2e7bc5178b4b3100357c` (product implementation SHA `f93001cf22a2315f01e6b857c295720d99e392ca`).
 
 - v0.1: local coordinate-sorted BAM, CPU counters, exact canonical coverage, JSON/provenance, and atomic output publication.
 - v0.2: adds CRAM analysis with an explicit local FASTA, fail-closed SN/LN/M5 validation, actual local-reference provenance, BAM/CRAM canonical equivalence, and production HTSlib builds with remote reference transports excluded.
 - v0.3: adds fail-closed BED3–BED12 target parsing, deterministic target normalization, `--targets <BED>`, `--near-distance <N>` (default 250), exact on/near/off-target partitioning, per-source target depth/dropout reporting, native target enrichment, and `target_uniformity_penalty_80`.
+- v0.4 release candidate: adds the exact `samtools-stats-1.24-multiqc-1.35` compatibility profile, the exact Picard 3.4.0 13-field reference-independent AlignmentSummary subset, the exact Picard 3.4.0 default `ALL_READS` InsertSize profile, pinned MultiQC 1.35 generated-output validation for the supported parser surfaces, and an explicit release gate proving serial versus released HTSlib I/O-thread canonical equivalence.
 - Targeted analysis reuses the exact canonical chunked coverage sweep; counters, whole-genome coverage, and targeted reductions remain one alignment traversal.
-- v0.3 makes no Picard `CollectHsMetrics`, `FOLD_ENRICHMENT`, or `FOLD_80_BASE_PENALTY` compatibility claim. Comparable target-depth primitives are instead validated exactly against pinned Samtools 1.24 under network isolation.
+- Native targeted metrics do not claim Picard `CollectHsMetrics`, `FOLD_ENRICHMENT`, or `FOLD_80_BASE_PENALTY` compatibility. Comparable target-depth primitives are independently validated against pinned Samtools 1.24.
+- Picard WgsMetrics and HsMetrics remain explicitly deferred from v0.4. Milestone 13 proves their exact overlap primitives against pinned Picard 3.4.0 / HTSJDK 4.2.0, but complete WGS/Hs record filtering, reductions, renderers, full metric differentials, and generated-output MultiQC proof have not been promoted to release profiles.
+- Native `target_uniformity_penalty_80` remains distinct from Picard `FOLD_80_BASE_PENALTY`; there is no alias, copied value, or zero-filled fallback.
 - CRAM reference mismatch or absence is fatal; AlignGauge does not silently fall back to inherited local or remote providers.
 - Target BED contig/coordinate mismatch is fatal; AlignGauge does not infer chromosome aliases, silently drop unknown targets, or repair invalid source intervals.
 - Standalone `inspect` and `validate-reference` commands remain deferred until separately specified.
-- Milestone 10 is accepted: the pinned Samtools 1.24 `SN`/`IS` subset is exact and pinned MultiQC 1.35 consumes the generated surface equivalently.
-- Milestone 11 is accepted: the pinned Picard 3.4.0 reference-independent alignment-summary subset and default `ALL_READS` insert-size profile match deterministic fixtures and HG002 exactly with no tolerance. Reference-dependent Picard alignment-summary fields remain unsupported rather than zero-filled.
-- Milestone 12 — Picard WGS/hybrid-selection and MultiQC validation — is next. `v0.4.0` has not been released.
-- v0.4+ compatibility expansion and full-scale production qualification are not part of the v0.3 release boundary.
+- Collector execution remains deterministic and serial. `--threads >1` is accepted for configuration/provenance compatibility but emits `collector_threads_serial_v0_1` rather than implying parallel collectors.
+- Released bounded concurrency is HTSlib reader/decompression concurrency through `--io-threads`; the v0.4 release gate requires byte-identical canonical summaries between serial decoding and `--io-threads 2` for whole-input and targeted paths.
+- Indexed reference-partition execution is not admitted for v0.4.
 - GPU/backend selection remains research-only until end-to-end benchmarks justify it.
-- Collector execution remains deterministic and serial; `--threads >1` is accepted for configuration/provenance compatibility but emits an explicit warning rather than silently implying parallel collectors.
+
+No `v0.4.0` tag or GitHub release is created until the exact release commit has passed Permanent CI and the permanent v0.4 release-validation gate. The tag is evidence of a validated commit, not a mechanism for creating one.
 
 ## Development
 
@@ -43,6 +46,10 @@ RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features --no-deps
 - [v0.1.0 release](https://github.com/ekkus93/aligngauge/releases/tag/v0.1.0)
 - [Product and architecture specification](docs/DNA_QC_ENGINE_SPEC.md)
 - [Implementation TODO](docs/DNA_QC_ENGINE_TODO.md)
+- [v0.4 compatibility report](docs/evidence/V0_4_COMPATIBILITY_REPORT.md)
+- [v0.4 release validation evidence](docs/evidence/V0_4_RELEASE_VALIDATION.md)
+- [v0.4 release-scope ADR](docs/adr/ADR-0011-V0_4_RELEASE_SCOPE.md)
+- [Milestone 13 exact-overlap evidence](docs/evidence/M13_EXACT_OVERLAP.md)
 - [v0.3 targeted validation evidence](docs/evidence/V0_3_TARGETED_VALIDATION.md)
 - [v0.2 CRAM validation evidence](docs/evidence/V0_2_CRAM_VALIDATION.md)
 - [v0.1 validation report](docs/evidence/V0_1_VALIDATION_REPORT.md)

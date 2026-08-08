@@ -1,180 +1,241 @@
 # AlignGauge v0.4 compatibility report
 
-**Report state:** Milestones 12 and 13 compatibility-boundary evidence. This document is not a `v0.4.0` release declaration; the separate v0.4 release gate remains outstanding.
+**Report state:** reconciled v0.4 release-candidate compatibility boundary. This document does not itself create the `v0.4.0` tag or GitHub release.
 
-**Reference profiles**
+**Reference implementations**
 
-- Samtools: 1.24
-- Picard: 3.4.0
-- HTSJDK: 4.2.0 as bundled by pinned Picard 3.4.0
-- MultiQC: 1.35, immutable image from `tools/reference/multiqc/image.lock`
+- Samtools 1.24
+- Picard 3.4.0
+- HTSJDK 4.2.0 as bundled by pinned Picard 3.4.0
+- MultiQC 1.35 from the immutable image in `tools/reference/multiqc/image.lock`
 
-## Compatibility matrix
+**Release-scope authority:** ADR-0011.
 
-| Surface | AlignGauge status | Numerical evidence | MultiQC 1.35 status |
+## v0.4 compatibility matrix
+
+| Surface | v0.4 disposition | Direct numerical evidence | MultiQC 1.35 disposition |
 |---|---|---|---|
-| Samtools stats selected SN/IS sections | exact supported subset | Milestone 10 exact differential evidence | parsed and exact in Milestone 10 |
-| Picard AlignmentSummaryMetrics reference-independent 13-column subset | exact supported differential projection | Milestone 11 exact synthetic + HG002 evidence | **not claimed compatible**; MultiQC directly requires fields outside the M11 subset |
-| Picard InsertSizeMetrics default `ALL_READS` metrics + trimmed histogram | exact supported differential projection | Milestone 11 exact synthetic + HG002 evidence | parsed Picard-vs-AlignGauge data byte-identical in Milestone 12 |
-| Picard WgsMetrics selected default-MultiQC surface | selected candidate, not emitted | exact overlap primitive validated in Milestone 13; complete WGS collector/output differential still outstanding | discovery/parser fixture only; no compatibility claim |
-| Picard HsMetrics selected capture/coverage surface | selected candidate, not emitted | exact pinned Hs overlap primitive validated in Milestone 13; complete Hs collector/output differential still outstanding | discovery/parser fixture only; no compatibility claim |
-| Native `aligngauge-targeted-v0.3` | supported native profile | v0.3 validation evidence | no Picard HsMetrics claim |
+| `samtools-stats-1.24-multiqc-1.35` | released exact profile | exact Samtools 1.24 differential | generated output parsed; parsed data byte-identical |
+| `picard-alignment-summary-3.4.0-all-reads-subset-v1` | released exact 13-field subset | exact Picard 3.4.0 differential | **not claimed compatible**; parser requires reference-dependent columns outside the released subset |
+| `picard-insert-size-3.4.0-all-reads-v1` | released exact profile | exact Picard 3.4.0 differential | generated output parsed; parsed data byte-identical |
+| Picard WgsMetrics candidate | **deferred; not emitted** | M13 exact overlap primitive only; complete WGS differential absent | discovery-only fixture; `compatibility_claim: false` |
+| Picard HsMetrics candidate | **deferred; not emitted** | M13 exact overlap primitive only; complete Hs differential absent | discovery-only fixture; `compatibility_claim: false` |
+| native `aligngauge-targeted-v0.3` | supported native profile | v0.3 native validation | no Picard HsMetrics claim |
+| indexed reference-partition execution | unsupported | not admitted by ADR-0010 | not applicable |
 
-## Milestone 10 carry-forward
+Existing `samtools-flagstat` and `samtools-idxstats` compatibility projections from earlier releases remain available and are not widened by v0.4.
 
-Milestone 10 established the exact Samtools 1.24 compatibility subset consumed by the pinned MultiQC 1.35 Samtools parser. Its network-isolated parser validation compares MultiQC's parsed data from Samtools reference text and AlignGauge text rather than treating parser exit alone as sufficient evidence.
+## Final field reconciliation: Samtools Stats
 
-That evidence remains authoritative and is not duplicated under a new profile name.
+The released Samtools profile is exactly the ordinary, non-target Samtools 1.24 `SN` section plus the default `IS` section frozen by ADR-0007. The v0.4 release validator generates the pinned Samtools reference and AlignGauge projection from the same committed input and requires exact comparison with no blanket tolerance.
 
-## Milestone 11 carry-forward
+Every claimed ordinary `SN` row is reconciled below.
 
-Milestone 11 established two Picard 3.4.0 profiles:
+| # | Samtools 1.24 field | v0.4 status |
+|---:|---|---|
+| 1 | `raw total sequences` | exact |
+| 2 | `filtered sequences` | exact |
+| 3 | `sequences` | exact |
+| 4 | `is sorted` | exact |
+| 5 | `1st fragments` | exact |
+| 6 | `last fragments` | exact |
+| 7 | `reads mapped` | exact |
+| 8 | `reads mapped and paired` | exact |
+| 9 | `reads unmapped` | exact |
+| 10 | `reads properly paired` | exact |
+| 11 | `reads paired` | exact |
+| 12 | `reads duplicated` | exact |
+| 13 | `reads MQ0` | exact |
+| 14 | `reads QC failed` | exact |
+| 15 | `non-primary alignments` | exact |
+| 16 | `supplementary alignments` | exact |
+| 17 | `total length` | exact |
+| 18 | `total first fragment length` | exact |
+| 19 | `total last fragment length` | exact |
+| 20 | `bases mapped` | exact |
+| 21 | `bases mapped (cigar)` | exact |
+| 22 | `bases trimmed` | exact |
+| 23 | `bases duplicated` | exact |
+| 24 | `mismatches` | exact |
+| 25 | `error rate` | exact pinned textual semantics |
+| 26 | `average length` | exact |
+| 27 | `average first fragment length` | exact |
+| 28 | `average last fragment length` | exact |
+| 29 | `maximum length` | exact |
+| 30 | `maximum first fragment length` | exact |
+| 31 | `maximum last fragment length` | exact |
+| 32 | `average quality` | exact |
+| 33 | `insert size average` | exact |
+| 34 | `insert size standard deviation` | exact |
+| 35 | `inward oriented pairs` | exact |
+| 36 | `outward oriented pairs` | exact |
+| 37 | `pairs with other orientation` | exact |
+| 38 | `pairs on different chromosomes` | exact |
+| 39 | `percentage of properly paired reads (%)` | exact pinned textual semantics |
 
-1. `picard-alignment-summary-3.4.0-all-reads-subset-v1`
-2. `picard-insert-size-3.4.0-all-reads-v1`
+### Samtools `IS` section
 
-The alignment-summary profile is a deliberately reference-independent 13-column exact subset. It must remain that subset. Pinned MultiQC 1.35 directly indexes `PF_READS_ALIGNED` and `PF_ALIGNED_BASES` in its Picard alignment plot path, and those reference-dependent fields are outside the M11 compatibility claim. Milestone 12 therefore records the output as **not MultiQC-compatible** rather than adding fake zeros or approximate values.
+The released `IS` surface uses Samtools 1.24 default insert-size behavior from ADR-0007, including the 8000 maximum, orientation classification, pair-observation halving, 0.99 main-bulk rule, mean/standard-deviation calculation, and ordinary non-sparse rendering.
 
-The insert-size profile already contains the default `ALL_READS` fields and histogram required by MultiQC. Milestone 12 adds an end-to-end parser gate that requires the parsed MultiQC data produced from Picard reference output and AlignGauge output to be byte-identical.
+The complete supported `IS` output is directly compared against pinned Samtools 1.24. MultiQC's consumed `insert size` and `pairs total` data are also parsed from both reference and AlignGauge text and required to be byte-identical.
 
-## Selected Picard WGS surface
+### Explicitly unsupported Samtools Stats surfaces
 
-ADR-0009 selects the first WGS compatibility candidate around the default MultiQC 1.35 presentation:
+v0.4 makes no compatibility claim for the sections excluded by ADR-0007, including `CHK`, quality-cycle tables, GC/read-length/mapping-quality/indel/coverage/reference-GC/barcode sections, target-region-only summary extensions, split-by-tag output, or non-default filter/region profiles. Absence is intentional; partial rows are not emitted under the released profile.
 
-- genome territory;
-- mean, standard-deviation, and median coverage;
-- default 30X threshold fraction;
-- MAPQ, duplicate, unpaired, base-quality, overlap, and cap exclusion fractions;
-- high-quality coverage histogram.
+## Final field reconciliation: Picard AlignmentSummaryMetrics
 
-Milestone 13 closes the earlier overlap-design gap with the exact named policy `picard-wgs-3.4.0-default-overlap-v1`. The policy matches the pinned per-locus ordering: base-quality/no-call rejection occurs before raw-query-name de-duplication, secondary records do not participate, supplementary records remain eligible when they survive the other Picard filters, and repeated eligible query names at a locus become overlap exclusions.
+The released alignment-summary profile is exactly the Picard 3.4.0 reference-independent subset frozen by ADR-0008.
 
-The WGS surface is still **not emitted**. Exact overlap is a necessary primitive, not a substitute for proving the complete Picard WGS record filtering, depth reduction, cap semantics, metric denominators, renderer, and final differential output.
+| # | Picard field | v0.4 status |
+|---:|---|---|
+| 1 | `CATEGORY` | exact |
+| 2 | `TOTAL_READS` | exact |
+| 3 | `PF_READS` | exact |
+| 4 | `PCT_PF_READS` | exact |
+| 5 | `PF_NOISE_READS` | exact |
+| 6 | `PCT_ADAPTER` | exact |
+| 7 | `MEAN_READ_LENGTH` | exact |
+| 8 | `SD_READ_LENGTH` | exact |
+| 9 | `MEDIAN_READ_LENGTH` | exact |
+| 10 | `MAD_READ_LENGTH` | exact |
+| 11 | `MIN_READ_LENGTH` | exact |
+| 12 | `MAX_READ_LENGTH` | exact |
+| 13 | `BAD_CYCLES` | exact |
 
-## Selected Picard hybrid-selection surface
+Category-row behavior, secondary/supplementary exclusion, Picard default adapter matching, no-call cycle semantics, and empty/unpaired behavior are part of the direct Picard differential contract.
 
-ADR-0009 selects the first HsMetrics compatibility candidate around territory, PF accounting, bait/target placement, enrichment, usable-base fractions, target-depth statistics, fold-80, and the default target coverage thresholds used by MultiQC.
+Reference-dependent alignment/mismatch/indel/error, strand-balance, chimera, pair-alignment, clipping, `PF_READS_ALIGNED`, `PF_ALIGNED_BASES`, and other fields outside the 13-field profile remain unsupported and absent. They are never serialized as fake zeroes.
 
-The initial profile excludes GC/AT dropout, heterozygous-SNP sensitivity, library-size estimation, `HS_PENALTY_*`, sidecar coverage files, and non-default accumulation levels.
+Because pinned MultiQC 1.35 directly requires reference-dependent columns outside this profile, v0.4 does **not** claim MultiQC compatibility for the AlignmentSummary subset. Direct Picard exactness remains the release claim.
 
-Milestone 13 closes the overlap-design gap with `picard-hs-3.4.0-default-overlap-v1`, reproducing pinned HTSJDK 4.2.0 `SAMUtils.getNumOverlappingAlignedBasesToClip` behavior. That helper is record-local; AlignGauge therefore does not invent a mate cache or template-reconstruction algorithm for Hs overlap.
+## Final field reconciliation: Picard InsertSizeMetrics
 
-The HsMetrics surface is still **not emitted**. The exact targeted Picard filtering, denominator, bait/target accounting, fold-80, complete metric reduction, renderer, and differential output remain release-gate work.
+The released profile is Picard 3.4.0 default `ALL_READS` behavior with `DEVIATIONS=10.0`, default histogram width, Java-float `MINIMUM_PCT=0.05f` semantics, duplicates excluded, and no PDF chart claim.
 
-## Fold-80 reconciliation
+Every emitted orientation row reconciles these fields:
 
-The two names remain intentionally different metrics:
+| Picard field | v0.4 status |
+|---|---|
+| `READ_PAIRS` | exact |
+| `PAIR_ORIENTATION` | exact |
+| `MEDIAN_INSERT_SIZE` | exact |
+| `MODE_INSERT_SIZE` | exact |
+| `MEDIAN_ABSOLUTE_DEVIATION` | exact |
+| `MIN_INSERT_SIZE` | exact |
+| `MAX_INSERT_SIZE` | exact |
+| `MEAN_INSERT_SIZE` | exact after Picard MAD trimming |
+| `STANDARD_DEVIATION` | exact after Picard MAD trimming |
+| `WIDTH_OF_10_PERCENT` | exact |
+| `WIDTH_OF_20_PERCENT` | exact |
+| `WIDTH_OF_30_PERCENT` | exact |
+| `WIDTH_OF_40_PERCENT` | exact |
+| `WIDTH_OF_50_PERCENT` | exact |
+| `WIDTH_OF_60_PERCENT` | exact |
+| `WIDTH_OF_70_PERCENT` | exact |
+| `WIDTH_OF_80_PERCENT` | exact |
+| `WIDTH_OF_90_PERCENT` | exact |
+| `WIDTH_OF_95_PERCENT` | exact |
+| `WIDTH_OF_99_PERCENT` | exact |
 
-- AlignGauge native: `target_uniformity_penalty_80`
-- Picard compatibility: `FOLD_80_BASE_PENALTY`
+The complete Picard-trimmed insert-size histogram table is also part of the exact direct comparison. FR/RF/TANDEM orientation, second-of-pair observation selection, secondary/supplementary/duplicate exclusion, nonzero TLEN requirement, checked absolute TLEN, the promoted Java binary32 `MINIMUM_PCT` boundary, median/MAD trim width, HTSJDK histogram tie behavior, and decimal rendering are covered by ADR-0008 and its differential evidence.
 
-The native metric remains defined over the full normalized target territory including zero-depth bases. It is unavailable when its nearest-rank 20th-percentile denominator is zero.
+Pinned MultiQC 1.35 independently parses the generated Picard reference and AlignGauge outputs. The parsed Picard InsertSize data are required to be byte-identical after explicit filename-based sample identity normalization; parser exit alone is insufficient.
 
-Picard documents `FOLD_80_BASE_PENALTY` in terms of non-zero-coverage targets and computes it after the pinned Hs filtering/overlap behavior. Milestone 13 does not change the Milestone 12 rule: the native value must never be relabeled as Picard fold-80. The Picard field remains absent until a complete exact HsMetrics collector passes differential validation.
+PDF chart generation is outside the compatibility profile.
 
-## MultiQC 1.35 executable validation
+## WGS and HsMetrics disposition
 
-Milestone 12 added:
+ADR-0009 selected future candidate surfaces; M13 then supplied and differentially proved exact overlap primitives. Neither event makes a complete WGS or HsMetrics collector exist.
 
-- `tools/reference/multiqc/fixtures/picard-wgs-discovery.metrics.txt`
-- `tools/reference/multiqc/fixtures/picard-hs-discovery.metrics.txt`
-- `tools/reference/multiqc/validate-picard.sh`
-- `.github/workflows/multiqc-validation.yml`
+### Picard WgsMetrics
 
-The two static WGS/Hs files remain explicitly **discovery-only fixtures**. They exercise the exact pinned upstream file discovery and parser-required field contract but are not generated by AlignGauge and are not numerical compatibility evidence.
+The candidate remains **not emitted in v0.4**. The CLI does not expose `picard-wgs`.
 
-The permanent validator uses real generated output for Picard insert-size compatibility. It:
+M13 proves `picard-wgs-3.4.0-default-overlap-v1`, including the pinned per-locus ordering, base-quality/no-call-before-overlap behavior, raw query-name identity, secondary/supplementary boundary, hard memory budget, and pinned locus accumulation cap. Complete WGS filtering, depth reduction, capping, exclusion denominators, histogram, renderer, direct metric differential, and generated-output MultiQC proof remain absent.
 
-1. starts from an exact Picard-vs-AlignGauge insert-size differential pair;
-2. runs the pinned MultiQC container with networking disabled;
-3. forces filename-based sample identity with pinned MultiQC's `--fn_as_s_name` option so Picard's embedded `INPUT=` command line cannot create an artificial sample-name mismatch against an AlignGauge projection that correctly does not impersonate a Picard command invocation;
-4. requires the Picard module to discover both inputs;
-5. requires the parsed insert-size data files to exist;
-6. byte-compares the parsed reference and AlignGauge data;
-7. separately requires WGS and HsMetrics discovery fixtures to produce their expected parsed data files;
-8. verifies parser-required fields are present;
-9. records `compatibility_claim: false` for both discovery-only surfaces;
-10. fails on any nonzero parser exit or missing expected output.
+Therefore no WGS candidate field is a v0.4 compatibility claim.
 
-There is no `|| true`, warning-only parser path, zero-fill fallback, or success marker written before every assertion succeeds.
+### Picard HsMetrics
 
-## Milestone 12 fail-closed parser evidence
+The candidate remains **not emitted in v0.4**. The CLI does not expose `picard-hs-metrics`.
 
-The first parser-gate execution deliberately remained red when the parsed Picard and AlignGauge insert-size TSVs differed in sample identity:
+M13 proves `picard-hs-3.4.0-default-overlap-v1` against pinned HTSJDK 4.2.0. Complete Picard PF filtering, bait/target placement, denominator semantics, enrichment, usable-base fractions, depth reductions, renderer, and direct metric differential remain absent.
 
-- MultiQC Validation run `31246661302`
-- job `93076297421`
-- result: failure in `Run pinned MultiQC Picard parser`
-- direct Picard insert-size differential step: success before the parser failure
+The native `target_uniformity_penalty_80` is still distinct from Picard `FOLD_80_BASE_PENALTY`. The native value is not relabeled or copied into a Picard field.
 
-The failure was not suppressed. Investigation showed that MultiQC extracted the Picard reference sample name from Picard's embedded command line but fell back to the filename for the AlignGauge projection. The validator was then changed to use MultiQC's explicit `--fn_as_s_name` sample-handling mode with identical copied filenames. No metric column, parser assertion, or compatibility boundary was relaxed.
+The WGS and Hs files under `tools/reference/multiqc/fixtures/` are discovery-only parser fixtures. The permanent machine-readable MultiQC report records `compatibility_claim: false` for both.
 
-## Milestone 12 validated closure
+## Released execution modes
 
-Milestone 12's merged implementation and evidence remain recorded by the following master history:
+v0.4 has one authoritative deterministic collector/reduction path. Collector execution remains serial.
 
-- implementation candidate `9200358708650a1b0a462f3395ab24c133b3b0b5` — path-triggered gates green;
-- evidence SHA `5b7f6d15970918862d1006ea4c6add6937479ea6` — path-triggered gates green;
-- TODO-closure SHA `0e81a63d06a524f58667e10d0bc3fa8c44999197` — full seven-gate PR suite green;
-- PR #6 merge SHA `733e052534ec9fc2fe6a4dd2b6d7f790f8e2a5c7` — all eight triggered master workflows green.
+`--threads > 1` is a configured resource value, not an implemented parallel collector. A v0.4 release-gate run with `--threads 2` must continue to record `collector_threads_used = 1` and emit `collector_threads_serial_v0_1`.
 
-The final Milestone 12 documentation closeout is commit `e0e8c0e0fa71815409d437db098e79dd4f58d298`, whose Permanent CI, Reference Validation, and MultiQC Validation workflows all succeeded.
+Released bounded concurrency is HTSlib reader/decompression concurrency through `--io-threads` while preserving one logical ordered record stream.
 
-## Milestone 13 exact-overlap architecture
+The v0.4 candidate proves both:
 
-ADR-0010 freezes two different exact profiles rather than a generic clipping switch:
+- whole-input serial (`--io-threads 0`, effective reader threads 1) vs `--io-threads 2` canonical `summary.json`: **byte-identical**;
+- targeted serial vs `--io-threads 2` canonical `summary.json`: **byte-identical**.
 
-- `picard-wgs-3.4.0-default-overlap-v1`
-- `picard-hs-3.4.0-default-overlap-v1`
+Provenance is intentionally not byte-identical because it truthfully records configured/effective I/O-thread settings and timing values.
 
-The only released exact-overlap execution mode is:
+Indexed reference-partition execution remains unsupported by ADR-0010 and is not a released mode.
 
-`streaming-coordinate-order-v1`
+## Pinned MultiQC generated-output proof
 
-WGS exact state is bounded and fail-closed. It keeps raw query-name identity without lossy normalization or collision-prone hash-only storage, evicts state when future coordinate-sorted records can no longer overlap it, and fails with `resource_limit` rather than dropping or approximating state. The pinned `LOCUS_ACCUMULATION_CAP=100000` is also treated as a hard compatibility boundary.
+v0.4 claims MultiQC 1.35 compatibility only where generated AlignGauge output has been independently parsed and compared to parsed reference output:
 
-Hs overlap does not have a cross-record mate cache because the pinned HTSJDK helper does not use one.
+1. `samtools-stats-1.24-multiqc-1.35` — parsed `multiqc_samtools_stats.txt` and `samtools_insert_size.txt` are byte-identical reference vs AlignGauge;
+2. `picard-insert-size-3.4.0-all-reads-v1` — parsed Picard insert-size data are byte-identical reference vs AlignGauge.
 
-## Milestone 13 pinned executable differential
+The Picard AlignmentSummary 13-field subset is intentionally outside the MultiQC claim. WGS/Hs are discovery-only and carry false compatibility claims.
 
-`.github/workflows/overlap-validation.yml` creates a deterministic BAM and compares AlignGauge's overlap primitives to a narrow Java oracle executed from inside the immutable pinned Picard 3.4.0 image. The Java path uses the Picard-bundled HTSJDK 4.2.0 classes and runs with networking disabled.
+All pinned MultiQC executions use the immutable 1.35 image and network isolation. No parser failure is converted to a warning, no expected parsed file may be absent, and no success marker is written before all assertions pass.
 
-The candidate's Rust and reference TSVs are byte-identical with these exact counters:
+## v0.4 release-gate implementation candidate
 
-| Counter | Exact value |
-|---|---:|
-| `wgs_retained_bases` | 135 |
-| `wgs_baseq_excluded_bases` | 10 |
-| `wgs_overlap_excluded_bases` | 35 |
-| `hs_overlap_clipped_read_bases` | 64 |
+Candidate SHA:
 
-The fixture and unit suite cover ordinary paired overlap, low-quality-first ordering, secondary/supplementary behavior, equal-start read1/read2 ties, insertion CIGAR, extended `=`/`X` CIGAR, state expiry, memory-budget failure, locus-cap failure, and unpaired/mate-unmapped Hs behavior.
+`191fd927c506d037dad57b8209d132f78a36d025`
 
-Implementation candidate `3f3237ab34c43d826a2332134d3dc1462955bbf8` passed the full eight-gate pull-request matrix:
+Successful workflows on that exact SHA:
 
-- Permanent CI run `31249073395`, job `93082408210` — success
-- Full Runtime Validation run `31249073379`, job `93082432961` — success
-- Reference Validation run `31249073370`, job `93082432239` — success
-- Targeted Validation run `31249073352`, job `93082431519` — success
-- Samtools Stats Validation run `31249073367`, job `93082408071` — success
-- Picard Validation run `31249073348`, job `93082408038` — success
-- MultiQC Validation run `31249073373`, job `93082407967` — success
-- Exact Overlap Validation run `31249073464`, job `93082408299` — success
+- V0.4 Release Validation run `31254954734`, job `93096874003` — success
+- Permanent CI run `31254954580`, job `93096873958` — success
+- Reference Validation run `31254954662`, job `93096874325` — success
 
-Detailed Milestone 13 evidence is recorded in `docs/evidence/M13_EXACT_OVERLAP.md`.
+The v0.4 gate proved, on one commit:
 
-## Indexed parallelism disposition
+- released CLI profile boundaries;
+- WGS/Hs non-promotion;
+- whole-input serial/I/O-thread canonical equivalence;
+- targeted serial/I/O-thread canonical equivalence;
+- explicit serial collector behavior under `--threads 2`;
+- exact generated Samtools Stats differential;
+- pinned MultiQC Samtools parsed-data equivalence;
+- exact generated Picard AlignmentSummary differential;
+- exact generated Picard InsertSize differential;
+- pinned MultiQC Picard InsertSize parsed-data equivalence;
+- discovery-only WGS/Hs false compatibility claims;
+- fail-closed artifact creation and clean repository state.
 
-Milestone 13 does not admit indexed reference-partition parallelism for v0.4. The TODO conditions implementation on measured value sufficient to justify the additional semantic/resource complexity, and no repository evidence establishes that admission case. Separately, the specification forbids combining indexed partition execution with exact overlap until separately designed and differentially proved.
+Detailed release-gate evidence is in `docs/evidence/V0_4_RELEASE_VALIDATION.md`.
 
-Therefore no additional production readers, descriptors, partition buffers, decompression pools, merge rules, or indexed-exact-overlap fallback were introduced. The globally coordinate-ordered streaming path remains authoritative. Decoder/I/O concurrency is allowed only where it preserves that one logical ordered stream.
+## Prior milestone evidence carried into v0.4
 
-This is an explicit design disposition, not an unimplemented feature silently represented as complete.
+The release claim also rests on the existing permanent evidence chain rather than replacing it:
 
-## Remaining v0.4 work
+- Milestone 10: `docs/evidence/M10_SAMTOOLS_STATS_MULTIQC.md`
+- Milestone 11: `docs/evidence/M11_PICARD_ALIGNMENT_INSERT_SIZE.md`
+- Milestone 12: pinned Picard/MultiQC discovery and generated InsertSize validation recorded in this report's repository history
+- Milestone 13: `docs/evidence/M13_EXACT_OVERLAP.md`
 
-Milestone 13 removes the overlap-semantics blocker but does not itself satisfy the separate `v0.4.0` release gate.
+The v0.4 release validator is additive. It does not weaken or substitute for Permanent CI, Reference Validation, Samtools Stats Validation, Picard Validation, MultiQC Validation, Exact Overlap Validation, Full Runtime Validation, Targeted Validation, or Samtools Stats Validation where those workflows are triggered.
 
-Before WGS/Hs compatibility can be promoted, the release path must still prove the complete selected collectors and outputs end-to-end: all remaining Picard record filters and denominators, depth/target reductions, WGS cap/exclusion semantics, Hs bait/target and fold-80 semantics, renderers, exact differential metrics, pinned MultiQC ingestion, determinism, memory behavior, and release documentation.
+## Release status
 
-The selected WGS/Hs surfaces remain **not emitted** until that proof exists. This report must be updated rather than silently reinterpreted if the release-gate work demonstrates that a selected field cannot be matched exactly.
+The **compatibility-report reconciliation requirement is satisfied in this candidate state**, subject to CI validating this committed report.
+
+The report does not claim that a `v0.4.0` tag already exists. The remaining repository operations are evidence/TODO closure, exact merge validation on `master`, selection of an exact green release commit, and only then creation of the `v0.4.0` tag and GitHub release.
