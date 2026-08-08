@@ -14,15 +14,22 @@ replace_once(
     "        if record.flags() & FLAG_SECONDARY != 0 {\n            return Ok(());\n        }\n",
     "        if record.flags() & (FLAG_SECONDARY | FLAG_SUPPLEMENTARY) != 0 {\n            return Ok(());\n        }\n",
 )
-
 replace_once(
     "docs/adr/ADR-0008-PICARD_ALIGNMENT_INSERT_SIZE_PROFILE.md",
     "- secondary and supplementary records are excluded from the alignment-summary read-count categories according to the pinned collector behavior.\n",
     "- secondary and supplementary records are rejected by Picard's top-level alignment-summary collector before category dispatch, so they contribute neither read counts nor `BAD_CYCLES`.\n",
 )
-
 replace_once(
     "docs/DNA_QC_ENGINE_SPEC.md",
     "silently acquire sequence materialization cost.\n\nThe insert-size profile matches Picard 3.4.0 CollectInsertSizeMetrics defaults at\n",
     "silently acquire sequence materialization cost. Secondary and supplementary records are\nrejected before alignment-summary category dispatch and therefore contribute neither read\ncounts nor `BAD_CYCLES`.\n\nThe insert-size profile matches Picard 3.4.0 CollectInsertSizeMetrics defaults at\n",
+)
+replace_once(
+    "crates/aligngauge-testkit/src/corpus.rs",
+    '        let position = 100 + i32::try_from(index).expect("small fixture index") * 10;\n',
+    '''        let index = i32::try_from(index).map_err(|source| {
+            TestkitError::generation(format!("Picard alignment fixture index exceeds i32: {source}"))
+        })?;
+        let position = 100 + index * 10;
+''',
 )
