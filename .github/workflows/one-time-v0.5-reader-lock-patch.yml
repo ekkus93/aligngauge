@@ -15,7 +15,7 @@ jobs:
     if: github.repository == 'ekkus93/aligngauge'
     runs-on: ubuntu-24.04
     env:
-      EXPECTED_PARENT: a57163a09fc95153a5c33496b00cfab04af58c13
+      EXPECTED_PARENT: 6e26a33f420d451717f0d7a91ba27c9927567874
     steps:
       - name: Check out exact branch head
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
