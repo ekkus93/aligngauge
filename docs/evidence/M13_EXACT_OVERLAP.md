@@ -1,6 +1,6 @@
 # Milestone 13 exact overlap evidence
 
-**Evidence state:** validated Milestone 13 evidence. This document does not declare a `v0.4.0` release and does not promote the selected Picard WGS or HsMetrics surfaces to emitted compatibility profiles.
+**Evidence state:** Milestone 13 closed and validated on `master`. This document does not declare a `v0.4.0` release and does not promote the selected Picard WGS or HsMetrics surfaces to emitted compatibility profiles.
 
 ## Validated implementation candidate
 
@@ -38,7 +38,46 @@ After `M13_EXACT_OVERLAP.md` and the updated v0.4 compatibility report were comm
 - MultiQC Validation run `31249215985` — success
 - Exact Overlap Validation run `31249215961`, job `93082777275` — success
 
-The exact-overlap oracle therefore remained green after the evidence and compatibility-boundary text existed in the repository. The next repository-closure step is to update the milestone TODO and validate that closure SHA before merge.
+The exact-overlap oracle therefore remained green after the evidence and compatibility-boundary text existed in the repository.
+
+## TODO-closure validation
+
+TODO-closure SHA:
+
+`d80687eb2d78bf7d3e77e0a95da4007f05e85ad7`
+
+That exact PR head passed all eight triggered pull-request workflows before merge:
+
+- Permanent CI run `31249448939` — success
+- Full Runtime Validation run `31249448972` — success
+- Reference Validation run `31249448940` — success
+- Targeted Validation run `31249448920` — success
+- Samtools Stats Validation run `31249448976` — success
+- Picard Validation run `31249448927` — success
+- MultiQC Validation run `31249448936` — success
+- Exact Overlap Validation run `31249448921` — success
+
+The TODO records Milestone 13 as complete, records indexed reference-partition execution as explicitly not admitted for v0.4 by ADR-0010, and leaves the separate v0.4 release gate open.
+
+## Merged master validation
+
+PR #7 merged to `master` as:
+
+`3451b635135ba3eb8469696ca87ace690ea5cb75`
+
+Every workflow triggered by that exact merge SHA completed successfully:
+
+- Permanent CI run `31249557837`, job `93083615906` — success
+- Full Runtime Validation run `31249557831`, job `93083615871` — success
+- Reference Validation run `31249557800`, job `93083615908` — success
+- Targeted Validation run `31249557810`, job `93083616060` — success
+- Samtools Stats Validation run `31249557828`, job `93083615850` — success
+- Picard Validation run `31249557798`, job `93083615820` — success
+- MultiQC Validation run `31249557819`, job `93083615843` — success
+- Exact Overlap Validation run `31249557829`, job `93083615864` — success
+- M2 HG002 Preparation Validation run `31249557807`, job `93083615865` — success
+
+The merged exact-overlap job reran the unit suite, generated the deterministic BAM, executed the pinned Picard/HTSJDK oracle with networking disabled, compared the Rust and reference outputs exactly, and uploaded evidence successfully. Milestone 13 is therefore closed on `master`; the separate v0.4 release gate remains outstanding.
 
 ## Frozen exact-overlap profiles
 
