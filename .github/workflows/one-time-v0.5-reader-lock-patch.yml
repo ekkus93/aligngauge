@@ -1,0 +1,129 @@
+name: One-time v0.5 reader and lockfile patch
+
+on:
+  push:
+    branches: [agent/v0.5-production-beta]
+    paths:
+      - ".github/workflows/one-time-v0.5-reader-lock-patch.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    name: maintenance/v0.5-reader-lock-patch
+    if: github.repository == 'ekkus93/aligngauge'
+    runs-on: ubuntu-24.04
+    env:
+      EXPECTED_PARENT: a57163a09fc95153a5c33496b00cfab04af58c13
+    steps:
+      - name: Check out exact branch head
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: agent/v0.5-production-beta
+          fetch-depth: 2
+          persist-credentials: true
+
+      - name: Prove helper is immediately after expected parent
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD^)" == "$EXPECTED_PARENT" ]]
+          test -z "$(git status --porcelain --untracked-files=all)"
+
+      - name: Snapshot external lock identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, tomllib
+          from pathlib import Path
+          lock = tomllib.loads(Path('Cargo.lock').read_text())
+          external = sorted(
+              (p['name'], p['version'], p.get('source'), p.get('checksum'))
+              for p in lock['package'] if p.get('source')
+          )
+          Path('/tmp/external-lock-before.json').write_text(json.dumps(external, indent=2) + '\n')
+          PY
+
+      - name: Apply safe reader call-site and local lock update
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('crates/aligngauge-hts/src/reader.rs')
+          text = path.read_text(encoding='utf-8')
+          old = '''fn open_htslib_reader(
+              input: &Path,
+              options: ReaderOptions,
+              format: AlignmentFormat,
+          ) -> Result<Reader, AlignGaugeError> {
+              let mut reader = Reader::from_path(input).map_err(|source| {
+          '''.replace('          ', '')
+          new = '''fn open_htslib_reader(
+              input: &Path,
+              options: ReaderOptions,
+              format: AlignmentFormat,
+          ) -> Result<Reader, AlignGaugeError> {
+              aligngauge_hts_ffi::preflight_header(input).map_err(|source| {
+                  AlignGaugeError::new(
+                      ErrorCategory::InputCorrupt,
+                      format!(
+                          "failed HTSlib header ownership preflight for {} input '{}'",
+                          format.as_str(),
+                          input.display()
+                      ),
+                  )
+                  .with_detail("input", input.to_string_lossy().into_owned())
+                  .with_source(source)
+              })?;
+              let mut reader = Reader::from_path(input).map_err(|source| {
+          '''.replace('          ', '')
+          count = text.count(old)
+          if count != 1:
+              raise SystemExit(f'expected exactly one reader call-site match, found {count}')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+          cargo fmt --all
+          cargo check -p aligngauge-hts
+
+      - name: Prove external dependency lock did not move
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, tomllib
+          from pathlib import Path
+          before = json.loads(Path('/tmp/external-lock-before.json').read_text())
+          lock = tomllib.loads(Path('Cargo.lock').read_text())
+          after = sorted(
+              (p['name'], p['version'], p.get('source'), p.get('checksum'))
+              for p in lock['package'] if p.get('source')
+          )
+          if before != [list(row) for row in after]:
+              raise SystemExit('external Cargo.lock package identity changed unexpectedly')
+          local_names = {p['name'] for p in lock['package'] if not p.get('source')}
+          if 'aligngauge-hts-ffi' not in local_names:
+              raise SystemExit('aligngauge-hts-ffi was not added to Cargo.lock')
+          PY
+          git diff --check
+          git diff -- Cargo.lock crates/aligngauge-hts/src/reader.rs
+
+      - name: Validate locked workspace boundary
+        run: |
+          cargo test -p aligngauge-hts --locked
+          cargo clippy -p aligngauge-hts-ffi -p aligngauge-hts --all-targets --locked -- -D warnings
+
+      - name: Commit patch and remove helper
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/one-time-v0.5-reader-lock-patch.yml
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add Cargo.lock crates/aligngauge-hts/src/reader.rs \
+            .github/workflows/one-time-v0.5-reader-lock-patch.yml
+          git commit -m 'fix: preflight HTS headers through owned FFI shim'
+          git push origin HEAD:agent/v0.5-production-beta
