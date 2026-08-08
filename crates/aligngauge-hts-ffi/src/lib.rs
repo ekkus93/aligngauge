@@ -28,10 +28,15 @@ pub enum HeaderPreflightError {
 impl fmt::Display for HeaderPreflightError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::PathEncoding => formatter.write_str("alignment path is not representable for HTSlib"),
+            Self::PathEncoding => {
+                formatter.write_str("alignment path is not representable for HTSlib")
+            }
             Self::Open => formatter.write_str("HTSlib failed to open the alignment"),
             Self::HeaderRead => formatter.write_str("HTSlib failed to read the alignment header"),
-            Self::Close(status) => write!(formatter, "HTSlib header preflight close failed with status {status}"),
+            Self::Close(status) => write!(
+                formatter,
+                "HTSlib header preflight close failed with status {status}"
+            ),
         }
     }
 }
@@ -46,11 +51,16 @@ impl HtsFileGuard {
     }
 
     fn pointer(&self) -> *mut htslib::htsFile {
-        self.0.expect("HTS file guard owns a pointer until close").as_ptr()
+        self.0
+            .expect("HTS file guard owns a pointer until close")
+            .as_ptr()
     }
 
     fn close(mut self) -> i32 {
-        let pointer = self.0.take().expect("HTS file guard owns a pointer until close");
+        let pointer = self
+            .0
+            .take()
+            .expect("HTS file guard owns a pointer until close");
         // SAFETY: `pointer` was returned by `hts_open`, is uniquely owned by this guard, and is
         // removed from the guard before this call so Drop cannot close it twice.
         unsafe { htslib::hts_close(pointer.as_ptr()) }
