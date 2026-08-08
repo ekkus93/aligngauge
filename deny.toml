@@ -1,18 +1,17 @@
 [advisories]
+# Vulnerability, unsoundness, and notice advisories remain fatal. Unmaintained
+# informational advisories are fatal for direct workspace dependencies; transitive
+# maintenance debt is still reported and must be documented in release evidence.
+unmaintained = "workspace"
 ignore = []
 
 [licenses]
 confidence-threshold = 0.8
 allow = [
   "Apache-2.0",
-  "BSD-2-Clause",
   "BSD-3-Clause",
-  "BSL-1.0",
-  "CC0-1.0",
   "ISC",
   "MIT",
-  "MPL-2.0",
-  "OpenSSL",
   "Unicode-3.0",
   "Zlib",
 ]
@@ -20,6 +19,9 @@ allow = [
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"
+# Workspace crates are private (`publish = false`), so versionless path dependencies
+# are allowed while wildcard registry/git dependencies remain denied.
+allow-wildcard-paths = true
 highlight = "all"
 
 [sources]
